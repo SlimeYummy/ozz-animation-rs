@@ -2,8 +2,8 @@ use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
 use crate::math::{OzzNumber, OzzTransform};
 use anyhow::{anyhow, Result};
 use nalgebra::{Quaternion, Vector3};
-use std::mem;
 use std::collections::HashMap;
+use std::mem;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -116,7 +116,7 @@ impl<N: OzzNumber> ArchiveReader<Skeleton<N>> for Skeleton<N> {
 
         let joint_bind_poses = joint_bind_poses
             .iter()
-            .map(|t| OzzTransform::convert_f32(t))
+            .map(|t| OzzTransform::parse_f32(t))
             .collect();
         return Ok(Skeleton {
             joint_bind_poses,
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn test_read_skeleton() {
         let mut archive = IArchive::new("./test_files/skeleton-simple.ozz").unwrap();
-        let skeleton = Skeleton::read(&mut archive).unwrap();
+        let skeleton = Skeleton::<f32>::read(&mut archive).unwrap();
 
         assert_eq!(skeleton.joint_bind_poses().len(), 67);
         assert_eq!(

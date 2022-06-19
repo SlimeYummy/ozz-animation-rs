@@ -15,7 +15,7 @@ pub struct Float3Key<N: OzzNumber> {
 
 impl<N: OzzNumber> Float3Key<N> {
     pub fn ratio(&self) -> N {
-        return N::convert_f32(self.ratio);
+        return N::parse_f32(self.ratio);
     }
 
     pub fn track(&self) -> u16 {
@@ -24,9 +24,9 @@ impl<N: OzzNumber> Float3Key<N> {
 
     pub fn decompress(&self) -> Vector3<N> {
         return Vector3::new(
-            N::convert_f16(self.value[0]),
-            N::convert_f16(self.value[1]),
-            N::convert_f16(self.value[2]),
+            N::parse_f16(self.value[0]),
+            N::parse_f16(self.value[1]),
+            N::parse_f16(self.value[2]),
         );
     }
 }
@@ -59,7 +59,7 @@ pub struct QuaternionKey<N: OzzNumber> {
 
 impl<N: OzzNumber> QuaternionKey<N> {
     pub fn ratio(&self) -> N {
-        return N::convert_f32(self.ratio);
+        return N::parse_f32(self.ratio);
     }
 
     pub fn track(&self) -> u16 {
@@ -86,16 +86,16 @@ impl<N: OzzNumber> QuaternionKey<N> {
         );
         cmp_keys[self.largest() as usize] = 0;
 
-        let int2float = N::convert_f32(0.0000215798450022f32); // 1 ÷ (32767 × √2)
+        let int2float = N::parse_f32(0.0000215798450022f32); // 1 ÷ (32767 × √2)
         let mut cpnt = Vector4::new(
-            N::convert_i16(cmp_keys[0]) * int2float,
-            N::convert_i16(cmp_keys[1]) * int2float,
-            N::convert_i16(cmp_keys[2]) * int2float,
-            N::convert_i16(cmp_keys[3]) * int2float,
+            N::parse_i16(cmp_keys[0]) * int2float,
+            N::parse_i16(cmp_keys[1]) * int2float,
+            N::parse_i16(cmp_keys[2]) * int2float,
+            N::parse_i16(cmp_keys[3]) * int2float,
         );
 
         let dot = cpnt[0] * cpnt[0] + cpnt[1] * cpnt[1] + cpnt[2] * cpnt[2] + cpnt[3] * cpnt[3];
-        let ww0 = N::max(N::convert_f32(1e-16f32), N::one() - dot);
+        let ww0 = N::max(N::parse_f32(1e-16f32), N::one() - dot);
         let w0 = ww0.sqrt();
         let restored = if self.sign() == 0 { w0 } else { -w0 };
 
@@ -154,7 +154,7 @@ impl<N: OzzNumber> ArchiveReader<Animation<N>> for Animation<N> {
             return Err(anyhow!("Invalid version"));
         }
 
-        let duration: N = N::convert_f32(archive.read()?);
+        let duration: N = N::parse_f32(archive.read()?);
         let num_tracks: i32 = archive.read()?;
         let name_len: i32 = archive.read()?;
         let translation_count: i32 = archive.read()?;
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_float3_key_decompress() {
-        let res = Float3Key {
+        let res = Float3Key::<f32> {
             ratio: 0.0,
             track: 0,
             value: [11405, 34240, 31],
@@ -229,19 +229,22 @@ mod tests {
             Vector3::new(0.0711059570, -8.77380371e-05, 1.84774399e-06)
         );
 
-        let res = Float3Key {
+        let res = Float3Key::<f64> {
             ratio: 0.0,
             track: 0,
             value: [9839, 1, 0],
             phantom: PhantomData,
         }
         .decompress();
-        assert_eq!(res, Vector3::new(0.0251312256, 5.96046448e-08, 0.00000000));
+        assert_eq!(
+            res,
+            Vector3::new(0.0251312255859375, 5.960464477539063e-8, 0.0)
+        );
     }
 
     #[test]
     fn test_quaternion_key_decompress() {
-        let res = QuaternionKey {
+        let res = QuaternionKey::<f64> {
             ratio: 0.0,
             bit_field: (3 << 1) | 0,
             value: [396, 409, 282],
@@ -250,10 +253,15 @@ mod tests {
         .decompress();
         assert_eq!(
             res,
-            Quaternion::new(0.999906003, 0.00854561850, 0.00882615615, 0.00608551595)
+            Quaternion::new(
+                0.9999060145140845,
+                0.008545618438802194,
+                0.008826156417853781,
+                0.006085516160965199
+            )
         );
 
-        let res = QuaternionKey {
+        let res = QuaternionKey::<f64> {
             ratio: 0.0,
             bit_field: (0 << 1) | 0,
             value: [5256, -14549, 25373],
@@ -262,10 +270,15 @@ mod tests {
         .decompress();
         assert_eq!(
             res,
-            Quaternion::new(0.547545373, 0.767303705, 0.113423660, -0.313965172)
+            Quaternion::new(
+                0.5475453955750709,
+                0.767303715540273,
+                0.11342366291501094,
+                -0.3139651582478109
+            )
         );
 
-        let res = QuaternionKey {
+        let res = QuaternionKey::<f32> {
             ratio: 0.0,
             bit_field: (3 << 1) | 0,
             value: [0, 0, -195],
@@ -277,7 +290,7 @@ mod tests {
             Quaternion::new(0.999991119, 0.00000000, 0.00000000, -0.00420806976)
         );
 
-        let res = QuaternionKey {
+        let res = QuaternionKey::<f32> {
             ratio: 0.0,
             bit_field: (2 << 1) | 1,
             value: [-23255, -23498, 21462],
