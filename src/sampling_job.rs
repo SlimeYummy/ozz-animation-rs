@@ -1,6 +1,6 @@
 use crate::animation::Animation;
 use crate::math::{ozz_quat_nlerp, ozz_vec3_lerp, OzzNumber, OzzTransform};
-use bitvec::prelude::{bitvec, BitVec, LocalBits};
+use bitvec::prelude::{bitvec, BitVec, Lsb0};
 use nalgebra::{self as na, Quaternion, Vector3};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -36,9 +36,9 @@ pub struct SamplingJob<N: OzzNumber> {
     rotation_cursor: usize,
     scale_cursor: usize,
 
-    outdated_translations: BitVec<LocalBits, u32>,
-    outdated_rotations: BitVec<LocalBits, u32>,
-    outdated_scales: BitVec<LocalBits, u32>,
+    outdated_translations: BitVec<u32>,
+    outdated_rotations: BitVec<u32>,
+    outdated_scales: BitVec<u32>,
 }
 
 impl<N: OzzNumber> SamplingJob<N> {
@@ -62,9 +62,9 @@ impl<N: OzzNumber> SamplingJob<N> {
             rotation_cursor: 0,
             scale_cursor: 0,
 
-            outdated_translations: bitvec![LocalBits, u32; 1; num_tracks],
-            outdated_rotations: bitvec![LocalBits, u32; 1; num_tracks],
-            outdated_scales: bitvec![LocalBits, u32; 1; num_tracks],
+            outdated_translations: bitvec![u32, Lsb0; 1; num_tracks],
+            outdated_rotations: bitvec![u32, Lsb0; 1; num_tracks],
+            outdated_scales: bitvec![u32, Lsb0; 1; num_tracks],
         };
 
         for idx in 0..num_aligned_tracks {
@@ -136,12 +136,12 @@ impl<N: OzzNumber> SamplingJob<N> {
                 .map(|mut re| *re = false);
 
             let key_idx = self.translation_keys[idx * 2];
-            let k0 = self.animation.translations()[key_idx as usize];
+            let k0 = &self.animation.translations()[key_idx as usize];
             self.translations[idx as usize].ratio[0] = k0.ratio();
             self.translations[idx as usize].value[0] = k0.decompress();
 
             let key_idx = self.translation_keys[idx * 2 + 1];
-            let k1 = self.animation.translations()[key_idx as usize];
+            let k1 = &self.animation.translations()[key_idx as usize];
             self.translations[idx as usize].ratio[1] = k1.ratio();
             self.translations[idx as usize].value[1] = k1.decompress();
         }
@@ -174,12 +174,12 @@ impl<N: OzzNumber> SamplingJob<N> {
                 .map(|mut re| *re = false);
 
             let key_idx = self.rotation_keys[idx * 2];
-            let k0 = self.animation.rotations()[key_idx as usize];
+            let k0 = &self.animation.rotations()[key_idx as usize];
             self.rotations[idx as usize].ratio[0] = k0.ratio();
             self.rotations[idx as usize].value[0] = k0.decompress();
 
             let key_idx = self.rotation_keys[idx * 2 + 1];
-            let k1 = self.animation.rotations()[key_idx as usize];
+            let k1 = &self.animation.rotations()[key_idx as usize];
             self.rotations[idx as usize].ratio[1] = k1.ratio();
             self.rotations[idx as usize].value[1] = k1.decompress();
         }
@@ -210,12 +210,12 @@ impl<N: OzzNumber> SamplingJob<N> {
             self.outdated_scales.get_mut(idx).map(|mut re| *re = false);
 
             let key_idx = self.scale_keys[idx * 2];
-            let k0 = self.animation.scales()[key_idx as usize];
+            let k0 = &self.animation.scales()[key_idx as usize];
             self.scales[idx as usize].ratio[0] = k0.ratio();
             self.scales[idx as usize].value[0] = k0.decompress();
 
             let key_idx = self.scale_keys[idx * 2 + 1];
-            let k1 = self.animation.scales()[key_idx as usize];
+            let k1 = &self.animation.scales()[key_idx as usize];
             self.scales[idx as usize].ratio[1] = k1.ratio();
             self.scales[idx as usize].value[1] = k1.decompress();
         }

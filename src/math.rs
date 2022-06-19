@@ -3,47 +3,68 @@ use std::mem;
 
 pub trait OzzNumber
 where
-    Self: Default + ComplexField + RealField,
+    Self: Default + Copy + ComplexField + RealField,
 {
-    fn convert_f16(n: u16) -> Self;
-    fn convert_f32(n: f32) -> Self;
-    fn convert_i16(n: i16) -> Self;
+    fn parse_f16(n: u16) -> Self;
+    fn parse_f32(n: f32) -> Self;
+    fn parse_i16(n: i16) -> Self;
 }
 
 impl OzzNumber for f32 {
     #[inline]
-    fn convert_f16(n: u16) -> Self {
-        let sign = (n & 0x8000) as u32;
-        let expo = (n & 0x7C00) as u32;
-        let base = (n & 0x03FF) as u32;
-        if expo == 0x7C00 {
-            if base != 0 {
-                return f32::NAN;
-            }
-            if sign == 0x8000 {
-                return f32::NEG_INFINITY;
-            } else {
-                return f32::INFINITY;
-            }
-        }
-        let expmant = (n & 0x7FFF) as u32;
-        unsafe {
-            let magic = mem::transmute::<u32, f32>((254 - 15) << 23);
-            let shifted = mem::transmute::<u32, f32>(expmant << 13);
-            let scaled = mem::transmute::<f32, u32>(shifted * magic);
-            return mem::transmute::<u32, f32>((sign << 16) | scaled);
-        };
+    fn parse_f16(n: u16) -> Self {
+        return ozz_parse_f16(n);
     }
 
     #[inline(always)]
-    fn convert_f32(n: f32) -> Self {
+    fn parse_f32(n: f32) -> Self {
         return n;
     }
 
     #[inline(always)]
-    fn convert_i16(n: i16) -> Self {
+    fn parse_i16(n: i16) -> Self {
         return n as f32;
     }
+}
+
+impl OzzNumber for f64 {
+    #[inline]
+    fn parse_f16(n: u16) -> Self {
+        return ozz_parse_f16(n) as f64;
+    }
+
+    #[inline(always)]
+    fn parse_f32(n: f32) -> Self {
+        return n as f64;
+    }
+
+    #[inline(always)]
+    fn parse_i16(n: i16) -> Self {
+        return n as f64;
+    }
+}
+
+pub fn ozz_parse_f16(n: u16) -> f32 {
+    let sign = (n & 0x8000) as u32;
+    let expo = (n & 0x7C00) as u32;
+    let base = (n & 0x03FF) as u32;
+    if expo == 0x7C00 {
+        if base != 0 {
+            return f32::NAN;
+        }
+        if sign == 0x8000 {
+            return f32::NEG_INFINITY;
+        } else {
+            return f32::INFINITY;
+        }
+    }
+    let expmant = (n & 0x7FFF) as u32;
+    unsafe {
+        let magic = mem::transmute::<u32, f32>((254 - 15) << 23);
+        let shifted = mem::transmute::<u32, f32>(expmant << 13);
+        let scaled = mem::transmute::<f32, u32>(shifted * magic);
+        return mem::transmute::<u32, f32>((sign << 16) | scaled);
+    };
 }
 
 #[repr(C)]
@@ -55,23 +76,23 @@ pub struct OzzTransform<N: OzzNumber> {
 }
 
 impl<N: OzzNumber> OzzTransform<N> {
-    pub fn convert_f32(t: &OzzTransform<f32>) -> OzzTransform<N> {
+    pub fn parse_f32(t: &OzzTransform<f32>) -> OzzTransform<N> {
         return OzzTransform {
             translation: Vector3::new(
-                OzzNumber::convert_f32(t.translation.x),
-                OzzNumber::convert_f32(t.translation.y),
-                OzzNumber::convert_f32(t.translation.z),
+                OzzNumber::parse_f32(t.translation.x),
+                OzzNumber::parse_f32(t.translation.y),
+                OzzNumber::parse_f32(t.translation.z),
             ),
             rotation: Quaternion::new(
-                OzzNumber::convert_f32(t.rotation.w),
-                OzzNumber::convert_f32(t.rotation.i),
-                OzzNumber::convert_f32(t.rotation.j),
-                OzzNumber::convert_f32(t.rotation.k),
+                OzzNumber::parse_f32(t.rotation.w),
+                OzzNumber::parse_f32(t.rotation.i),
+                OzzNumber::parse_f32(t.rotation.j),
+                OzzNumber::parse_f32(t.rotation.k),
             ),
             scale: Vector3::new(
-                OzzNumber::convert_f32(t.scale.x),
-                OzzNumber::convert_f32(t.scale.y),
-                OzzNumber::convert_f32(t.scale.z),
+                OzzNumber::parse_f32(t.scale.x),
+                OzzNumber::parse_f32(t.scale.y),
+                OzzNumber::parse_f32(t.scale.z),
             ),
         };
     }
@@ -187,12 +208,12 @@ mod tests {
 
     #[test]
     fn test_half_to_f32() {
-        assert_eq!(f32::convert_f16(0b00111100_00000000), 1.0f32);
-        assert_eq!(f32::convert_f16(0b10111100_00000000), -1.0f32);
-        assert_eq!(f32::convert_f16(0b01000011_00000000), 3.5f32);
-        assert_eq!(f32::convert_f16(0b01111100_00000000), f32::INFINITY);
-        assert_eq!(f32::convert_f16(0b11111100_00000000), f32::NEG_INFINITY);
-        assert!(f32::convert_f16(0xFFFF).is_nan());
-        assert_eq!(f32::convert_f16(32791), -1.37090683e-06);
+        assert_eq!(f32::parse_f16(0b00111100_00000000), 1.0f32);
+        assert_eq!(f32::parse_f16(0b10111100_00000000), -1.0f32);
+        assert_eq!(f32::parse_f16(0b01000011_00000000), 3.5f32);
+        assert_eq!(f32::parse_f16(0b01111100_00000000), f32::INFINITY);
+        assert_eq!(f32::parse_f16(0b11111100_00000000), f32::NEG_INFINITY);
+        assert!(f32::parse_f16(0xFFFF).is_nan());
+        assert_eq!(f32::parse_f16(32791), -1.37090683e-06);
     }
 }
