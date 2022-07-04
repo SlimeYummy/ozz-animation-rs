@@ -68,11 +68,21 @@ pub fn ozz_parse_f16(n: u16) -> f32 {
 }
 
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OzzTransform<N: OzzNumber> {
     pub translation: Vector3<N>,
     pub rotation: Quaternion<N>,
     pub scale: Vector3<N>,
+}
+
+impl<N: OzzNumber> Default for OzzTransform<N> {
+    fn default() -> OzzTransform<N> {
+        return OzzTransform {
+            translation: Vector3::zeros(),
+            rotation: Quaternion::identity(),
+            scale: Vector3::new(N::one(), N::one(), N::one()),
+        };
+    }
 }
 
 impl<N: OzzNumber> OzzTransform<N> {
@@ -125,6 +135,14 @@ pub fn ozz_quat_nlerp<N: OzzNumber>(a: &Quaternion<N>, b: &Quaternion<N>, f: N) 
 
 pub fn ozz_quat_dot<N: OzzNumber>(a: &Quaternion<N>, b: &Quaternion<N>) -> N {
     return a.i * b.i + a.j * b.j + a.k * b.k + a.w * b.w;
+}
+
+pub fn ozz_quat_xor_sign<N: OzzNumber>(sign: bool, q: &Quaternion<N>) -> Quaternion<N> {
+    if sign {
+        return Quaternion::new(q.w, q.i, q.j, q.k);
+    } else {
+        return Quaternion::new(-q.w, -q.i, -q.j, -q.k);
+    }
 }
 
 pub fn ozz_quat_normalize<N: OzzNumber>(q: &Quaternion<N>) -> Quaternion<N> {

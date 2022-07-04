@@ -55,10 +55,11 @@ impl SoaTransform {
     }
 }
 
+#[derive(Debug)]
 pub struct Skeleton<N: OzzNumber> {
-    joint_bind_poses: Vec<OzzTransform<N>>,
-    joint_parents: Vec<i16>,
-    joint_names: HashMap<String, i16>,
+    pub(crate) joint_bind_poses: Vec<OzzTransform<N>>,
+    pub(crate) joint_parents: Vec<i16>,
+    pub(crate) joint_names: HashMap<String, i16>,
 }
 
 impl<N: OzzNumber> ArchiveVersion for Skeleton<N> {
@@ -156,6 +157,10 @@ impl<N: OzzNumber> Skeleton<N> {
 
     pub fn joint_parents(&self) -> &[i16] {
         return &self.joint_parents;
+    }
+
+    pub fn joint_parent(&self, idx: usize) -> i16 {
+        return self.joint_parents[idx];
     }
 
     pub fn joint_names(&self) -> &HashMap<String, i16> {
