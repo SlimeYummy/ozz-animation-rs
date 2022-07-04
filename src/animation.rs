@@ -14,6 +14,15 @@ pub struct Float3Key<N: OzzNumber> {
 }
 
 impl<N: OzzNumber> Float3Key<N> {
+    pub fn new(ratio: f32, track: u16, value: [u16; 3]) -> Float3Key<N> {
+        return Float3Key {
+            ratio,
+            track,
+            value,
+            phantom: PhantomData,
+        };
+    }
+
     pub fn ratio(&self) -> N {
         return N::parse_f32(self.ratio);
     }
@@ -58,6 +67,15 @@ pub struct QuaternionKey<N: OzzNumber> {
 }
 
 impl<N: OzzNumber> QuaternionKey<N> {
+    pub fn new(ratio: f32, bit_field: u16, value: [i16; 3]) -> QuaternionKey<N> {
+        return QuaternionKey {
+            ratio,
+            bit_field,
+            value,
+            phantom: PhantomData,
+        };
+    }
+
     pub fn ratio(&self) -> N {
         return N::parse_f32(self.ratio);
     }
@@ -122,13 +140,14 @@ impl<N: OzzNumber> ArchiveReader<QuaternionKey<N>> for QuaternionKey<N> {
     }
 }
 
+#[derive(Debug)]
 pub struct Animation<N: OzzNumber> {
-    duration: N,
-    num_tracks: usize,
-    name: String,
-    translations: Vec<Float3Key<N>>,
-    rotations: Vec<QuaternionKey<N>>,
-    scales: Vec<Float3Key<N>>,
+    pub(crate) duration: N,
+    pub(crate) num_tracks: usize,
+    pub(crate) name: String,
+    pub(crate) translations: Vec<Float3Key<N>>,
+    pub(crate) rotations: Vec<QuaternionKey<N>>,
+    pub(crate) scales: Vec<Float3Key<N>>,
 }
 
 impl<N: OzzNumber> ArchiveVersion for Animation<N> {
