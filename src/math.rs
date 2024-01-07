@@ -1,50 +1,677 @@
-use nalgebra::{ComplexField, Matrix4, Quaternion, RealField, Vector3, Vector4};
+#![allow(dead_code)]
+
+#[cfg(feature = "bincode")]
+use bincode::{
+    de::{BorrowDecoder, Decoder},
+    enc::Encoder,
+    error::{DecodeError, EncodeError},
+    BorrowDecode, Decode, Encode,
+};
+use glam::{Mat4, Quat, Vec3, Vec3A};
+use static_assertions::const_assert_eq;
+use std::fmt::Debug;
 use std::mem;
+use std::simd::prelude::*;
+use std::simd::*;
 
-pub trait OzzNumber
-where
-    Self: Default + Copy + ComplexField + RealField,
-{
-    fn parse_f16(n: u16) -> Self;
-    fn parse_f32(n: f32) -> Self;
-    fn parse_i16(n: i16) -> Self;
+use crate::archive::{ArchiveReader, IArchive};
+use crate::OzzError;
+
+// #[cfg(feature = "serde")]
+// use serde::{de::Deserializer, ser::SerializeSeq, Deserialize, Serialize};
+
+pub const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
+pub const ONE: f32x4 = f32x4::from_array([1.0; 4]);
+pub const TWO: f32x4 = f32x4::from_array([2.0; 4]);
+pub const THREE: f32x4 = f32x4::from_array([3.0; 4]);
+pub const NEG_ONE: f32x4 = f32x4::from_array([-1.0; 4]);
+pub const FRAC_1_2: f32x4 = f32x4::from_array([0.5; 4]);
+pub const FRAC_2_PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_2_PI; 4]);
+pub const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
+pub const SIGN: i32x4 = i32x4::from_array([core::i32::MIN; 4]);
+pub const SIGN_W: i32x4 = i32x4::from_array([0, 0, 0, core::i32::MIN]);
+
+pub const X_AXIS: f32x4 = f32x4::from_array([1.0, 0.0, 0.0, 0.0]);
+pub const Y_AXIS: f32x4 = f32x4::from_array([0.0, 1.0, 0.0, 0.0]);
+pub const Z_AXIS: f32x4 = f32x4::from_array([0.0, 0.0, 1.0, 0.0]);
+
+pub const QUAT_UNIT: f32x4 = f32x4::from_array([0.0, 0.0, 0.0, 1.0]);
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct SoaFloat3 {
+    pub(crate) x: f32x4,
+    pub(crate) y: f32x4,
+    pub(crate) z: f32x4,
 }
 
-impl OzzNumber for f32 {
+impl SoaFloat3 {
     #[inline]
-    fn parse_f16(n: u16) -> Self {
-        return ozz_parse_f16(n);
+    pub(crate) const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4]) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: f32x4::from_array(x),
+            y: f32x4::from_array(y),
+            z: f32x4::from_array(z),
+        };
     }
 
-    #[inline(always)]
-    fn parse_f32(n: f32) -> Self {
-        return n;
-    }
-
-    #[inline(always)]
-    fn parse_i16(n: i16) -> Self {
-        return n as f32;
-    }
-}
-
-impl OzzNumber for f64 {
     #[inline]
-    fn parse_f16(n: u16) -> Self {
-        return ozz_parse_f16(n) as f64;
+    pub(crate) const fn splat_col(v: [f32; 3]) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: f32x4::from_array([v[0]; 4]),
+            y: f32x4::from_array([v[1]; 4]),
+            z: f32x4::from_array([v[2]; 4]),
+        };
     }
 
-    #[inline(always)]
-    fn parse_f32(n: f32) -> Self {
-        return n as f64;
+    #[inline]
+    pub(crate) const fn splat_row(v: f32x4) -> SoaFloat3 {
+        return SoaFloat3 { x: v, y: v, z: v };
     }
 
-    #[inline(always)]
-    fn parse_i16(n: i16) -> Self {
-        return n as f64;
+    #[inline]
+    pub(crate) fn at(&self, idx: usize) -> Vec3 {
+        return Vec3::new(self.x[idx], self.y[idx], self.z[idx]);
+    }
+
+    #[inline]
+    pub(crate) fn neg(&self) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn add(&self, other: &SoaFloat3) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn sub(&self, other: &SoaFloat3) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn component_mul(&self, other: &SoaFloat3) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: self.x * other.x,
+            y: self.y * other.y,
+            z: self.z * other.z,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn mul_num(&self, f: f32x4) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: self.x * f,
+            y: self.y * f,
+            z: self.z * f,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn lerp(from: &SoaFloat3, to: &SoaFloat3, alpha: f32x4) -> SoaFloat3 {
+        return SoaFloat3 {
+            x: (to.x - from.x) * alpha + from.x,
+            y: (to.y - from.y) * alpha + from.y,
+            z: (to.z - from.z) * alpha + from.z,
+        };
     }
 }
 
-pub fn ozz_parse_f16(n: u16) -> f32 {
+#[cfg(feature = "bincode")]
+impl Encode for SoaFloat3 {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(self.x.as_array(), encoder)?;
+        Encode::encode(self.y.as_array(), encoder)?;
+        Encode::encode(self.z.as_array(), encoder)?;
+        return Ok(());
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl Decode for SoaFloat3 {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<SoaFloat3, DecodeError> {
+        let x = f32x4::from_array(Decode::decode(decoder)?);
+        let y = f32x4::from_array(Decode::decode(decoder)?);
+        let z = f32x4::from_array(Decode::decode(decoder)?);
+        return Ok(SoaFloat3 { x, y, z });
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl<'de> BorrowDecode<'de> for SoaFloat3 {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<SoaFloat3, DecodeError> {
+        return SoaFloat3::decode(decoder);
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct SoaQuaternion {
+    pub(crate) x: f32x4,
+    pub(crate) y: f32x4,
+    pub(crate) z: f32x4,
+    pub(crate) w: f32x4,
+}
+
+impl SoaQuaternion {
+    #[inline]
+    pub(crate) const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4], w: [f32; 4]) -> SoaQuaternion {
+        return SoaQuaternion {
+            x: f32x4::from_array(x),
+            y: f32x4::from_array(y),
+            z: f32x4::from_array(z),
+            w: f32x4::from_array(w),
+        };
+    }
+
+    #[inline]
+    pub(crate) const fn splat_col(v: [f32; 4]) -> SoaQuaternion {
+        return SoaQuaternion {
+            x: f32x4::from_array([v[0]; 4]),
+            y: f32x4::from_array([v[1]; 4]),
+            z: f32x4::from_array([v[2]; 4]),
+            w: f32x4::from_array([v[3]; 4]),
+        };
+    }
+
+    #[inline]
+    pub(crate) fn at(&self, idx: usize) -> Quat {
+        return Quat::from_xyzw(self.x[idx], self.y[idx], self.z[idx], self.w[idx]);
+    }
+
+    #[inline]
+    pub(crate) fn conjugate(&self) -> SoaQuaternion {
+        return SoaQuaternion {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+            w: self.w,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn add(&self, other: &SoaQuaternion) -> SoaQuaternion {
+        return SoaQuaternion {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+            w: self.w + other.w,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn mul(&self, other: &SoaQuaternion) -> SoaQuaternion {
+        let x = self.w * other.x + self.x * other.w + self.y * other.z - self.z * other.y;
+        let y = self.w * other.y + self.y * other.w + self.z * other.x - self.x * other.z;
+        let z = self.w * other.z + self.z * other.w + self.x * other.y - self.y * other.x;
+        let w = self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z;
+        return SoaQuaternion { x, y, z, w };
+    }
+
+    #[inline]
+    pub(crate) fn mul_num(&self, f: f32x4) -> SoaQuaternion {
+        return SoaQuaternion {
+            x: self.x * f,
+            y: self.y * f,
+            z: self.z * f,
+            w: self.w * f,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn normalize(&self) -> SoaQuaternion {
+        let len2 = self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w;
+        let inv_len = len2.sqrt().recip();
+        return SoaQuaternion {
+            x: self.x * inv_len,
+            y: self.y * inv_len,
+            z: self.z * inv_len,
+            w: self.w * inv_len,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn dot(&self, other: &SoaQuaternion) -> f32x4 {
+        return self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w;
+    }
+
+    #[inline]
+    pub(crate) fn nlerp(&self, other: &SoaQuaternion, f: f32x4) -> SoaQuaternion {
+        let lerp_x = (other.x - self.x) * f + self.x;
+        let lerp_y = (other.y - self.y) * f + self.y;
+        let lerp_z = (other.z - self.z) * f + self.z;
+        let lerp_w = (other.w - self.w) * f + self.w;
+        let len2 = lerp_x * lerp_x + lerp_y * lerp_y + lerp_z * lerp_z + lerp_w * lerp_w;
+        let inv_len = len2.sqrt().recip();
+        return SoaQuaternion {
+            x: lerp_x * inv_len,
+            y: lerp_y * inv_len,
+            z: lerp_z * inv_len,
+            w: lerp_w * inv_len,
+        };
+    }
+
+    #[inline]
+    pub(crate) fn xor_num(&self, i: i32x4) -> SoaQuaternion {
+        return SoaQuaternion {
+            x: as_f32x4(as_i32x4(self.x) ^ i),
+            y: as_f32x4(as_i32x4(self.y) ^ i),
+            z: as_f32x4(as_i32x4(self.z) ^ i),
+            w: as_f32x4(as_i32x4(self.w) ^ i),
+        };
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl Encode for SoaQuaternion {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(self.x.as_array(), encoder)?;
+        Encode::encode(self.y.as_array(), encoder)?;
+        Encode::encode(self.z.as_array(), encoder)?;
+        Encode::encode(self.w.as_array(), encoder)?;
+        return Ok(());
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl Decode for SoaQuaternion {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<SoaQuaternion, DecodeError> {
+        let x = f32x4::from_array(Decode::decode(decoder)?);
+        let y = f32x4::from_array(Decode::decode(decoder)?);
+        let z = f32x4::from_array(Decode::decode(decoder)?);
+        let w = f32x4::from_array(Decode::decode(decoder)?);
+        return Ok(SoaQuaternion { x, y, z, w });
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl<'de> BorrowDecode<'de> for SoaQuaternion {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<SoaQuaternion, DecodeError> {
+        return SoaQuaternion::decode(decoder);
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "bincode", derive(Encode, Decode))]
+pub struct SoaTransform {
+    pub(crate) translation: SoaFloat3,
+    pub(crate) rotation: SoaQuaternion,
+    pub(crate) scale: SoaFloat3,
+}
+
+impl ArchiveReader<SoaTransform> for SoaTransform {
+    fn read(archive: &mut IArchive) -> Result<SoaTransform, OzzError> {
+        const COUNT: usize = mem::size_of::<SoaTransform>() / mem::size_of::<f32>();
+        let mut buffer = [0f32; COUNT];
+        for idx in 0..COUNT {
+            buffer[idx] = archive.read()?;
+        }
+        return Ok(unsafe { mem::transmute(buffer) });
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Float4x4 {
+    pub(crate) cols: [f32x4; 4],
+}
+
+const_assert_eq!(mem::size_of::<Float4x4>(), mem::size_of::<Mat4>());
+
+impl From<Mat4> for Float4x4 {
+    fn from(mat: Mat4) -> Float4x4 {
+        return unsafe { mem::transmute(mat) };
+    }
+}
+
+impl Into<Mat4> for Float4x4 {
+    fn into(self) -> Mat4 {
+        return unsafe { mem::transmute(self) };
+    }
+}
+
+impl Float4x4 {
+    #[rustfmt::skip]
+    #[inline]
+    pub(crate) fn new(
+        n00: f32, n01: f32, n02: f32, n03: f32,
+        n10: f32, n11: f32, n12: f32, n13: f32,
+        n20: f32, n21: f32, n22: f32, n23: f32,
+        n30: f32, n31: f32, n32: f32, n33: f32,
+    ) -> Float4x4 {
+        return Float4x4 {
+            cols: [
+                f32x4::from_array([n00, n01, n02, n03]),
+                f32x4::from_array([n10, n11, n12, n13]),
+                f32x4::from_array([n20, n21, n22, n23]),
+                f32x4::from_array([n30, n31, n32, n33]),
+            ],
+        };
+    }
+
+    #[inline]
+    pub(crate) fn new_translation(t: Vec3) -> Float4x4 {
+        return Float4x4 {
+            cols: [
+                f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
+                f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
+                f32x4::from_array([0.0, 0.0, 1.0, 0.0]),
+                f32x4::from_array([t.x, t.y, t.z, 1.0]),
+            ],
+        };
+    }
+
+    #[inline]
+    pub(crate) fn new_scaling(s: Vec3) -> Float4x4 {
+        return Float4x4 {
+            cols: [
+                f32x4::from_array([s.x, 0.0, 0.0, 0.0]),
+                f32x4::from_array([0.0, s.y, 0.0, 0.0]),
+                f32x4::from_array([0.0, 0.0, s.z, 0.0]),
+                f32x4::from_array([0.0, 0.0, 0.0, 1.0]),
+            ],
+        };
+    }
+
+    #[inline]
+    pub(crate) fn identity() -> Float4x4 {
+        return Float4x4 {
+            cols: [
+                f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
+                f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
+                f32x4::from_array([0.0, 0.0, 1.0, 0.0]),
+                f32x4::from_array([0.0, 0.0, 0.0, 1.0]),
+            ],
+        };
+    }
+
+    pub fn mul(&self, other: &Float4x4) -> Float4x4 {
+        // TODO: use shuffle command
+        const X: [usize; 4] = [0, 0, 0, 0];
+        const Y: [usize; 4] = [1, 1, 1, 1];
+        const Z: [usize; 4] = [2, 2, 2, 2];
+        const W: [usize; 4] = [3, 3, 3, 3];
+
+        let mut result = Float4x4::default();
+
+        let xxxx = simd_swizzle!(other.cols[0], X) * self.cols[0];
+        let zzzz = simd_swizzle!(other.cols[0], Z) * self.cols[2];
+        let a01 = simd_swizzle!(other.cols[0], Y) * self.cols[1] + xxxx;
+        let a23 = simd_swizzle!(other.cols[0], W) * self.cols[3] + zzzz;
+        result.cols[0] = a01 + a23;
+
+        let xxxx = simd_swizzle!(other.cols[1], X) * self.cols[0];
+        let zzzz = simd_swizzle!(other.cols[1], Z) * self.cols[2];
+        let a01 = simd_swizzle!(other.cols[1], Y) * self.cols[1] + xxxx;
+        let a23 = simd_swizzle!(other.cols[1], W) * self.cols[3] + zzzz;
+        result.cols[1] = a01 + a23;
+
+        let xxxx = simd_swizzle!(other.cols[2], X) * self.cols[0];
+        let zzzz = simd_swizzle!(other.cols[2], Z) * self.cols[2];
+        let a01 = simd_swizzle!(other.cols[2], Y) * self.cols[1] + xxxx;
+        let a23 = simd_swizzle!(other.cols[2], W) * self.cols[3] + zzzz;
+        result.cols[2] = a01 + a23;
+
+        let xxxx = simd_swizzle!(other.cols[3], X) * self.cols[0];
+        let zzzz = simd_swizzle!(other.cols[3], Z) * self.cols[2];
+        let a01 = simd_swizzle!(other.cols[3], Y) * self.cols[1] + xxxx;
+        let a23 = simd_swizzle!(other.cols[3], W) * self.cols[3] + zzzz;
+        result.cols[3] = a01 + a23;
+
+        return result;
+    }
+
+    pub fn invert(&self) -> Float4x4 {
+        const IB1: [usize; 4] = [1, 0, 3, 2]; // 0xB1
+        const I4E: [usize; 4] = [2, 3, 0, 1]; // 0x4E
+
+        let t0 = simd_swizzle!(self.cols[0], self.cols[1], [0, 1, 4, 5]);
+        let t1 = simd_swizzle!(self.cols[2], self.cols[3], [0, 1, 4, 5]);
+        let t2 = simd_swizzle!(self.cols[0], self.cols[1], [2, 3, 6, 7]);
+        let t3 = simd_swizzle!(self.cols[2], self.cols[3], [2, 3, 6, 7]);
+        let c0 = simd_swizzle!(t0, t1, [0, 2, 4, 6]);
+        let c1 = simd_swizzle!(t1, t0, [1, 3, 5, 7]);
+        let c2 = simd_swizzle!(t2, t3, [0, 2, 4, 6]);
+        let c3 = simd_swizzle!(t3, t2, [1, 3, 5, 7]);
+
+        let mut minor0;
+        let mut minor1;
+        let mut minor2;
+        let mut minor3;
+        let mut tmp1;
+        let tmp2;
+
+        tmp1 = simd_swizzle!(c2 * c3, IB1);
+        minor0 = c1 * tmp1;
+        minor1 = c0 * tmp1;
+        tmp1 = simd_swizzle!(tmp1, I4E);
+        minor0 = c1 * tmp1 - minor0;
+        minor1 = c0 * tmp1 - minor1;
+        minor1 = simd_swizzle!(minor1, I4E);
+
+        tmp1 = simd_swizzle!(c1 * c2, IB1);
+        minor0 = c3 * tmp1 + minor0;
+        minor3 = c0 * tmp1;
+        tmp1 = simd_swizzle!(tmp1, I4E);
+        minor0 = minor0 - c3 * tmp1;
+        minor3 = c0 * tmp1 - minor3;
+        minor3 = simd_swizzle!(minor3, I4E);
+
+        tmp1 = simd_swizzle!(c1, I4E) * c3;
+        tmp1 = simd_swizzle!(tmp1, IB1);
+        tmp2 = simd_swizzle!(c2, I4E);
+        minor0 = tmp2 * tmp1 + minor0;
+        minor2 = c0 * tmp1;
+        tmp1 = simd_swizzle!(tmp1, I4E);
+        minor0 = minor0 - tmp2 * tmp1;
+        minor2 = c0 * tmp1 - minor2;
+        minor2 = simd_swizzle!(minor2, I4E);
+
+        tmp1 = simd_swizzle!(c0 * c1, IB1);
+        minor2 = c3 * tmp1 + minor2;
+        minor3 = tmp2 * tmp1 - minor3;
+        tmp1 = simd_swizzle!(tmp1, I4E);
+        minor2 = c3 * tmp1 - minor2;
+        minor3 = minor3 - tmp2 * tmp1;
+
+        tmp1 = simd_swizzle!(c0 * c3, IB1);
+        minor1 = minor1 - tmp2 * tmp1;
+        minor2 = c1 * tmp1 + minor2;
+        tmp1 = simd_swizzle!(tmp1, I4E);
+        minor1 = tmp2 * tmp1 + minor1;
+        minor2 = minor2 - c1 * tmp1;
+
+        tmp1 = simd_swizzle!(c0 * tmp2, IB1);
+        minor1 = c3 * tmp1 + minor1;
+        minor3 = minor3 - c1 * tmp1;
+        tmp1 = simd_swizzle!(tmp1, I4E);
+        minor1 = minor1 - c3 * tmp1;
+        minor3 = c1 * tmp1 + minor3;
+
+        let mut det = c0 * minor0;
+        det = simd_swizzle!(det, I4E) + det;
+        det = simd_swizzle!(det, IB1) + det; // first
+        let invertible: i32x4 = det.simd_ne(ZERO).to_int(); // first
+
+        let det_recip = det.recip(); // first
+                                     // det_recip = (det_recip + det_recip) - det_recip * det_recip * det; // first
+        tmp1 = as_f32x4((as_i32x4(det_recip) & invertible) | (!invertible & as_i32x4(ZERO))); // first
+        det = (tmp1 + tmp1) - det * (tmp1 * tmp1); // first
+        det = simd_swizzle!(det, [0; 4]);
+        return Float4x4 {
+            cols: [det * minor0, det * minor1, det * minor2, det * minor3],
+        };
+    }
+
+    #[inline]
+    pub fn transform_point(&self, p: f32x4) -> f32x4 {
+        let xxxx = simd_swizzle!(p, [0; 4]) * self.cols[0];
+        let a23 = simd_swizzle!(p, [2; 4]) * self.cols[2] + self.cols[3];
+        let a01 = simd_swizzle!(p, [1; 4]) * self.cols[1] + xxxx;
+        return (a01 + a23).into();
+    }
+
+    #[inline]
+    pub fn transform_vector(&self, p: f32x4) -> f32x4 {
+        let xxxx = simd_swizzle!(p, [0; 4]) * self.cols[0];
+        let zzzz = simd_swizzle!(p, [1; 4]) * self.cols[1];
+        let a21 = simd_swizzle!(p, [2; 4]) * self.cols[2] + xxxx;
+        return zzzz + a21;
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl Encode for Float4x4 {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        for idx in 0..4 {
+            Encode::encode(self.cols[idx].as_array(), encoder)?;
+        }
+        return Ok(());
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl Decode for Float4x4 {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Float4x4, DecodeError> {
+        let mut res = Float4x4::default();
+        for idx in 0..4 {
+            res.cols[idx] = f32x4::from_array(Decode::decode(decoder)?);
+        }
+        return Ok(res);
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl<'de> BorrowDecode<'de> for Float4x4 {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Float4x4, DecodeError> {
+        return Float4x4::decode(decoder);
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct SoaFloat4x4 {
+    pub(crate) cols: [f32x4; 16],
+}
+
+impl SoaFloat4x4 {
+    pub(crate) fn from_affine(translation: &SoaFloat3, rotation: &SoaQuaternion, scale: &SoaFloat3) -> SoaFloat4x4 {
+        let xx = rotation.x * rotation.x;
+        let xy = rotation.x * rotation.y;
+        let xz = rotation.x * rotation.z;
+        let xw = rotation.x * rotation.w;
+        let yy = rotation.y * rotation.y;
+        let yz = rotation.y * rotation.z;
+        let yw = rotation.y * rotation.w;
+        let zz = rotation.z * rotation.z;
+        let zw = rotation.z * rotation.w;
+        return SoaFloat4x4 {
+            cols: [
+                scale.x * (ONE - TWO * (yy + zz)),
+                scale.x * TWO * (xy + zw),
+                scale.x * TWO * (xz - yw),
+                ZERO,
+                scale.y * TWO * (xy - zw),
+                scale.y * (ONE - TWO * (xx + zz)),
+                scale.y * (TWO * (yz + xw)),
+                ZERO,
+                scale.z * TWO * (xz + yw),
+                scale.z * TWO * (yz - xw),
+                scale.z * (ONE - TWO * (xx + yy)),
+                ZERO,
+                translation.x,
+                translation.y,
+                translation.z,
+                ONE,
+            ],
+        };
+    }
+
+    pub(crate) fn to_aos(&self) -> [Float4x4; 4] {
+        const LOW: [usize; 4] = [0, 4, 1, 5];
+        const HIGH: [usize; 4] = [2, 6, 3, 7];
+
+        let mut aos = [f32x4::default(); 16];
+
+        let tmp0 = simd_swizzle!(self.cols[0], self.cols[2], LOW);
+        let tmp1 = simd_swizzle!(self.cols[1], self.cols[3], LOW);
+        aos[0] = simd_swizzle!(tmp0, tmp1, LOW);
+        aos[4] = simd_swizzle!(tmp0, tmp1, HIGH);
+        let tmp2 = simd_swizzle!(self.cols[0], self.cols[2], HIGH);
+        let tmp3 = simd_swizzle!(self.cols[1], self.cols[3], HIGH);
+        aos[8] = simd_swizzle!(tmp2, tmp3, LOW);
+        aos[12] = simd_swizzle!(tmp2, tmp3, HIGH);
+        let tmp4 = simd_swizzle!(self.cols[4], self.cols[6], LOW);
+        let tmp5 = simd_swizzle!(self.cols[5], self.cols[7], LOW);
+        aos[1] = simd_swizzle!(tmp4, tmp5, LOW);
+        aos[5] = simd_swizzle!(tmp4, tmp5, HIGH);
+        let tmp6 = simd_swizzle!(self.cols[4], self.cols[6], HIGH);
+        let tmp7 = simd_swizzle!(self.cols[5], self.cols[7], HIGH);
+        aos[9] = simd_swizzle!(tmp6, tmp7, LOW);
+        aos[13] = simd_swizzle!(tmp6, tmp7, HIGH);
+        let tmp8 = simd_swizzle!(self.cols[8], self.cols[10], LOW);
+        let tmp9 = simd_swizzle!(self.cols[9], self.cols[11], LOW);
+        aos[2] = simd_swizzle!(tmp8, tmp9, LOW);
+        aos[6] = simd_swizzle!(tmp8, tmp9, HIGH);
+        let tmp10 = simd_swizzle!(self.cols[8], self.cols[10], HIGH);
+        let tmp11 = simd_swizzle!(self.cols[9], self.cols[11], HIGH);
+        aos[10] = simd_swizzle!(tmp10, tmp11, LOW);
+        aos[14] = simd_swizzle!(tmp10, tmp11, HIGH);
+        let tmp12 = simd_swizzle!(self.cols[12], self.cols[14], LOW);
+        let tmp13 = simd_swizzle!(self.cols[13], self.cols[15], LOW);
+        aos[3] = simd_swizzle!(tmp12, tmp13, LOW);
+        aos[7] = simd_swizzle!(tmp12, tmp13, HIGH);
+        let tmp14 = simd_swizzle!(self.cols[12], self.cols[14], HIGH);
+        let tmp15 = simd_swizzle!(self.cols[13], self.cols[15], HIGH);
+        aos[11] = simd_swizzle!(tmp14, tmp15, LOW);
+        aos[15] = simd_swizzle!(tmp14, tmp15, HIGH);
+
+        return unsafe { mem::transmute(aos) };
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl Encode for SoaFloat4x4 {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        for idx in 0..16 {
+            Encode::encode(self.cols[idx].as_array(), encoder)?;
+        }
+        return Ok(());
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl Decode for SoaFloat4x4 {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<SoaFloat4x4, DecodeError> {
+        let mut res = SoaFloat4x4::default();
+        for idx in 0..16 {
+            res.cols[idx] = f32x4::from_array(Decode::decode(decoder)?);
+        }
+        return Ok(res);
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl<'de> BorrowDecode<'de> for SoaFloat4x4 {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<SoaFloat4x4, DecodeError> {
+        return SoaFloat4x4::decode(decoder);
+    }
+}
+
+pub fn f16_to_f32(n: u16) -> f32 {
     let sign = (n & 0x8000) as u32;
     let expo = (n & 0x7C00) as u32;
     let base = (n & 0x03FF) as u32;
@@ -67,157 +694,317 @@ pub fn ozz_parse_f16(n: u16) -> f32 {
     };
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct OzzTransform<N: OzzNumber> {
-    pub translation: Vector3<N>,
-    pub rotation: Quaternion<N>,
-    pub scale: Vector3<N>,
+pub fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
+    const MASK_NO_SIGN: i32x4 = i32x4::from_array([0x7FFF; 4]);
+    const MAGIC: f32x4 = as_f32x4(i32x4::from_array([(254 - 15) << 23; 4]));
+    const WAS_INFNAN: i32x4 = i32x4::from_array([0x7BFF; 4]);
+    const EXP_INFNAN: i32x4 = i32x4::from_array([255 << 23; 4]);
+
+    let int4 = i32x4::from([half4[0] as i32, half4[1] as i32, half4[2] as i32, half4[3] as i32]);
+    let expmant = MASK_NO_SIGN & int4;
+    let shifted = expmant << 13;
+    let scaled = as_f32x4(shifted) * MAGIC;
+    let was_infnan = i32x4::simd_ge(expmant, WAS_INFNAN).to_int();
+    let sign = (int4 ^ expmant) << 16;
+    let infnanexp = was_infnan & EXP_INFNAN;
+    let sign_inf = sign | infnanexp;
+    let float4 = as_i32x4(scaled) | sign_inf;
+    return as_f32x4(float4);
 }
 
-impl<N: OzzNumber> Default for OzzTransform<N> {
-    fn default() -> OzzTransform<N> {
-        return OzzTransform {
-            translation: Vector3::zeros(),
-            rotation: Quaternion::identity(),
-            scale: Vector3::new(N::one(), N::one(), N::one()),
-        };
+#[inline(always)]
+pub const fn as_f32x4(v: i32x4) -> f32x4 {
+    return unsafe { mem::transmute(v) };
+}
+
+#[inline(always)]
+pub const fn as_i32x4(v: f32x4) -> i32x4 {
+    return unsafe { mem::transmute(v) };
+}
+
+const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Vec3A>());
+
+#[inline(always)]
+pub fn f32x4_from_vec3a(v: Vec3A) -> f32x4 {
+    return unsafe { mem::transmute(v) };
+}
+
+#[inline(always)]
+pub fn f32x4_to_vec3a(v: f32x4) -> Vec3A {
+    return unsafe { mem::transmute(v) };
+}
+
+const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Quat>());
+
+#[inline(always)]
+pub fn f32x4_from_quat(q: Quat) -> f32x4 {
+    return unsafe { mem::transmute(q) };
+}
+
+#[inline(always)]
+pub fn f32x4_to_quat(q: f32x4) -> Quat {
+    return unsafe { mem::transmute(q) };
+}
+
+#[inline(always)]
+pub fn f32x4_set_y(a: f32x4, b: f32x4) -> f32x4 {
+    return simd_swizzle!(a, b, [0, 4, 2, 3]);
+}
+
+#[inline(always)]
+pub fn f32x4_set_z(a: f32x4, b: f32x4) -> f32x4 {
+    return simd_swizzle!(a, b, [0, 1, 4, 3]);
+}
+
+#[inline(always)]
+pub fn f32x4_set_w(a: f32x4, b: f32x4) -> f32x4 {
+    return simd_swizzle!(a, b, [0, 1, 2, 4]);
+}
+
+#[inline(always)]
+pub fn f32x4_splat_x(v: f32x4) -> f32x4 {
+    return simd_swizzle!(v, [0, 0, 0, 0]);
+}
+
+#[inline(always)]
+pub fn f32x4_splat_y(v: f32x4) -> f32x4 {
+    return simd_swizzle!(v, [1, 1, 1, 1]);
+}
+
+#[inline(always)]
+pub fn f32x4_splat_z(v: f32x4) -> f32x4 {
+    return simd_swizzle!(v, [2, 2, 2, 2]);
+}
+
+#[inline(always)]
+pub fn f32x4_splat_w(v: f32x4) -> f32x4 {
+    return simd_swizzle!(v, [3, 3, 3, 3]);
+}
+
+#[inline(always)]
+pub fn f32x4_extract_sign(v: f32x4) -> i32x4 {
+    return as_i32x4(v) & SIGN;
+}
+
+pub fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
+    // Implementation based on Vec4.inl from the JoltPhysics
+    // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
+
+    const N1: f32x4 = f32x4::from_array([1.5703125; 4]);
+    const N2: f32x4 = f32x4::from_array([0.0004837512969970703125; 4]);
+    const N3: f32x4 = f32x4::from_array([7.549789948768648e-8; 4]);
+
+    const C1: f32x4 = f32x4::from_array([2.443315711809948e-5; 4]);
+    const C2: f32x4 = f32x4::from_array([1.388731625493765e-3; 4]);
+    const C3: f32x4 = f32x4::from_array([4.166664568298827e-2; 4]);
+
+    const S1: f32x4 = f32x4::from_array([-1.9515295891e-4; 4]);
+    const S2: f32x4 = f32x4::from_array([8.3321608736e-3; 4]);
+    const S3: f32x4 = f32x4::from_array([1.6666654611e-1; 4]);
+
+    // Make argument positive and remember sign for sin only since cos is symmetric around x (highest bit of a float is the sign bit)
+    let mut sin_sign = f32x4_extract_sign(v);
+    let mut x = as_f32x4(as_i32x4(v) ^ sin_sign);
+
+    // x / (PI / 2) rounded to nearest int gives us the quadrant closest to x
+    let quadrant = (FRAC_2_PI * x + FRAC_1_2).trunc();
+
+    // Make x relative to the closest quadrant.
+    // This does x = x - quadrant * PI / 2 using a two step Cody-Waite argument reduction.
+    // This improves the accuracy of the result by avoiding loss of significant bits in the subtraction.
+    // We start with x = x - quadrant * PI / 2, PI / 2 in hexadecimal notation is 0x3fc90fdb, we remove the lowest 16 bits to
+    // get 0x3fc90000 (= 1.5703125) this means we can now multiply with a number of up to 2^16 without losing any bits.
+    // This leaves us with: x = (x - quadrant * 1.5703125) - quadrant * (PI / 2 - 1.5703125).
+    // PI / 2 - 1.5703125 in hexadecimal is 0x39fdaa22, stripping the lowest 12 bits we get 0x39fda000 (= 0.0004837512969970703125)
+    // This leaves uw with: x = ((x - quadrant * 1.5703125) - quadrant * 0.0004837512969970703125) - quadrant * (PI / 2 - 1.5703125 - 0.0004837512969970703125)
+    // See: https://stackoverflow.com/questions/42455143/sine-cosine-modular-extended-precision-arithmetic
+    // After this we have x in the range [-PI / 4, PI / 4].
+    x = ((x - quadrant * N1) - quadrant * N2) - quadrant * N3;
+
+    // Calculate x2 = x^2
+    let x2 = x * x;
+
+    // Taylor expansion:
+    // Cos(x) = 1 - x^2/2! + x^4/4! - x^6/6! + x^8/8! + ... = (((x2/8!- 1/6!) * x2 + 1/4!) * x2 - 1/2!) * x2 + 1
+    let taylor_cos = ((C1 * x2 - C2) * x2 + C3) * x2 * x2 - FRAC_1_2 * x2 + ONE;
+    // Sin(x) = x - x^3/3! + x^5/5! - x^7/7! + ... = ((-x2/7! + 1/5!) * x2 - 1/3!) * x2 * x + x
+    let taylor_sin = ((S1 * x2 + S2) * x2 - S3) * x2 * x + x;
+
+    // The lowest 2 bits of quadrant indicate the quadrant that we are in.
+    // Let x be the original input value and x' our value that has been mapped to the range [-PI / 4, PI / 4].
+    // since cos(x) = sin(x - PI / 2) and since we want to use the Taylor expansion as close as possible to 0,
+    // we can alternate between using the Taylor expansion for sin and cos according to the following table:
+    //
+    // quadrant	 sin(x)		 cos(x)
+    // XXX00b	 sin(x')	 cos(x')
+    // XXX01b	 cos(x')	-sin(x')
+    // XXX10b	-sin(x')	-cos(x')
+    // XXX11b	-cos(x')	 sin(x')
+    //
+    // So: sin_sign = bit2, cos_sign = bit1 ^ bit2, bit1 determines if we use sin or cos Taylor expansion
+    let quadrant_int: i32x4 = unsafe { quadrant.to_int_unchecked() };
+    let bit1 = quadrant_int << 31;
+    let bit2 = (quadrant_int << 30) & SIGN;
+
+    // Select which one of the results is sin and which one is cos
+    let cond = bit1.simd_eq(SIGN);
+    let s = cond.select(taylor_cos, taylor_sin);
+    let c = cond.select(taylor_sin, taylor_cos);
+
+    // Update the signs
+    sin_sign = sin_sign ^ bit2;
+    let cos_sign = bit1 ^ bit2;
+
+    // Correct the signs
+    let out_sin = as_f32x4(as_i32x4(s) ^ sin_sign);
+    let out_cos = as_f32x4(as_i32x4(c) ^ cos_sign);
+    return (out_sin, out_cos);
+}
+
+pub fn f32x4_asin(v: f32x4) -> f32x4 {
+    // Implementation based on Vec4.inl from the JoltPhysics
+    // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
+
+    const N1: f32x4 = f32x4::from_array([4.2163199048e-2; 4]);
+    const N2: f32x4 = f32x4::from_array([2.4181311049e-2; 4]);
+    const N3: f32x4 = f32x4::from_array([4.5470025998e-2; 4]);
+    const N4: f32x4 = f32x4::from_array([7.4953002686e-2; 4]);
+    const N5: f32x4 = f32x4::from_array([1.6666752422e-1; 4]);
+
+    // Make argument positive
+    let asin_sign = f32x4_extract_sign(v);
+    let mut a = as_f32x4(as_i32x4(v) ^ asin_sign);
+
+    // ASin is not defined outside the range [-1, 1] but it often happens that a value is slightly above 1 so we just clamp here
+    a = f32x4::simd_min(a, ONE);
+
+    // When |x| <= 0.5 we use the asin approximation as is
+    let z1 = a * a;
+    let x1 = a;
+
+    // When |x| > 0.5 we use the identity asin(x) = PI / 2 - 2 * asin(sqrt((1 - x) / 2))
+    let z2 = FRAC_1_2 * (ONE - a);
+    let x2 = z2.sqrt();
+
+    // Select which of the two situations we have
+    let greater = f32x4::simd_gt(a, FRAC_1_2);
+    let mut z = greater.select(z2, z1);
+    let x = greater.select(x2, x1);
+
+    // Polynomial approximation of asin
+    z = ((((N1 * z + N2) * z + N3) * z + N4) * z + N5) * z * x + x;
+
+    // If |x| > 0.5 we need to apply the remainder of the identity above
+    z = greater.select(FRAC_PI_2 - (z + z), z);
+
+    // Put the sign back
+    return as_f32x4(as_i32x4(z) | asin_sign);
+}
+
+#[inline]
+pub fn f32x4_acos(v: f32x4) -> f32x4 {
+    const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
+    return FRAC_PI_2 - f32x4_asin(v);
+}
+
+#[inline]
+pub fn f32x4_lerp(from: f32x4, to: f32x4, alpha: f32x4) -> f32x4 {
+    return alpha * (to - from) + from;
+}
+
+#[inline]
+pub fn vec3_is_normalized(v: f32x4) -> bool {
+    const MAX: f32 = 1.0 + 0.002;
+    const MIN: f32 = 1.0 - 0.002;
+    let len2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+    return (MIN < len2) & (len2 < MAX);
+}
+
+#[inline]
+pub fn vec3_length2_s(v: f32x4) -> f32x4 {
+    return vec3_dot_s(v, v);
+}
+
+#[inline]
+pub fn vec3_dot_s(a: f32x4, b: f32x4) -> f32x4 {
+    let tmp = a * b;
+    return tmp + simd_swizzle!(tmp, [1; 4]) + simd_swizzle!(tmp, [2; 4]);
+}
+
+pub fn vec3_cross(a: f32x4, b: f32x4) -> f32x4 {
+    let shufa = simd_swizzle!(a, [1, 2, 0, 3]);
+    let shufb = simd_swizzle!(b, [1, 2, 0, 3]);
+    let shufc = a * shufb - b * shufa;
+    return simd_swizzle!(shufc, [1, 2, 0, 3]);
+}
+
+pub fn quat_from_axis_angle(axis: f32x4, angle: f32x4) -> f32x4 {
+    let half_angle = f32x4_splat_x(angle) * FRAC_1_2;
+    let (half_sin, half_cos) = f32x4_sin_cos(half_angle);
+    return f32x4_set_w(axis * half_sin, half_cos);
+}
+
+pub fn quat_from_cos_angle(axis: f32x4, cos: f32x4) -> f32x4 {
+    let half_cos2 = (ONE + cos) * FRAC_1_2;
+    let half_sin2 = ONE - half_cos2;
+    let half_cossin2 = f32x4_set_y(half_cos2, half_sin2);
+    let half_cossin = half_cossin2.sqrt();
+    let half_sin = f32x4_splat_y(half_cossin);
+    return f32x4_set_w(axis * half_sin, half_cossin);
+}
+
+pub fn quat_from_vectors(from: f32x4, to: f32x4) -> f32x4 {
+    let norm_from_norm_to = (vec3_length2_s(from) * vec3_length2_s(to)).sqrt();
+    let norm_from_norm_to_x = norm_from_norm_to[0];
+    if norm_from_norm_to_x < 1.0e-6 {
+        return QUAT_UNIT;
     }
-}
 
-impl<N: OzzNumber> OzzTransform<N> {
-    pub fn parse_f32(t: &OzzTransform<f32>) -> OzzTransform<N> {
-        return OzzTransform {
-            translation: Vector3::new(
-                OzzNumber::parse_f32(t.translation.x),
-                OzzNumber::parse_f32(t.translation.y),
-                OzzNumber::parse_f32(t.translation.z),
-            ),
-            rotation: Quaternion::new(
-                OzzNumber::parse_f32(t.rotation.w),
-                OzzNumber::parse_f32(t.rotation.i),
-                OzzNumber::parse_f32(t.rotation.j),
-                OzzNumber::parse_f32(t.rotation.k),
-            ),
-            scale: Vector3::new(
-                OzzNumber::parse_f32(t.scale.x),
-                OzzNumber::parse_f32(t.scale.y),
-                OzzNumber::parse_f32(t.scale.z),
-            ),
-        };
-    }
-}
+    let real_part = norm_from_norm_to + vec3_dot_s(from, to);
+    let real_part_x = real_part[0];
 
-pub fn ozz_vec3_lerp<N: OzzNumber>(a: &Vector3<N>, b: &Vector3<N>, f: N) -> Vector3<N> {
-    return Vector3::new(
-        (b.x - a.x) * f + a.x,
-        (b.y - a.y) * f + a.y,
-        (b.z - a.z) * f + a.z,
-    );
-}
-
-pub fn ozz_quat_nlerp<N: OzzNumber>(a: &Quaternion<N>, b: &Quaternion<N>, f: N) -> Quaternion<N> {
-    let lerp = Quaternion::new(
-        (b.w - a.w) * f + a.w,
-        (b.i - a.i) * f + a.i,
-        (b.j - a.j) * f + a.j,
-        (b.k - a.k) * f + a.k,
-    );
-    let len2 = lerp.i * lerp.i + lerp.j * lerp.j + lerp.k * lerp.k + lerp.w * lerp.w;
-    let inv_len = N::one() / len2.sqrt();
-    return Quaternion::new(
-        lerp.w * inv_len,
-        lerp.i * inv_len,
-        lerp.j * inv_len,
-        lerp.k * inv_len,
-    );
-}
-
-pub fn ozz_quat_dot<N: OzzNumber>(a: &Quaternion<N>, b: &Quaternion<N>) -> N {
-    return a.i * b.i + a.j * b.j + a.k * b.k + a.w * b.w;
-}
-
-pub fn ozz_quat_xor_sign<N: OzzNumber>(sign: bool, q: &Quaternion<N>) -> Quaternion<N> {
-    if sign {
-        return Quaternion::new(q.w, q.i, q.j, q.k);
+    let quat;
+    if real_part_x < 1.0e-6 * norm_from_norm_to_x {
+        if from[0].abs() > from[2].abs() {
+            quat = f32x4::from_array([-from[1], from[0], 0.0, 0.0])
+        } else {
+            quat = f32x4::from_array([0.0, -from[2], from[1], 0.0])
+        }
     } else {
-        return Quaternion::new(-q.w, -q.i, -q.j, -q.k);
-    }
+        quat = f32x4_set_w(vec3_cross(from, to), real_part)
+    };
+
+    return quat_normalize(quat);
 }
 
-pub fn ozz_quat_normalize<N: OzzNumber>(q: &Quaternion<N>) -> Quaternion<N> {
-    let len2 = q.i * q.i + q.j * q.j + q.k * q.k + q.w * q.w;
-    let inv_len = N::one() / len2.sqrt();
-    return Quaternion::new(q.w * inv_len, q.i * inv_len, q.j * inv_len, q.k * inv_len);
+#[inline]
+pub fn quat_length2_s(q: f32x4) -> f32x4 {
+    let q2 = (q * q).reduce_sum();
+    return f32x4::splat(q2);
 }
 
-pub fn ozz_matrix4_new<N: OzzNumber>(
-    translation: &Vector3<N>,
-    rotation: &Quaternion<N>,
-    scale: &Vector3<N>,
-) -> Matrix4<N> {
-    let xx = rotation.i * rotation.i;
-    let xy = rotation.i * rotation.j;
-    let xz = rotation.i * rotation.k;
-    let xw = rotation.i * rotation.w;
-    let yy = rotation.j * rotation.j;
-    let yz = rotation.j * rotation.k;
-    let yw = rotation.j * rotation.w;
-    let zz = rotation.k * rotation.k;
-    let zw = rotation.k * rotation.w;
-    let zero = N::zero();
-    let one = N::one();
-    let two = N::one() + N::one();
-    return Matrix4::new(
-        scale.x * (one - two * (yy + zz)),
-        scale.y * two * (xy - zw),
-        scale.z * two * (xz + yw),
-        translation.x,
-        scale.x * two * (xy + zw),
-        scale.y * (one - two * (xx + zz)),
-        scale.z * two * (yz - xw),
-        translation.y,
-        scale.x * two * (xz - yw),
-        scale.y * two * (yz + xw),
-        scale.z * (one - two * (xx + yy)),
-        translation.z,
-        zero,
-        zero,
-        zero,
-        one,
-    );
+#[inline]
+pub fn quat_normalize(q: f32x4) -> f32x4 {
+    let q2 = q * q;
+    let len2 = q2.reduce_sum();
+    let inv_len = f32x4::splat(len2).sqrt().recip();
+    return q * inv_len;
 }
 
-pub fn ozz_matrix4_mul<N: OzzNumber>(a: &Matrix4<N>, b: &Matrix4<N>) -> Matrix4<N> {
-    fn dot<N: OzzNumber>(r: &Vector4<N>, c: &Vector4<N>) -> N {
-        return r[0] * c[0] + r[1] * c[1] + r[2] * c[2] + r[3] * c[3];
-    }
-    let ar0 = Vector4::new(a[(0, 0)], a[(0, 1)], a[(0, 2)], a[(0, 3)]);
-    let ar1 = Vector4::new(a[(1, 0)], a[(1, 1)], a[(1, 2)], a[(1, 3)]);
-    let ar2 = Vector4::new(a[(2, 0)], a[(2, 1)], a[(2, 2)], a[(2, 3)]);
-    let ar3 = Vector4::new(a[(3, 0)], a[(3, 1)], a[(3, 2)], a[(3, 3)]);
-    let bc0 = Vector4::new(b[(0, 0)], b[(1, 0)], b[(2, 0)], b[(3, 0)]);
-    let bc1 = Vector4::new(b[(0, 1)], b[(1, 1)], b[(2, 1)], b[(3, 1)]);
-    let bc2 = Vector4::new(b[(0, 2)], b[(1, 2)], b[(2, 2)], b[(3, 2)]);
-    let bc3 = Vector4::new(b[(0, 3)], b[(1, 3)], b[(2, 3)], b[(3, 3)]);
-    return Matrix4::new(
-        dot(&ar0, &bc0),
-        dot(&ar0, &bc1),
-        dot(&ar0, &bc2),
-        dot(&ar0, &bc3),
-        dot(&ar1, &bc0),
-        dot(&ar1, &bc1),
-        dot(&ar1, &bc2),
-        dot(&ar1, &bc3),
-        dot(&ar2, &bc0),
-        dot(&ar2, &bc1),
-        dot(&ar2, &bc2),
-        dot(&ar2, &bc3),
-        dot(&ar3, &bc0),
-        dot(&ar3, &bc1),
-        dot(&ar3, &bc2),
-        dot(&ar3, &bc3),
-    );
+#[inline]
+pub fn quat_transform_vector(q: f32x4, v: f32x4) -> f32x4 {
+    let cross1 = f32x4_splat_w(q) * v + vec3_cross(q, v);
+    let cross2 = vec3_cross(q, cross1);
+    return v + cross2 + cross2;
+}
+
+#[inline]
+pub fn quat_mul(a: f32x4, b: f32x4) -> f32x4 {
+    let p1 = simd_swizzle!(a, [3, 3, 3, 2]) * simd_swizzle!(b, [0, 1, 2, 2]);
+    let p2 = simd_swizzle!(a, [0, 1, 2, 0]) * simd_swizzle!(b, [3, 3, 3, 0]);
+    let p13 = simd_swizzle!(a, [1, 2, 0, 1]) * simd_swizzle!(b, [2, 0, 1, 1]) + p1;
+    let p24 = p2 - simd_swizzle!(a, [2, 0, 1, 3]) * simd_swizzle!(b, [1, 2, 0, 3]);
+    return as_f32x4(as_i32x4(p13 + p24) ^ SIGN_W);
 }
 
 #[cfg(test)]
@@ -225,13 +1012,182 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_half_to_f32() {
-        assert_eq!(f32::parse_f16(0b00111100_00000000), 1.0f32);
-        assert_eq!(f32::parse_f16(0b10111100_00000000), -1.0f32);
-        assert_eq!(f32::parse_f16(0b01000011_00000000), 3.5f32);
-        assert_eq!(f32::parse_f16(0b01111100_00000000), f32::INFINITY);
-        assert_eq!(f32::parse_f16(0b11111100_00000000), f32::NEG_INFINITY);
-        assert!(f32::parse_f16(0xFFFF).is_nan());
-        assert_eq!(f32::parse_f16(32791), -1.37090683e-06);
+    fn test_f16_to_f32() {
+        assert_eq!(f16_to_f32(0b00111100_00000000), 1.0f32);
+        assert_eq!(f16_to_f32(0b10111100_00000000), -1.0f32);
+        assert_eq!(f16_to_f32(0b01000011_00000000), 3.5f32);
+        assert_eq!(f16_to_f32(0b01111100_00000000), f32::INFINITY);
+        assert_eq!(f16_to_f32(0b11111100_00000000), f32::NEG_INFINITY);
+        assert_eq!(f16_to_f32(32791), -1.37090683e-06);
+        assert_eq!(f16_to_f32(0), 0.0f32);
+        assert_eq!(f16_to_f32(0x8000), 0.0f32);
+        assert!(f16_to_f32(0xFFFF).is_nan());
+    }
+
+    #[test]
+    fn test_simd_f16_to_f32() {
+        let half4 = [
+            0b00111100_00000000,
+            0b10111100_00000000,
+            0b01000011_00000000,
+            0b01111100_00000000,
+        ];
+        let float4 = simd_f16_to_f32(half4);
+        assert_eq!(float4, f32x4::from_array([1.0f32, -1.0f32, 3.5f32, f32::INFINITY]));
+
+        let half4 = [0b11111100_00000000, 0, 0x8000, 32791];
+        let float4 = simd_f16_to_f32(half4);
+        assert_eq!(
+            float4,
+            f32x4::from_array([f32::NEG_INFINITY, 0.0f32, 0.0f32, -1.37090683e-06])
+        );
+
+        let half4 = [0xFFFF, 0, 0, 0];
+        let float4 = simd_f16_to_f32(half4);
+        assert!(float4[0].is_nan());
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_matrix_invert() {
+        let m = Float4x4::new(
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        );
+        let m_inv = m.invert();
+        assert_eq!(m_inv, Float4x4::new(
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ));
+
+        let m = Float4x4::new(
+            5.0, 0.0, 0.0, 0.0,
+            0.0, 5.0, 0.0, 0.0,
+            0.0, 0.0, 5.0, 0.0,
+            0.0, 0.0, 0.0, 5.0,
+        );
+        let m_inv = m.invert();
+        assert_eq!(m_inv, Float4x4::new(
+            0.2, 0.0, 0.0, 0.0,
+            0.0, 0.2, 0.0, 0.0,
+            0.0, 0.0, 0.2, 0.0,
+            0.0, 0.0, 0.0, 0.2,
+        ));
+
+        let m = Float4x4::new(
+            -1.82742070e-08, 0.988180459, 0.153295174, 0.0,
+            1.17800290e-07, 0.153295159, -0.988180578, 0.0,
+            -1.00000012, 0.0, -1.19209290e-07, 0.0,
+            0.0, 0.0999999940, 0.0, 1.0,
+        );
+        let m_inv = m.invert();
+        assert_eq!(
+            m_inv,
+            Float4x4::new(
+                -1.82742035e-08, 1.17800262e-07, -0.999999881, 0.0,
+                0.988180459, 0.153295159, 0.0, 0.0,
+                0.153295144, -0.988180339, -1.19209261e-07, 0.0,
+                -0.0988180414, -0.0153295146, 0.0, 1.0,
+            )
+        );
+    }
+
+    #[test]
+    fn test_sin_cos() {
+        const EPSILON: f32x4 = f32x4::from_array([1.0e-7; 4]);
+
+        let (sin, cos) = f32x4_sin_cos(f32x4::from_array([
+            0.0,
+            core::f32::consts::FRAC_PI_2,
+            core::f32::consts::PI,
+            -core::f32::consts::FRAC_PI_2,
+        ]));
+        assert!((sin - f32x4::from_array([0.0, 1.0, 0.0, -1.0]))
+            .abs()
+            .simd_lt(EPSILON)
+            .all());
+        assert!((cos - f32x4::from_array([1.0, 0.0, -1.0, 0.0]))
+            .abs()
+            .simd_lt(EPSILON)
+            .all());
+
+        let mut ms: f64 = 0.0;
+        let mut mc: f64 = 0.0;
+
+        let mut i = -100.0 * core::f32::consts::PI;
+        while i < 100.0 * core::f32::consts::PI {
+            let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]);
+            let (sin, cos) = f32x4_sin_cos(iv);
+
+            for i in 0..4 {
+                let sin_std = (iv[i] as f64).sin();
+                let ds = (sin[i] as f64 - sin_std).abs();
+                ms = ms.max(ds);
+
+                let cos_std = (iv[i] as f64).cos();
+                let dc = (cos[i] as f64 - cos_std).abs();
+                mc = mc.max(dc);
+            }
+
+            i += 1.0e-3;
+        }
+
+        assert!(ms < 1.0e-7);
+        assert!(mc < 1.0e-7);
+    }
+
+    #[test]
+    fn test_asin() {
+        assert_eq!(f32x4_asin(f32x4::splat(0.0))[0], 0.0);
+        assert_eq!(f32x4_asin(f32x4::splat(1.0))[0], core::f32::consts::FRAC_PI_2);
+        assert_eq!(f32x4_asin(f32x4::splat(-1.0))[0], -core::f32::consts::FRAC_PI_2);
+        assert_eq!(f32x4_asin(f32x4::splat(1.1))[0], core::f32::consts::FRAC_PI_2);
+        assert_eq!(f32x4_asin(f32x4::splat(-1.1))[0], -core::f32::consts::FRAC_PI_2);
+
+        let mut ma: f64 = 0.0;
+
+        let mut i = -1.0;
+        while i < 1.0 {
+            let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
+            let asin = f32x4_asin(iv);
+
+            for i in 0..4 {
+                let asin_std = (iv[i] as f64).asin();
+                let da = (asin[i] as f64 - asin_std).abs();
+                ma = ma.max(da);
+            }
+
+            i += 1.0e-3;
+        }
+
+        assert!(ma < 2.0e-7);
+    }
+
+    #[test]
+    fn test_acos() {
+        assert_eq!(f32x4_acos(f32x4::splat(0.0))[0], core::f32::consts::FRAC_PI_2);
+        assert_eq!(f32x4_acos(f32x4::splat(1.0))[0], 0.0);
+        assert_eq!(f32x4_acos(f32x4::splat(-1.0))[0], core::f32::consts::PI);
+        assert_eq!(f32x4_acos(f32x4::splat(1.1))[0], 0.0);
+        assert_eq!(f32x4_acos(f32x4::splat(-1.1))[0], core::f32::consts::PI);
+
+        let mut ma: f64 = 0.0;
+
+        let mut i = -1.0;
+        while i < 1.0 {
+            let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
+            let acos = f32x4_acos(iv);
+
+            for i in 0..4 {
+                let acos_std = (iv[i] as f64).acos();
+                let da = (acos[i] as f64 - acos_std).abs();
+                ma = ma.max(da);
+            }
+
+            i += 1.0e-3;
+        }
+
+        assert!(ma < 3.5e-7);
     }
 }
