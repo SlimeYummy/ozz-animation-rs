@@ -1,10 +1,10 @@
-use crate::endian::{Endian, SwapEndian};
-use anyhow::Result;
 use std::fs::File;
 use std::io::Read;
-use std::mem;
 use std::path::Path;
-use std::str;
+use std::{mem, slice, str};
+
+use crate::endian::{Endian, SwapEndian};
+use crate::OzzError;
 
 pub trait ArchiveVersion {
     fn version() -> u32;
@@ -15,7 +15,7 @@ pub trait ArchiveTag {
 }
 
 pub trait ArchiveReader<T> {
-    fn read(archive: &mut IArchive) -> Result<T>;
+    fn read(archive: &mut IArchive) -> Result<T, OzzError>;
 }
 
 pub struct IArchive {
@@ -24,7 +24,7 @@ pub struct IArchive {
 }
 
 impl IArchive {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<IArchive> {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<IArchive, OzzError> {
         let mut file = File::open(path)?;
 
         let mut endian_tag = [0u8; 1];
@@ -39,21 +39,21 @@ impl IArchive {
         });
     }
 
-    pub fn test_tag<T: ArchiveTag>(&mut self) -> Result<bool> {
+    pub fn test_tag<T: ArchiveTag>(&mut self) -> Result<bool, OzzError> {
         let file_tag = self.read_string(0)?;
         let type_tag = T::tag();
         return Ok(type_tag == file_tag);
     }
 
-    pub fn read_version(&mut self) -> Result<u32> {
+    pub fn read_version(&mut self) -> Result<u32, OzzError> {
         return self.read::<u32>();
     }
 
-    pub fn read<T: ArchiveReader<T>>(&mut self) -> Result<T> {
+    pub fn read<T: ArchiveReader<T>>(&mut self) -> Result<T, OzzError> {
         return T::read(self);
     }
 
-    pub fn read_vec<T: ArchiveReader<T>>(&mut self, count: usize) -> Result<Vec<T>> {
+    pub fn read_vec<T: ArchiveReader<T>>(&mut self, count: usize) -> Result<Vec<T>, OzzError> {
         let mut buffer = Vec::with_capacity(count);
         for _ in 0..count {
             buffer.push(self.read()?);
@@ -61,7 +61,7 @@ impl IArchive {
         return Ok(buffer);
     }
 
-    pub fn read_string(&mut self, count: usize) -> Result<String> {
+    pub fn read_string(&mut self, count: usize) -> Result<String, OzzError> {
         if count != 0 {
             let buffer = self.read_vec::<u8>(count)?;
             let text = String::from_utf8(buffer)?;
@@ -85,14 +85,15 @@ impl IArchive {
 macro_rules! primitive_reader {
     ($type:ty) => {
         impl ArchiveReader<$type> for $type {
-            fn read(archive: &mut IArchive) -> Result<$type> {
-                let mut bytes = [0u8; mem::size_of::<$type>()];
-                archive.file.read_exact(&mut bytes)?;
-                let raw = unsafe { mem::transmute(bytes) };
+            fn read(archive: &mut IArchive) -> Result<$type, OzzError> {
+                let val = Default::default();
+                archive.file.read_exact(unsafe {
+                    slice::from_raw_parts_mut(&val as *const $type as *mut u8, mem::size_of::<$type>())
+                })?;
                 if !archive.endian_swap {
-                    return Ok(raw);
+                    return Ok(val);
                 } else {
-                    return Ok(raw.swap());
+                    return Ok(val.swap_endian());
                 }
             }
         }
@@ -116,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_archive_new() {
-        let archive = IArchive::new("./test_files/animation-simple.ozz").unwrap();
+        let archive = IArchive::new("./resource/playback/animation.ozz").unwrap();
         assert_eq!(archive.endian_swap, false);
     }
 }
