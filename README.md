@@ -1,9 +1,15 @@
-# ozz-animation-rust
-A rust runtime library for ozz-animation with fixed-point support.
+![github actions](https://github.com/FenQiDian/ozz-animation-rs/actions/workflows/main.yml/badge.svg)
+[![CircleCI](https://dl.circleci.com/status-badge/img/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/main.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/main)
 
-[Ozz-animation](https://github.com/guillaumeblanc/ozz-animation) is an open source c++ 3d skeletal animation library and toolset. Ozz-animation-rust only implement ozz-animation's runtime part. You should use ozz-animation-rust with ozz-animation's toolset.
+# Ozz-animation-rs
 
-In order to introduce support for fixed-point. Ozz-animation-rust does not simply wrap ozz-animation's runtime, but rewrite the full runtime library in rust. So ozz-animation-rust can be use in network scenarios, such as lock-step networking synchronize.
+Ozz-animation-rs is a rust version skeletal animation library with cross-platform deterministic.
+
+Ozz-animation-rs is based on [ozz-animation](https://github.com/guillaumeblanc/ozz-animation) library, an open source c++ 3d skeletal animation library and toolset. Ozz-animation-rs only implement ozz-animation's runtime part. You should use this library with ozz-animation's toolset.
+
+In order to introduce cross-platform deterministic, ozz-animation-rs does not simply wrap ozz-animation's runtime, but rewrite the full runtime library in rust. So it can be used om in network game scenarios, such as lock-step networking synchronize.
+
+### Features
 
 | Ozz-animation Features | State |
 | ------- | -------- |
@@ -17,7 +23,34 @@ In order to introduce support for fixed-point. Ozz-animation-rust does not simpl
 | Baked physic simulation | unsupported |
 | Keyframe reduction | unsupported |
 | Offline libraries usage | unsupported |
-| Two bone IK | unimplemented |
-| Look-at | unimplemented |
-| Foot ik | unimplemented |
+| Two bone IK | done |
+| Look-at | done |
+| Foot ik | done |
 | Multi-threading | unsupported |
+| SIMD | done |
+
+I have no plan to implement "unsupported" features, currently. Or you can try to implement them yourself.
+
+### Toolchain
+
+Since rust simd features are not stable, you need a nightly version rust to compile this library.
+
+### platforms
+
+In theory, ozz-animation-rs supports all platforms supported by rust. But I only tested on the following platforms:
+- Windows/Ubuntu/Mac x64 (Github actions)
+- X64/Arm64 docker (CircleCI)
+
+Maybe you can run cross-platform deterministic test cases under [./tests](https://github.com/FenQiDian/ozz-animation-rs/tree/master/tests) on your target platform.
+
+### Examples
+
+The test cases under [./tests](https://github.com/FenQiDian/ozz-animation-rs/tree/master/tests) can be viewed as examples.
+
+Ozz-animation-rs keeps the same API styles with original ozz-animation library. Therefore, you can also refer to the ozz-animation [examples](https://github.com/guillaumeblanc/ozz-animation/tree/master/samples).
+
+### Why not fixed-point?
+
+Initially, I tried to implement similar functionality using fixed point numbers. But fixed-point performance is worse, and it is difficult to be compatible with other libraries.
+
+With further research, I found that x64/arm63 platforms now have good support for the IEEE floating point standard. So I reimplemented this library based on f32.
