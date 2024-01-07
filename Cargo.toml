@@ -1,14 +1,20 @@
 [package]
-name = "ozz-rust"
+name = "ozz-animation-rs"
 version = "0.1.0"
 authors = ["FenQiDian <email@fenqi.moe>"]
 edition = "2018"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["serde", "bincode"]
+serde = ["dep:serde"]
+bincode = ["dep:bincode"]
+
 [dependencies]
-anyhow = "1.0.57"
-approx = "0.5.1"
-bitvec = "1.0.0"
-maplit = "1.0.2"
-nalgebra = "0.31.0"
+bincode = { version = "2.0.0-rc.3", optional = true }
+glam = "0.24"
+serde = { version = "1", features = ["derive"], optional = true }
+static_assertions = "1.1.0"
+thiserror = "1.0.52"
