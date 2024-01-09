@@ -1,133 +1,86 @@
-use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
-use crate::math::{OzzNumber, OzzTransform};
-use anyhow::{anyhow, Result};
-use nalgebra::{Quaternion, Vector3};
+#[cfg(feature = "bincode")]
+use bincode::{Decode, Encode};
 use std::collections::HashMap;
-use std::mem;
+use std::path::Path;
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SoaTransform {
-    pub translation_x: [f32; 4],
-    pub translation_y: [f32; 4],
-    pub translation_z: [f32; 4],
-
-    pub rotation_x: [f32; 4],
-    pub rotation_y: [f32; 4],
-    pub rotation_z: [f32; 4],
-    pub rotation_w: [f32; 4],
-
-    pub scale_x: [f32; 4],
-    pub scale_y: [f32; 4],
-    pub scale_z: [f32; 4],
-}
-
-impl ArchiveReader<SoaTransform> for SoaTransform {
-    fn read(archive: &mut IArchive) -> Result<SoaTransform> {
-        const COUNT: usize = mem::size_of::<SoaTransform>() / mem::size_of::<f32>();
-        let mut buffer = [0f32; COUNT];
-        for idx in 0..COUNT {
-            buffer[idx] = archive.read()?;
-        }
-        return Ok(unsafe { mem::transmute(buffer) });
-    }
-}
-
-impl SoaTransform {
-    pub fn aos_at(&self, idx: usize) -> OzzTransform<f32> {
-        let translation = Vector3::new(
-            self.translation_x[idx],
-            self.translation_y[idx],
-            self.translation_z[idx],
-        );
-        let rotation = Quaternion::new(
-            self.rotation_x[idx],
-            self.rotation_y[idx],
-            self.rotation_z[idx],
-            self.rotation_w[idx],
-        );
-        let scale = Vector3::new(self.scale_x[idx], self.scale_y[idx], self.scale_z[idx]);
-        return OzzTransform {
-            translation,
-            rotation,
-            scale,
-        };
-    }
-}
+use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
+use crate::math::SoaTransform;
+use crate::{DeterministicState, OzzError};
 
 #[derive(Debug)]
-pub struct Skeleton<N: OzzNumber> {
-    pub(crate) joint_bind_poses: Vec<OzzTransform<N>>,
+#[cfg_attr(feature = "bincode", derive(Encode, Decode))]
+pub struct Skeleton {
+    pub(crate) joint_rest_poses: Vec<SoaTransform>,
     pub(crate) joint_parents: Vec<i16>,
-    pub(crate) joint_names: HashMap<String, i16>,
+    pub(crate) joint_names: HashMap<String, i16, DeterministicState>,
 }
 
-impl<N: OzzNumber> ArchiveVersion for Skeleton<N> {
+impl ArchiveVersion for Skeleton {
     fn version() -> u32 {
         return 2;
     }
 }
 
-impl<N: OzzNumber> ArchiveTag for Skeleton<N> {
+impl ArchiveTag for Skeleton {
     fn tag() -> &'static str {
         return "ozz-skeleton";
     }
 }
 
-impl<N: OzzNumber> ArchiveReader<Skeleton<N>> for Skeleton<N> {
-    fn read(archive: &mut IArchive) -> Result<Skeleton<N>> {
+impl ArchiveReader<Skeleton> for Skeleton {
+    fn read(archive: &mut IArchive) -> Result<Skeleton, OzzError> {
         if !archive.test_tag::<Self>()? {
-            return Err(anyhow!("Invalid tag"));
+            return Err(OzzError::InvalidTag);
         }
 
         let version = archive.read_version()?;
         if version != Self::version() {
-            return Err(anyhow!("Invalid version"));
+            return Err(OzzError::InvalidVersion);
         }
 
         let num_joints: i32 = archive.read()?;
         if num_joints == 0 {
             return Ok(Skeleton {
-                joint_bind_poses: Vec::new(),
+                joint_rest_poses: Vec::new(),
                 joint_parents: Vec::new(),
-                joint_names: HashMap::new(),
+                joint_names: HashMap::with_hasher(DeterministicState::new()),
             });
         }
 
         let _char_count: i32 = archive.read()?;
-        let mut joint_names = HashMap::with_capacity(num_joints as usize);
+        let mut joint_names = HashMap::with_capacity_and_hasher(num_joints as usize, DeterministicState::new());
         for idx in 0..num_joints {
             joint_names.insert(archive.read_string(0)?, idx as i16);
         }
 
         let joint_parents: Vec<i16> = archive.read_vec(num_joints as usize)?;
 
-        let mut joint_bind_poses: Vec<OzzTransform<f32>> = Vec::with_capacity(num_joints as usize);
-        let mut aos_counter = 0;
         let soa_num_joints = (num_joints + 3) / 4;
+        let mut joint_rest_poses: Vec<SoaTransform> = Vec::with_capacity(soa_num_joints as usize);
         for _ in 0..soa_num_joints {
-            let soa: SoaTransform = archive.read()?;
-            for idx in 0..4 {
-                if aos_counter < num_joints {
-                    aos_counter += 1;
-                    joint_bind_poses.push(soa.aos_at(idx));
-                }
-            }
+            joint_rest_poses.push(archive.read()?);
         }
 
-        let joint_bind_poses = joint_bind_poses
-            .iter()
-            .map(|t| OzzTransform::parse_f32(t))
-            .collect();
         return Ok(Skeleton {
-            joint_bind_poses,
+            joint_rest_poses,
             joint_parents,
             joint_names,
         });
     }
 }
 
-impl<N: OzzNumber> Skeleton<N> {
+impl Skeleton {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Skeleton, OzzError> {
+        let mut archive = IArchive::new(path)?;
+        return Skeleton::read(&mut archive);
+    }
+
+    pub fn from_reader(reader: &mut IArchive) -> Result<Skeleton, OzzError> {
+        return Skeleton::read(reader);
+    }
+}
+
+impl Skeleton {
     #[inline(always)]
     pub fn max_joints() -> usize {
         return 1024;
@@ -151,8 +104,12 @@ impl<N: OzzNumber> Skeleton<N> {
         return (self.num_joints() + 3) & !0x3;
     }
 
-    pub fn joint_bind_poses(&self) -> &[OzzTransform<N>] {
-        return &self.joint_bind_poses;
+    pub fn num_soa_joints(&self) -> usize {
+        return (self.joint_parents.len() + 3) / 4;
+    }
+
+    pub fn joint_rest_poses(&self) -> &[SoaTransform] {
+        return &self.joint_rest_poses;
     }
 
     pub fn joint_parents(&self) -> &[i16] {
@@ -163,7 +120,7 @@ impl<N: OzzNumber> Skeleton<N> {
         return self.joint_parents[idx];
     }
 
-    pub fn joint_names(&self) -> &HashMap<String, i16> {
+    pub fn joint_names(&self) -> &HashMap<String, i16, DeterministicState> {
         return &self.joint_names;
     }
 
@@ -171,61 +128,75 @@ impl<N: OzzNumber> Skeleton<N> {
         return self.joint_names.get(name).map(|idx| *idx);
     }
 
-    pub fn index_joint(&self, idx: i16) -> Option<&OzzTransform<N>> {
-        return self.joint_bind_poses.get(idx as usize);
+    pub fn index_joint(&self, idx: i16) -> Option<&SoaTransform> {
+        return self.joint_rest_poses.get(idx as usize);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use nalgebra::{Quaternion, Vector3};
+    use std::simd::prelude::*;
 
     use super::*;
+    use crate::math::{SoaFloat3, SoaQuaternion};
 
     #[test]
     fn test_read_skeleton() {
-        let mut archive = IArchive::new("./test_files/skeleton-simple.ozz").unwrap();
-        let skeleton = Skeleton::<f32>::read(&mut archive).unwrap();
+        let mut archive = IArchive::new("./resource/playback/skeleton.ozz").unwrap();
+        let skeleton = Skeleton::read(&mut archive).unwrap();
 
-        assert_eq!(skeleton.joint_bind_poses().len(), 67);
+        assert_eq!(skeleton.joint_rest_poses().len(), 17);
         assert_eq!(
-            skeleton.joint_bind_poses()[0].translation,
-            Vector3::new(0.00000000, 1.04666960, -0.0151103791)
+            skeleton.joint_rest_poses()[0].translation,
+            SoaFloat3 {
+                x: f32x4::from_array([-4.01047945e-10, 0.00000000, 0.0710870326, 0.110522307]),
+                y: f32x4::from_array([1.04666960, 0.00000000, -8.79573781e-05, -7.82728166e-05]),
+                z: f32x4::from_array([-0.0151103791, 0.00000000, 9.85883801e-08, -2.17094467e-10]),
+            },
         );
         assert_eq!(
-            skeleton.joint_bind_poses()[1].translation,
-            Vector3::new(0.00000000, 0.00000000, 0.00000000)
-        );
-        assert_eq!(
-            skeleton.joint_bind_poses()[66].translation,
-            Vector3::new(0.0849116519, 2.77555750e-19, 0.00000000)
-        );
-
-        assert_eq!(
-            skeleton.joint_bind_poses()[0].rotation,
-            Quaternion::new(0.500000000, 0.500000000, 0.500000000, -0.500000000)
-        );
-        assert_eq!(
-            skeleton.joint_bind_poses()[66].rotation,
-            Quaternion::new(
-                -1.05879131e-22,
-                -1.30968591e-21,
-                -1.97215226e-31,
-                1.00000000
-            )
+            skeleton.joint_rest_poses()[16].translation,
+            SoaFloat3 {
+                x: f32x4::from_array([0.458143145, 0.117970668, 0.0849116519, 0.00000000]),
+                y: f32x4::from_array([2.64545919e-09, 0.148304969, 0.00000000, 0.00000000]),
+                z: f32x4::from_array([-4.97557555e-14, -7.47846236e-15, -1.77635680e-17, 0.00000000]),
+            }
         );
 
         assert_eq!(
-            skeleton.joint_bind_poses()[0].scale,
-            Vector3::new(1.0, 1.0, 1.0)
+            skeleton.joint_rest_poses()[0].rotation,
+            SoaQuaternion {
+                x: f32x4::from_array([-0.500000000, -0.499999702, -1.41468570e-06, -3.05311332e-14]),
+                y: f32x4::from_array([-0.500000000, -0.500000358, -6.93941161e-07, 1.70812796e-22]),
+                z: f32x4::from_array([-0.500000000, -0.499999702, 0.000398159056, 1.08420217e-19]),
+                w: f32x4::from_array([0.500000000, 0.500000358, 1.00000000, 1.00000000]),
+            },
         );
         assert_eq!(
-            skeleton.joint_bind_poses()[1].scale,
-            Vector3::new(1.0, 1.0, 1.0)
+            skeleton.joint_rest_poses()[16].rotation,
+            SoaQuaternion {
+                x: f32x4::from_array([-2.20410801e-09, 4.11812209e-07, -6.55128745e-32, 0.00000000]),
+                y: f32x4::from_array([4.60687737e-08, -4.11812152e-07, -1.30968591e-21, 0.00000000]),
+                z: f32x4::from_array([0.0498105064, 0.707106829, -2.46519033e-32, 0.00000000]),
+                w: f32x4::from_array([0.998758733, 0.707106769, 1.00000000, 1.00000000]),
+            }
+        );
+
+        assert_eq!(
+            skeleton.joint_rest_poses()[0].scale,
+            SoaFloat3 {
+                x: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),
+                y: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),
+                z: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),
+            },
         );
         assert_eq!(
-            skeleton.joint_bind_poses()[66].scale,
-            Vector3::new(1.0, 1.0, 1.0)
+            skeleton.joint_rest_poses()[16].scale,
+            SoaFloat3 {
+                x: f32x4::from_array([0.999999940, 1.0, 1.0, 1.0]),
+                y: f32x4::from_array([0.999999940, 1.0, 1.0, 1.0]),
+                z: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),
+            }
         );
 
         assert_eq!(skeleton.joint_parents().len(), 67);
