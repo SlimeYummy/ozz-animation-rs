@@ -1,98 +1,153 @@
-use crate::base::{OzzBuf, OzzBufX, OzzRes, OzzResX};
-use crate::math::{ozz_quat_dot, ozz_quat_normalize, ozz_quat_xor_sign, OzzNumber, OzzTransform};
-use crate::skeleton::Skeleton;
-use anyhow::{anyhow, Result};
-use nalgebra::{Quaternion, Vector3};
+use std::cell::RefCell;
 use std::iter;
+use std::rc::Rc;
+use std::simd::prelude::*;
+
+use crate::base::{OzzBuf, OzzRef};
+use crate::math::{f32x4_extract_sign, SoaFloat3, SoaQuaternion, SoaTransform};
+use crate::skeleton::Skeleton;
+use crate::OzzError;
+
+const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
+const ONE: f32x4 = f32x4::from_array([1.0; 4]);
 
 #[derive(Debug, Clone)]
-pub struct BlendingLayer<N: OzzNumber> {
-    input: OzzBufX<OzzTransform<N>>,
-    weight: N,
-    joint_weights: Vec<N>,
+pub struct BlendingLayer<I: OzzBuf<SoaTransform>> {
+    pub transform: I,
+    pub weight: f32,
+    pub joint_weights: Vec<f32x4>,
+}
+
+impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
+    pub fn new(transform: I) -> BlendingLayer<I> {
+        return BlendingLayer {
+            transform,
+            weight: 0.0,
+            joint_weights: Vec::new(),
+        };
+    }
+
+    pub fn with_weight(transform: I, weight: f32) -> BlendingLayer<I> {
+        return BlendingLayer {
+            transform,
+            weight,
+            joint_weights: Vec::new(),
+        };
+    }
+
+    pub fn with_joint_weights(transform: I, joint_weights: Vec<f32x4>) -> BlendingLayer<I> {
+        return BlendingLayer {
+            transform,
+            weight: 0.0,
+            joint_weights,
+        };
+    }
 }
 
 #[derive(Debug)]
-pub struct BlendingJob<N: OzzNumber> {
-    skeleton: OzzResX<Skeleton<N>>,
-    threshold: N,
-    layers: Vec<BlendingLayer<N>>,
-    additive_layers: Vec<BlendingLayer<N>>,
-    output: OzzBufX<OzzTransform<N>>,
+pub struct BlendingJob<S = Rc<Skeleton>, I = Rc<RefCell<Vec<SoaTransform>>>, O = Rc<RefCell<Vec<SoaTransform>>>>
+where
+    S: OzzRef<Skeleton>,
+    I: OzzBuf<SoaTransform>,
+    O: OzzBuf<SoaTransform>,
+{
+    skeleton: Option<S>,
+    threshold: f32,
+    layers: Vec<BlendingLayer<I>>,
+    additive_layers: Vec<BlendingLayer<I>>,
+    output: Option<O>,
 
+    verified: bool,
     num_passes: u32,
     num_partial_passes: u32,
-    accumulated_weight: N,
-    accumulated_weights: Vec<N>,
+    accumulated_weight: f32,
+    accumulated_weights: Vec<f32x4>,
 }
 
-impl<N: OzzNumber> Default for BlendingJob<N> {
-    fn default() -> BlendingJob<N> {
+impl<S, I, O> Default for BlendingJob<S, I, O>
+where
+    S: OzzRef<Skeleton>,
+    I: OzzBuf<SoaTransform>,
+    O: OzzBuf<SoaTransform>,
+{
+    fn default() -> BlendingJob<S, I, O> {
         return BlendingJob {
             skeleton: None,
-            threshold: N::one() / N::from_i32(10).unwrap_or(N::one()), // todo: fix 0.1
+            threshold: 0.1,
             layers: Vec::new(),
             additive_layers: Vec::new(),
             output: None,
 
+            verified: false,
             num_passes: 0,
             num_partial_passes: 0,
-            accumulated_weight: N::zero(),
+            accumulated_weight: 0.0,
             accumulated_weights: Vec::new(),
         };
     }
 }
 
-impl<N: OzzNumber> BlendingJob<N> {
-    pub fn threshold(&self) -> N {
+impl<S, I, O> BlendingJob<S, I, O>
+where
+    S: OzzRef<Skeleton>,
+    I: OzzBuf<SoaTransform>,
+    O: OzzBuf<SoaTransform>,
+{
+    pub fn threshold(&self) -> f32 {
         return self.threshold;
     }
 
-    pub fn set_threshold(&mut self, threshold: N) {
+    pub fn set_threshold(&mut self, threshold: f32) {
         self.threshold = threshold;
     }
 
-    pub fn skeleton(&self) -> OzzResX<Skeleton<N>> {
-        return self.skeleton.clone();
+    pub fn skeleton(&self) -> Option<&S> {
+        return self.skeleton.as_ref();
     }
 
-    pub fn set_skeleton(&mut self, skeleton: &OzzRes<Skeleton<N>>) {
-        let joint_bind_poses = skeleton.joint_bind_poses().len();
-        if self.accumulated_weights.len() < joint_bind_poses {
-            self.accumulated_weights.resize(joint_bind_poses, N::zero());
+    pub fn set_skeleton(&mut self, skeleton: S) {
+        self.verified = false;
+        let joint_rest_poses = skeleton.as_ref().joint_rest_poses().len();
+        if self.accumulated_weights.len() < joint_rest_poses {
+            self.accumulated_weights.resize(joint_rest_poses, ZERO);
         }
-        self.skeleton = Some(skeleton.clone());
+        self.skeleton = Some(skeleton);
     }
 
-    pub fn reset_skeleton(&mut self) {
+    pub fn clear_skeleton(&mut self) {
+        self.verified = false;
         self.skeleton = None;
     }
 
-    pub fn output(&self) -> OzzBufX<OzzTransform<N>> {
-        return self.output.clone();
+    pub fn output(&self) -> Option<&O> {
+        return self.output.as_ref();
     }
 
-    pub fn set_output(&mut self, output: &OzzBuf<OzzTransform<N>>) {
-        self.output = Some(output.clone());
+    pub fn set_output(&mut self, output: O) {
+        self.verified = false;
+        self.output = Some(output);
     }
 
-    pub fn reset_output(&mut self) {
+    pub fn clear_output(&mut self) {
+        self.verified = false;
         self.output = None;
     }
 
-    pub fn layers(&self) -> &[BlendingLayer<N>] {
+    pub fn layers(&self) -> &[BlendingLayer<I>] {
         return &self.layers;
     }
 
-    pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<N>> {
+    pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
+        self.verified = false; // TODO: more efficient way to avoid verification
         return &mut self.layers;
     }
 
-    pub fn additive_layers(&self) -> &[BlendingLayer<N>] {
+    pub fn additive_layers(&self) -> &[BlendingLayer<I>] {
         return &self.additive_layers;
     }
 
-    pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<N>> {
+    pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
+        self.verified = false; // TODO: more efficient way to avoid verification
         return &mut self.additive_layers;
     }
 
@@ -102,475 +157,490 @@ impl<N: OzzNumber> BlendingJob<N> {
             None => return false,
         };
 
-        if self.threshold <= N::zero() {
+        if self.threshold <= 0.0 {
             return false;
         }
 
         let output = match self.output.as_ref() {
-            Some(output) => output.as_ref().borrow(),
+            Some(output) => match output.vec() {
+                Ok(output) => output,
+                Err(_) => return false,
+            },
             None => return false,
         };
-        if output.len() < skeleton.joint_bind_poses().len() {
+        if output.len() < skeleton.as_ref().joint_rest_poses().len() {
             return false;
         }
 
-        fn validate_layer<N: OzzNumber>(layer: &BlendingLayer<N>, joint_bind_poses: usize) -> bool {
-            let input = match layer.input.as_ref() {
-                Some(input) => input.as_ref().borrow(),
-                None => return false,
+        fn validate_layer<I: OzzBuf<SoaTransform>>(layer: &BlendingLayer<I>, joint_rest_poses: usize) -> bool {
+            let transform = match layer.transform.vec() {
+                Ok(transform) => transform,
+                Err(_) => return false,
             };
-            if input.len() < joint_bind_poses {
+            if transform.len() < joint_rest_poses {
                 return false;
             }
 
             if !layer.joint_weights.is_empty() {
-                return layer.joint_weights.len() >= joint_bind_poses;
+                return layer.joint_weights.len() >= joint_rest_poses;
             }
             return true;
         }
 
-        return !iter::empty()
+        let res = !iter::empty()
             .chain(&self.layers)
             .chain(&self.additive_layers)
-            .any(|l| !validate_layer(l, skeleton.joint_bind_poses().len()));
+            .any(|l| !validate_layer(l, skeleton.as_ref().joint_rest_poses().len()));
+
+        return res;
     }
 
-    pub fn run(&mut self) -> Result<()> {
-        if !self.validate() {
-            return Err(anyhow!("Invalid SamplingJob"));
+    pub fn run(&mut self) -> Result<(), OzzError> {
+        if !self.verified {
+            if !self.validate() {
+                return Err(OzzError::InvalidJob);
+            }
+            self.verified = true;
         }
 
         self.num_partial_passes = 0;
         self.num_passes = 0;
-        self.accumulated_weight = N::zero();
+        self.accumulated_weight = 0.0;
 
-        self.blend_layers();
-        self.blend_bind_pose();
-        self.normalize();
-        self.add_layers();
+        let output = self.output.clone(); // TODO: avoid clone
+        let mut output = output.as_ref().unwrap().vec_mut()?;
+        self.blend_layers(&mut output)?;
+        self.blend_rest_pose(&mut output);
+        self.normalize(&mut output);
+        self.add_layers(&mut output)?;
         return Ok(());
     }
 
-    fn blend_layers(&mut self) {
-        let mut output = self.output.as_ref().unwrap().borrow_mut();
-        let bind_pose = self.skeleton.as_ref().unwrap().joint_bind_poses();
+    fn blend_layers(&mut self, output: &mut Vec<SoaTransform>) -> Result<(), OzzError> {
+        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let num_soa_joints = skeleton.num_soa_joints();
 
         for layer in &self.layers {
-            let input = layer.input.as_ref().unwrap().borrow();
-            if layer.weight <= N::zero() {
+            let transform = layer.transform.vec()?;
+            if layer.weight <= 0.0 {
                 continue;
             }
             self.accumulated_weight += layer.weight;
+            let layer_weight = f32x4::splat(layer.weight);
 
             if !layer.joint_weights.is_empty() {
                 self.num_partial_passes += 1;
+
                 if self.num_passes == 0 {
-                    for idx in 0..bind_pose.len() {
-                        let weight = layer.weight * N::max(layer.joint_weights[idx], N::zero());
+                    for idx in 0..num_soa_joints {
+                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
                         self.accumulated_weights[idx] = weight;
-                        Self::blend_1st_pass(&input[idx], weight, &mut output[idx]);
+                        Self::blend_1st_pass(&transform[idx], weight, &mut output[idx]);
                     }
                 } else {
-                    for idx in 0..bind_pose.len() {
-                        let weight = layer.weight * N::max(layer.joint_weights[idx], N::zero());
+                    for idx in 0..num_soa_joints {
+                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
                         self.accumulated_weights[idx] += weight;
-                        Self::blend_n_pass(&input[idx], weight, &mut output[idx]);
+                        Self::blend_n_pass(&transform[idx], weight, &mut output[idx]);
                     }
                 }
                 self.num_passes += 1;
             } else {
                 if self.num_passes == 0 {
-                    for idx in 0..bind_pose.len() {
-                        self.accumulated_weights[idx] = layer.weight;
-                        Self::blend_1st_pass(&input[idx], layer.weight, &mut output[idx]);
+                    for idx in 0..num_soa_joints {
+                        self.accumulated_weights[idx] = layer_weight;
+                        Self::blend_1st_pass(&transform[idx], layer_weight, &mut output[idx]);
                     }
                 } else {
-                    for idx in 0..bind_pose.len() {
-                        self.accumulated_weights[idx] += layer.weight;
-                        Self::blend_n_pass(&input[idx], layer.weight, &mut output[idx]);
+                    for idx in 0..num_soa_joints {
+                        self.accumulated_weights[idx] += layer_weight;
+                        Self::blend_n_pass(&transform[idx], layer_weight, &mut output[idx]);
                     }
                 }
                 self.num_passes += 1;
             }
         }
+
+        return Ok(());
     }
 
-    fn blend_bind_pose(&mut self) {
-        let mut output = self.output.as_ref().unwrap().borrow_mut();
-        let joint_bind_poses = self.skeleton.as_ref().unwrap().joint_bind_poses();
+    fn blend_rest_pose(&mut self, output: &mut Vec<SoaTransform>) {
+        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let joint_rest_poses = skeleton.joint_rest_poses();
 
         if self.num_partial_passes == 0 {
             let bp_weight = self.threshold - self.accumulated_weight;
-            if bp_weight > N::zero() {
+            if bp_weight > 0.0 {
                 if self.num_passes == 0 {
-                    self.accumulated_weight = N::one();
-                    for idx in 0..joint_bind_poses.len() {
-                        output[idx] = joint_bind_poses[idx];
+                    self.accumulated_weight = 1.0;
+                    for idx in 0..joint_rest_poses.len() {
+                        output[idx] = joint_rest_poses[idx];
                     }
                 } else {
                     self.accumulated_weight = self.threshold;
-                    for idx in 0..joint_bind_poses.len() {
-                        Self::blend_n_pass(&joint_bind_poses[idx], bp_weight, &mut output[idx]);
+                    let simd_bp_weight = f32x4::splat(bp_weight);
+                    for idx in 0..joint_rest_poses.len() {
+                        Self::blend_n_pass(&joint_rest_poses[idx], simd_bp_weight, &mut output[idx]);
                     }
                 }
             }
         } else {
-            for idx in 0..joint_bind_poses.len() {
-                let bp_weight = N::max(self.threshold - self.accumulated_weights[idx], N::zero());
-                self.accumulated_weights[idx] =
-                    N::max(self.threshold, self.accumulated_weights[idx]);
-                Self::blend_n_pass(&joint_bind_poses[idx], bp_weight, &mut output[idx]);
+            let simd_threshold = f32x4::splat(self.threshold);
+            for idx in 0..joint_rest_poses.len() {
+                let bp_weight = (simd_threshold - self.accumulated_weights[idx]).simd_max(ZERO);
+                self.accumulated_weights[idx] = simd_threshold.simd_max(self.accumulated_weights[idx]);
+                Self::blend_n_pass(&joint_rest_poses[idx], bp_weight, &mut output[idx]);
             }
         }
     }
 
-    fn normalize(&mut self) {
-        let mut output = self.output.as_ref().unwrap().borrow_mut();
-        let joint_bind_poses = self.skeleton.as_ref().unwrap().joint_bind_poses();
+    fn normalize(&mut self, output: &mut Vec<SoaTransform>) {
+        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let joint_rest_poses = skeleton.joint_rest_poses();
 
         if self.num_partial_passes == 0 {
-            let ratio = self.accumulated_weight.recip();
-            for idx in 0..joint_bind_poses.len() {
-                output[idx].translation.scale_mut(ratio);
-                output[idx].rotation = ozz_quat_normalize(&output[idx].rotation);
-                output[idx].scale.scale_mut(ratio);
+            let ratio = f32x4::splat(self.accumulated_weight.recip());
+            for idx in 0..joint_rest_poses.len() {
+                let dest = &mut output[idx];
+                dest.translation = dest.translation.mul_num(ratio);
+                dest.rotation = dest.rotation.normalize();
+                dest.scale = dest.scale.mul_num(ratio);
             }
         } else {
-            for idx in 0..joint_bind_poses.len() {
+            for idx in 0..joint_rest_poses.len() {
+                let dest = &mut output[idx];
                 let ratio = self.accumulated_weights[idx].recip();
-                output[idx].translation.scale_mut(ratio);
-                output[idx].rotation = ozz_quat_normalize(&output[idx].rotation);
-                output[idx].scale.scale_mut(ratio);
+                dest.translation = dest.translation.mul_num(ratio);
+                dest.rotation = dest.rotation.normalize();
+                dest.scale = dest.scale.mul_num(ratio);
             }
         }
     }
 
-    fn add_layers(&mut self) {
-        let mut output = self.output.as_ref().unwrap().borrow_mut();
-        let joint_bind_poses = self.skeleton.as_ref().unwrap().joint_bind_poses();
+    fn add_layers(&mut self, output: &mut Vec<SoaTransform>) -> Result<(), OzzError> {
+        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let joint_rest_poses = skeleton.joint_rest_poses();
 
         for layer in &self.additive_layers {
-            let input = layer.input.as_ref().unwrap().borrow();
+            let transform = layer.transform.vec()?;
 
-            if layer.weight > N::zero() {
+            if layer.weight > 0.0 {
+                let layer_weight = f32x4::splat(layer.weight);
+
                 if !layer.joint_weights.is_empty() {
-                    for idx in 0..joint_bind_poses.len() {
-                        let weight = layer.weight * N::max(layer.joint_weights[idx], N::zero());
-                        Self::blend_add_pass(&input[idx], weight, &mut output[idx]);
+                    for idx in 0..joint_rest_poses.len() {
+                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
+                        let one_minus_weight = ONE - weight;
+                        let soa_one_minus_weight = SoaFloat3::splat_row(one_minus_weight);
+                        Self::blend_add_pass(&transform[idx], weight, &soa_one_minus_weight, &mut output[idx]);
                     }
                 } else {
-                    for idx in 0..joint_bind_poses.len() {
-                        Self::blend_add_pass(&input[idx], layer.weight, &mut output[idx]);
+                    let one_minus_weight = ONE - layer_weight;
+                    let soa_one_minus_weight = SoaFloat3::splat_row(one_minus_weight);
+                    for idx in 0..joint_rest_poses.len() {
+                        Self::blend_add_pass(&transform[idx], layer_weight, &soa_one_minus_weight, &mut output[idx]);
                     }
                 }
-            } else if layer.weight < N::zero() {
+            } else if layer.weight < 0.0 {
+                let layer_weight = f32x4::splat(-layer.weight);
+
                 if !layer.joint_weights.is_empty() {
-                    for idx in 0..joint_bind_poses.len() {
-                        let weight = (-layer.weight) * N::max(layer.joint_weights[idx], N::zero());
-                        Self::blend_sub_pass(&input[idx], weight, &mut output[idx]);
+                    for idx in 0..joint_rest_poses.len() {
+                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
+                        let one_minus_weight = ONE - weight;
+                        Self::blend_sub_pass(&transform[idx], weight, one_minus_weight, &mut output[idx]);
                     }
                 } else {
-                    for idx in 0..joint_bind_poses.len() {
-                        Self::blend_sub_pass(&input[idx], -layer.weight, &mut output[idx]);
+                    let one_minus_weight = ONE - layer_weight;
+                    for idx in 0..joint_rest_poses.len() {
+                        Self::blend_sub_pass(&transform[idx], layer_weight, one_minus_weight, &mut output[idx]);
                     }
                 }
             }
         }
+
+        return Ok(());
     }
 
-    fn blend_1st_pass(input: &OzzTransform<N>, weight: N, output: &mut OzzTransform<N>) {
-        output.translation = input.translation.scale(weight);
-        output.rotation.coords = input.rotation.coords.scale(weight);
-        output.scale = input.scale.scale(weight);
+    fn blend_1st_pass(input: &SoaTransform, weight: f32x4, output: &mut SoaTransform) {
+        output.translation = input.translation.mul_num(weight);
+        output.rotation = input.rotation.mul_num(weight);
+        output.scale = input.scale.mul_num(weight);
     }
 
-    fn blend_n_pass(input: &OzzTransform<N>, weight: N, output: &mut OzzTransform<N>) {
-        output.translation += input.translation.scale(weight);
-        let dot = ozz_quat_dot(&output.rotation, &input.rotation);
-        let rotation = ozz_quat_xor_sign(dot.is_positive(), &input.rotation);
-        output.rotation.coords += rotation.coords.scale(weight);
-        output.scale += input.scale.scale(weight);
+    fn blend_n_pass(input: &SoaTransform, weight: f32x4, output: &mut SoaTransform) {
+        output.translation = output.translation.add(&input.translation.mul_num(weight));
+        let dot = output.rotation.dot(&input.rotation).signum();
+        let rotation = input.rotation.xor_num(f32x4_extract_sign(dot));
+        output.rotation = output.rotation.add(&rotation.mul_num(weight));
+        output.scale = output.scale.add(&input.scale.mul_num(weight));
     }
 
-    fn blend_add_pass(input: &OzzTransform<N>, weight: N, output: &mut OzzTransform<N>) {
-        output.translation += input.translation.scale(weight);
+    fn blend_add_pass(
+        input: &SoaTransform,
+        weight: f32x4,
+        soa_one_minus_weight: &SoaFloat3,
+        output: &mut SoaTransform,
+    ) {
+        output.translation = output.translation.add(&input.translation.mul_num(weight));
 
-        let rotation = ozz_quat_xor_sign(input.rotation.w.is_positive(), &input.rotation);
-        let interp_quat = Quaternion::new(
-            (rotation.w - N::one()) * weight + N::one(),
-            rotation.i * weight,
-            rotation.j * weight,
-            rotation.k * weight,
-        );
-        let norm_interp_quat = ozz_quat_normalize(&interp_quat);
-        output.rotation = norm_interp_quat * output.rotation;
+        let sign = f32x4_extract_sign(input.rotation.w);
+        let rotation = input.rotation.xor_num(sign);
+        let interp_quat = SoaQuaternion {
+            x: rotation.x * weight,
+            y: rotation.y * weight,
+            z: rotation.z * weight,
+            w: (rotation.w - ONE) * weight + ONE,
+        };
+        output.rotation = interp_quat.normalize().mul(&output.rotation);
 
-        let one_minus_weight = Vector3::from_element(N::one() - weight);
-        let tmp_weight = one_minus_weight + input.scale.scale(weight);
-        output.scale = Vector3::component_mul(&output.scale, &tmp_weight);
+        let tmp_weight = soa_one_minus_weight.add(&input.scale.mul_num(weight));
+        output.scale = output.scale.component_mul(&tmp_weight);
     }
 
-    fn blend_sub_pass(input: &OzzTransform<N>, weight: N, output: &mut OzzTransform<N>) {
-        output.translation -= input.translation.scale(weight);
+    fn blend_sub_pass(input: &SoaTransform, weight: f32x4, one_minus_weight: f32x4, output: &mut SoaTransform) {
+        output.translation = output.translation.sub(&input.translation.mul_num(weight));
 
-        let rotation = ozz_quat_xor_sign(input.rotation.w.is_positive(), &input.rotation);
-        let interp_quat = Quaternion::new(
-            (rotation.w - N::one()) * weight + N::one(),
-            rotation.i * weight,
-            rotation.j * weight,
-            rotation.k * weight,
-        );
-        let norm_interp_quat = ozz_quat_normalize(&interp_quat);
-        output.rotation = norm_interp_quat.conjugate() * output.rotation;
+        let sign = f32x4_extract_sign(input.rotation.w);
+        let rotation = input.rotation.xor_num(sign);
+        let interp_quat = SoaQuaternion {
+            x: rotation.x * weight,
+            y: rotation.y * weight,
+            z: rotation.z * weight,
+            w: (rotation.w - ONE) * weight + ONE,
+        };
+        output.rotation = interp_quat.normalize().conjugate().mul(&output.rotation);
 
-        let one_min_weight = N::one() - weight;
-        let rcp_scale = Vector3::new(
-            (input.scale.x * weight + one_min_weight).recip(),
-            (input.scale.y * weight + one_min_weight).recip(),
-            (input.scale.z * weight + one_min_weight).recip(),
-        );
-        output.scale = Vector3::component_mul(&output.scale, &rcp_scale);
+        let rcp_scale = SoaFloat3 {
+            x: (input.scale.x * weight + one_minus_weight).recip(),
+            y: (input.scale.y * weight + one_minus_weight).recip(),
+            z: (input.scale.z * weight + one_minus_weight).recip(),
+        };
+        output.scale = output.scale.component_mul(&rcp_scale);
     }
 }
 
 #[cfg(test)]
 mod blending_tests {
-    use super::*;
-    use crate::approx::abs_diff_eq;
-    use crate::archive::{ArchiveReader, IArchive};
-    use crate::base::{ozz_buf, ozz_buf_x, ozz_res};
-    use crate::skeleton::Skeleton;
+    use glam::Vec4;
     use std::collections::HashMap;
-    use std::ops::Neg;
+    use std::mem;
+
+    use super::*;
+    use crate::archive::{ArchiveReader, IArchive};
+    use crate::base::{ozz_buf, DeterministicState};
+    use crate::skeleton::Skeleton;
+
+    const IDENTITY: SoaTransform = SoaTransform {
+        translation: SoaFloat3::splat_col([0.0; 3]),
+        rotation: SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]),
+        scale: SoaFloat3::splat_col([1.0; 3]),
+    };
 
     #[test]
     fn test_validity() {
-        let mut archive = IArchive::new("./test_files/skeleton-blending.ozz").unwrap();
-        let skeleton = ozz_res(Skeleton::<f32>::read(&mut archive).unwrap());
-        let num_bind_pose = skeleton.joint_bind_poses().len();
-        let default_layer = BlendingLayer::<f32> {
-            input: ozz_buf_x(vec![OzzTransform::default(); num_bind_pose]),
+        let mut archive = IArchive::new("./resource/skeleton-blending.ozz").unwrap();
+        let skeleton = Rc::new(Skeleton::read(&mut archive).unwrap());
+        let num_bind_pose = skeleton.joint_rest_poses().len();
+        let default_layer = BlendingLayer {
+            transform: ozz_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
             joint_weights: Vec::new(),
         };
 
         // empty/default job
-        let job = BlendingJob::<f32>::default();
+        let job: BlendingJob = BlendingJob::default();
         assert!(!job.validate());
 
         // invalid output
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job: BlendingJob = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         assert!(!job.validate());
 
         // layers are optional
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        let mut job: BlendingJob = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
 
         // invalid layer input, too small
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.layers_mut().push(default_layer.clone());
         job.layers_mut().push(BlendingLayer {
-            input: ozz_buf_x(vec![]),
+            transform: ozz_buf(vec![]),
             weight: 0.5,
             joint_weights: Vec::new(),
         });
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
 
         // invalid output range, smaller output
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.layers_mut().push(default_layer.clone());
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); 3]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); 3]));
         assert!(!job.validate());
 
         // invalid threshold
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job: BlendingJob = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.set_threshold(0.0);
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
 
         // invalid joint weights range
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.layers_mut().push(BlendingLayer {
-            input: ozz_buf_x(vec![OzzTransform::default(); num_bind_pose]),
+            transform: ozz_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
-            joint_weights: vec![0.5; 1],
+            joint_weights: vec![f32x4::splat(0.5); 1],
         });
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
 
         // valid job
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.layers_mut().push(default_layer.clone());
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
 
         // valid joint weights range
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.layers_mut().push(default_layer.clone());
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
 
         // valid job, bigger output
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.layers_mut().push(default_layer.clone());
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose + 5]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose + 5]));
         assert!(job.validate());
 
         // valid additive job, no normal blending
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.additive_layers_mut().push(default_layer.clone());
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
 
         // valid additive job, with normal blending
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.layers_mut().push(default_layer.clone());
         job.additive_layers_mut().push(default_layer.clone());
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
 
         // invalid layer input range, too small
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.additive_layers_mut().push(BlendingLayer {
-            input: ozz_buf_x(vec![OzzTransform::default(); 3]),
+            transform: ozz_buf(vec![SoaTransform::default(); 3]),
             weight: 0.5,
             joint_weights: Vec::new(),
         });
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
 
         // valid additive job, with per-joint weights
-        let mut job = BlendingJob::<f32>::default();
-        job.set_skeleton(&skeleton);
+        let mut job = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         job.additive_layers_mut().push(BlendingLayer {
-            input: ozz_buf_x(vec![OzzTransform::default(); num_bind_pose]),
+            transform: ozz_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
-            joint_weights: vec![0.5; num_bind_pose],
+            joint_weights: vec![f32x4::splat(0.5); num_bind_pose],
         });
-        job.set_output(&ozz_buf(vec![OzzTransform::default(); num_bind_pose]));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
     }
 
-    fn new_layers1() -> Vec<BlendingLayer<f32>> {
-        let mut input1 = vec![OzzTransform::default(); 8];
-        input1[0].translation = Vector3::new(0.0, 4.0, 8.0);
-        input1[1].translation = Vector3::new(1.0, 5.0, 9.0);
-        input1[2].translation = Vector3::new(2.0, 6.0, 10.0);
-        input1[3].translation = Vector3::new(3.0, 7.0, 11.0);
-        input1[4].translation = Vector3::new(12.0, 16.0, 20.0);
-        input1[5].translation = Vector3::new(13.0, 17.0, 21.0);
-        input1[6].translation = Vector3::new(14.0, 18.0, 22.0);
-        input1[7].translation = Vector3::new(15.0, 19.0, 23.0);
-
-        let mut input2 = input1.clone();
-        input2.iter_mut().for_each(|transform| {
-            transform.translation = transform.translation.neg();
-        });
-
+    fn new_layers(
+        input1: Vec<SoaTransform>,
+        weights1: Vec<f32x4>,
+        input2: Vec<SoaTransform>,
+        weights2: Vec<f32x4>,
+    ) -> Vec<BlendingLayer<Rc<RefCell<Vec<SoaTransform>>>>> {
         return vec![
             BlendingLayer {
-                input: ozz_buf_x(input1),
+                transform: ozz_buf(input1),
                 weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: weights1,
             },
             BlendingLayer {
-                input: ozz_buf_x(input2),
+                transform: ozz_buf(input2),
                 weight: 0.0,
-                joint_weights: Vec::new(),
-            },
-        ];
-    }
-
-    fn new_layers2() -> Vec<BlendingLayer<f32>> {
-        let input1 = ozz_buf(vec![OzzTransform::<f32>::default(); 4]);
-        input1.borrow_mut()[0].translation = Vector3::new(2.0, 6.0, 10.0);
-        input1.borrow_mut()[1].translation = Vector3::new(3.0, 7.0, 11.0);
-        input1.borrow_mut()[2].translation = Vector3::new(4.0, 8.0, 12.0);
-        input1.borrow_mut()[3].translation = Vector3::new(5.0, 9.0, 13.0);
-
-        let input2 = ozz_buf(vec![OzzTransform::<f32>::default(); 4]);
-        input2.borrow_mut()[0].translation = Vector3::new(3.0, 7.0, 11.0);
-        input2.borrow_mut()[1].translation = Vector3::new(4.0, 8.0, 12.0);
-        input2.borrow_mut()[2].translation = Vector3::new(5.0, 9.0, 13.0);
-        input2.borrow_mut()[3].translation = Vector3::new(6.0, 10.0, 14.0);
-
-        return vec![
-            BlendingLayer {
-                input: Some(input1.clone()),
-                weight: 0.0,
-                joint_weights: Vec::new(),
-            },
-            BlendingLayer {
-                input: Some(input2.clone()),
-                weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: weights2,
             },
         ];
     }
 
     fn execute_test(
-        skeleton: &OzzRes<Skeleton<f32>>,
-        layers: Vec<BlendingLayer<f32>>,
-        additive_layers: Vec<BlendingLayer<f32>>,
-        expected_translations: Option<Vec<Vector3<f32>>>,
-        expected_rotations: Option<Vec<Quaternion<f32>>>,
-        expected_scales: Option<Vec<Vector3<f32>>>,
+        skeleton: &Rc<Skeleton>,
+        layers: Vec<BlendingLayer<Rc<RefCell<Vec<SoaTransform>>>>>,
+        additive_layers: Vec<BlendingLayer<Rc<RefCell<Vec<SoaTransform>>>>>,
+        expected_translations: Vec<SoaFloat3>,
+        expected_rotations: Vec<SoaQuaternion>,
+        expected_scales: Vec<SoaFloat3>,
         message: &str,
     ) {
-        let mut job = BlendingJob::default();
-        job.set_skeleton(&skeleton);
+        let mut job: BlendingJob = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
         *job.layers_mut() = layers;
         *job.additive_layers_mut() = additive_layers;
-        let joint_bind_poses = skeleton.joint_bind_poses().len();
-        let output = ozz_buf(vec![OzzTransform::default(); joint_bind_poses]);
-        job.set_output(&output);
+        let joint_rest_poses = skeleton.joint_rest_poses().len();
+        let output = ozz_buf(vec![SoaTransform::default(); joint_rest_poses]);
+        job.set_output(output.clone());
         job.run().unwrap();
 
-        for idx in 0..joint_bind_poses {
+        for idx in 0..joint_rest_poses {
             let out = output.as_ref().borrow()[idx];
 
-            if let Some(translations) = &expected_translations {
+            if !expected_translations.is_empty() {
+                let a: [Vec4; 3] = unsafe { mem::transmute(out.translation) };
+                let b: [Vec4; 3] = unsafe { mem::transmute(expected_translations[idx]) };
                 assert!(
-                    abs_diff_eq!(out.translation, translations[idx], epsilon = 0.000002),
+                    a[0].abs_diff_eq(b[0], 2e-6f32)
+                        && a[1].abs_diff_eq(b[1], 2e-6f32)
+                        && a[2].abs_diff_eq(b[2], 2e-6f32),
                     "{} => translation idx:{} actual:{:?}, excepted:{:?}",
                     message,
                     idx,
                     out.translation,
-                    translations[idx],
+                    expected_translations[idx],
                 );
             }
-            if let Some(rotations) = &expected_rotations {
+            if !expected_rotations.is_empty() {
+                let a: [Vec4; 4] = unsafe { mem::transmute(out.rotation) };
+                let b: [Vec4; 4] = unsafe { mem::transmute(expected_rotations[idx]) };
                 assert!(
-                    abs_diff_eq!(out.rotation, rotations[idx], epsilon = 0.0001),
+                    a[0].abs_diff_eq(b[0], 0.0001)
+                        && a[1].abs_diff_eq(b[1], 0.0001)
+                        && a[2].abs_diff_eq(b[2], 0.0001)
+                        && a[3].abs_diff_eq(b[3], 0.0001),
                     "{} => rotation idx:{} actual:{:?}, excepted:{:?}",
                     message,
                     idx,
                     out.rotation,
-                    rotations[idx],
+                    expected_rotations[idx],
                 );
             }
-            if let Some(scales) = &expected_scales {
+            if !expected_scales.is_empty() {
+                let a: [Vec4; 3] = unsafe { mem::transmute(out.scale) };
+                let b: [Vec4; 3] = unsafe { mem::transmute(expected_scales[idx]) };
                 assert!(
-                    abs_diff_eq!(out.scale, scales[idx], epsilon = 0.000002),
+                    a[0].abs_diff_eq(b[0], 2e-6f32)
+                        && a[1].abs_diff_eq(b[1], 2e-6f32)
+                        && a[2].abs_diff_eq(b[2], 2e-6f32),
                     "{} => scale idx:{} actual:{:?}, excepted:{:?}",
                     message,
                     idx,
                     out.scale,
-                    scales[idx],
+                    expected_scales[idx],
                 );
             }
         }
@@ -578,699 +648,749 @@ mod blending_tests {
 
     #[test]
     fn test_empty() {
-        let mut joint_bind_poses = vec![
-            OzzTransform {
-                translation: Vector3::new(0.0, 4.0, 8.0),
-                rotation: Quaternion::new(0.0, 0.0, 0.0, 1.0),
-                scale: Vector3::new(0.0, 40.0, 80.0),
-            },
-            OzzTransform {
-                translation: Vector3::new(1.0, 5.0, 9.0),
-                rotation: Quaternion::new(0.0, 0.0, 0.0, 1.0),
-                scale: Vector3::new(10.0, 50.0, 90.0),
-            },
-            OzzTransform {
-                translation: Vector3::new(2.0, 6.0, 10.0),
-                rotation: Quaternion::new(0.0, 0.0, 0.0, 1.0),
-                scale: Vector3::new(20.0, 60.0, 100.0),
-            },
-            OzzTransform {
-                translation: Vector3::new(3.0, 7.0, 11.0),
-                rotation: Quaternion::new(0.0, 0.0, 0.0, 1.0),
-                scale: Vector3::new(30.0, 70.0, 110.0),
-            },
-        ];
-        joint_bind_poses.extend_from_within(0..4);
-        joint_bind_poses.iter_mut().skip(4).for_each(|x| {
-            x.translation = x.translation.scale(2.0);
-            x.scale = x.scale.scale(2.0);
-        });
+        let mut joint_rest_poses = vec![SoaTransform::default(); 2];
+        joint_rest_poses[0].translation =
+            SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
+        joint_rest_poses[0].rotation = SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]);
+        joint_rest_poses[0].scale = SoaFloat3::new(
+            [0.0, 10.0, 20.0, 30.0],
+            [40.0, 50.0, 60.0, 70.0],
+            [80.0, 90.0, 100.0, 110.0],
+        );
+        joint_rest_poses[1].translation = joint_rest_poses[0].translation.mul_num(f32x4::splat(2.0));
+        joint_rest_poses[1].rotation = SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]);
+        joint_rest_poses[1].scale = joint_rest_poses[0].scale.mul_num(f32x4::splat(2.0));
 
-        let skeleton = ozz_res(Skeleton {
-            joint_bind_poses,
-            joint_parents: vec![],
-            joint_names: HashMap::new(),
+        let skeleton = Rc::new(Skeleton {
+            joint_rest_poses,
+            joint_parents: vec![0; 8],
+            joint_names: HashMap::with_hasher(DeterministicState::new()),
         });
 
         execute_test(
             &skeleton,
             Vec::new(),
             Vec::new(),
-            Some(vec![
-                Vector3::new(0.0, 4.0, 8.0),
-                Vector3::new(1.0, 5.0, 9.0),
-                Vector3::new(2.0, 6.0, 10.0),
-                Vector3::new(3.0, 7.0, 11.0),
-                Vector3::new(0.0, 8.0, 16.0),
-                Vector3::new(2.0, 10.0, 18.0),
-                Vector3::new(4.0, 12.0, 20.0),
-                Vector3::new(6.0, 14.0, 22.0),
-            ]),
-            None,
-            Some(vec![
-                Vector3::new(0.0, 40.0, 80.0),
-                Vector3::new(10.0, 50.0, 90.0),
-                Vector3::new(20.0, 60.0, 100.0),
-                Vector3::new(30.0, 70.0, 110.0),
-                Vector3::new(0.0, 80.0, 160.0),
-                Vector3::new(20.0, 100.0, 180.0),
-                Vector3::new(40.0, 120.0, 200.0),
-                Vector3::new(60.0, 140.0, 220.0),
-            ]),
+            vec![
+                SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]),
+                SoaFloat3::new([0.0, 2.0, 4.0, 6.0], [8.0, 10.0, 12.0, 14.0], [16.0, 18.0, 20.0, 22.0]),
+            ],
+            vec![],
+            vec![
+                SoaFloat3::new(
+                    [0.0, 10.0, 20.0, 30.0],
+                    [40.0, 50.0, 60.0, 70.0],
+                    [80.0, 90.0, 100.0, 110.0],
+                ),
+                SoaFloat3::new(
+                    [00.0, 20.0, 40.0, 60.0],
+                    [80.0, 100.0, 120.0, 140.0],
+                    [160.0, 180.0, 200.0, 220.0],
+                ),
+            ],
             "empty",
         );
     }
 
     #[test]
     fn test_weight() {
-        let mut joint_bind_poses = vec![OzzTransform::default(); 8];
-        joint_bind_poses[0].scale = Vector3::new(0.0, 4.0, 8.0);
-        joint_bind_poses[1].scale = Vector3::new(1.0, 5.0, 9.0);
-        joint_bind_poses[2].scale = Vector3::new(2.0, 6.0, 10.0);
-        joint_bind_poses[3].scale = Vector3::new(3.0, 7.0, 11.0);
-        joint_bind_poses[4].scale = joint_bind_poses[0].scale.scale(2.0);
-        joint_bind_poses[5].scale = joint_bind_poses[1].scale.scale(2.0);
-        joint_bind_poses[6].scale = joint_bind_poses[2].scale.scale(2.0);
-        joint_bind_poses[7].scale = joint_bind_poses[3].scale.scale(2.0);
-        let skeleton = ozz_res(Skeleton {
-            joint_bind_poses,
-            joint_parents: vec![],
-            joint_names: HashMap::new(),
+        let mut input1 = vec![IDENTITY; 2];
+        input1[0].translation = SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
+        input1[1].translation = SoaFloat3::new(
+            [12.0, 13.0, 14.0, 15.0],
+            [16.0, 17.0, 18.0, 19.0],
+            [20.0, 21.0, 22.0, 23.0],
+        );
+        let mut input2 = vec![IDENTITY; 2];
+        input2[0].translation = input1[0].translation.neg();
+        input2[1].translation = input1[1].translation.neg();
+        let mut layers = new_layers(input1, vec![], input2, vec![]);
+
+        let rest_poses = vec![
+            SoaTransform {
+                translation: SoaFloat3::splat_col([0.0, 0.0, 0.0]),
+                rotation: SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]),
+                scale: SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]),
+            },
+            SoaTransform {
+                translation: SoaFloat3::splat_col([0.0, 0.0, 0.0]),
+                rotation: SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]),
+                scale: SoaFloat3::new(
+                    [12.0, 13.0, 14.0, 15.0],
+                    [16.0, 17.0, 18.0, 19.0],
+                    [20.0, 21.0, 22.0, 23.0],
+                ),
+            },
+        ];
+        let skeleton = Rc::new(Skeleton {
+            joint_rest_poses: rest_poses,
+            joint_parents: vec![0; 8],
+            joint_names: HashMap::with_hasher(DeterministicState::new()),
         });
 
-        let mut layers = new_layers1();
+        {
+            layers[0].weight = -0.07;
+            layers[1].weight = 1.0;
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![
+                    SoaFloat3::new(
+                        [-0.0, -1.0, -2.0, -3.0],
+                        [-4.0, -5.0, -6.0, -7.0],
+                        [-8.0, -9.0, -10.0, -11.0],
+                    ),
+                    SoaFloat3::new(
+                        [-12.0, -13.0, -14.0, -15.0],
+                        [-16.0, -17.0, -18.0, -19.0],
+                        [-20.0, -21.0, -22.0, -23.0],
+                    ),
+                ],
+                vec![],
+                vec![SoaFloat3::splat_col([1.0, 1.0, 1.0]); 2],
+                "weight - 1",
+            );
+        }
 
-        layers[0].weight = -0.07;
-        layers[1].weight = 1.0;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![
-                Vector3::new(-0.0, -4.0, -8.0),
-                Vector3::new(-1.0, -5.0, -9.0),
-                Vector3::new(-2.0, -6.0, -10.0),
-                Vector3::new(-3.0, -7.0, -11.0),
-                Vector3::new(-12.0, -16.0, -20.0),
-                Vector3::new(-13.0, -17.0, -21.0),
-                Vector3::new(-14.0, -18.0, -22.0),
-                Vector3::new(-15.0, -19.0, -23.0),
-            ]),
-            None,
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 8]),
-            "weight - 1",
-        );
+        {
+            layers[0].weight = 1.0;
+            layers[1].weight = 1.0e-23f32;
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![
+                    SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]),
+                    SoaFloat3::new(
+                        [12.0, 13.0, 14.0, 15.0],
+                        [16.0, 17.0, 18.0, 19.0],
+                        [20.0, 21.0, 22.0, 23.0],
+                    ),
+                ],
+                vec![],
+                vec![SoaFloat3::splat_col([1.0, 1.0, 1.0]); 2],
+                "weight - 2",
+            );
+        }
 
-        layers[0].weight = 1.0;
-        layers[1].weight = 1.0e-23f32;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![
-                Vector3::new(0.0, 4.0, 8.0),
-                Vector3::new(1.0, 5.0, 9.0),
-                Vector3::new(2.0, 6.0, 10.0),
-                Vector3::new(3.0, 7.0, 11.0),
-                Vector3::new(12.0, 16.0, 20.0),
-                Vector3::new(13.0, 17.0, 21.0),
-                Vector3::new(14.0, 18.0, 22.0),
-                Vector3::new(15.0, 19.0, 23.0),
-            ]),
-            None,
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 8]),
-            "weight - 2",
-        );
-
-        layers[0].weight = 0.5;
-        layers[1].weight = 0.5;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![Vector3::new(0.0, 0.0, 0.0); 8]),
-            None,
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 8]),
-            "weight - 3",
-        );
+        {
+            layers[0].weight = 0.5;
+            layers[1].weight = 0.5;
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![SoaFloat3::splat_col([0.0, 0.0, 0.0]); 2],
+                vec![],
+                vec![SoaFloat3::splat_col([1.0, 1.0, 1.0]); 2],
+                "weight - 3",
+            );
+        }
     }
 
     #[test]
     fn test_joint_weights() {
-        let mut joint_bind_poses = vec![OzzTransform::default(); 8];
-        joint_bind_poses[0].translation = Vector3::new(10.0, 14.0, 18.0);
-        joint_bind_poses[1].translation = Vector3::new(11.0, 15.0, 19.0);
-        joint_bind_poses[2].translation = Vector3::new(12.0, 16.0, 20.0);
-        joint_bind_poses[3].translation = Vector3::new(13.0, 17.0, 21.0);
-        joint_bind_poses[0].scale = Vector3::new(0.0, 4.0, 8.0);
-        joint_bind_poses[1].scale = Vector3::new(1.0, 5.0, 9.0);
-        joint_bind_poses[2].scale = Vector3::new(2.0, 6.0, 10.0);
-        joint_bind_poses[3].scale = Vector3::new(3.0, 7.0, 11.0);
-        joint_bind_poses[4].scale = joint_bind_poses[0].scale.scale(2.0);
-        joint_bind_poses[5].scale = joint_bind_poses[1].scale.scale(2.0);
-        joint_bind_poses[6].scale = joint_bind_poses[2].scale.scale(2.0);
-        joint_bind_poses[7].scale = joint_bind_poses[3].scale.scale(2.0);
-        let skeleton = ozz_res(Skeleton {
-            joint_bind_poses,
-            joint_parents: vec![],
-            joint_names: HashMap::new(),
+        let mut input1 = vec![IDENTITY; 2];
+        input1[0].translation = SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
+        input1[1].translation = SoaFloat3::new(
+            [12.0, 13.0, 14.0, 15.0],
+            [16.0, 17.0, 18.0, 19.0],
+            [20.0, 21.0, 22.0, 23.0],
+        );
+        let mut input2 = vec![IDENTITY; 2];
+        input2[0].translation = input1[0].translation.neg();
+        input2[1].translation = input1[1].translation.neg();
+        let weights1 = vec![
+            f32x4::from_array([1.0, 1.0, 0.0, 0.0]),
+            f32x4::from_array([1.0, 0.0, 1.0, 1.0]),
+        ];
+        let weights2 = vec![
+            f32x4::from_array([1.0, 1.0, 1.0, 0.0]),
+            f32x4::from_array([0.0, 1.0, 1.0, 1.0]),
+        ];
+        let mut layers = new_layers(input1, weights1, input2, weights2);
+
+        let rest_poses = vec![
+            SoaTransform {
+                translation: SoaFloat3::new(
+                    [10.0, 11.0, 12.0, 13.0],
+                    [14.0, 15.0, 16.0, 17.0],
+                    [18.0, 19.0, 20.0, 21.0],
+                ),
+                rotation: SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]),
+                scale: SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]),
+            },
+            SoaTransform {
+                translation: SoaFloat3::splat_col([0.0, 0.0, 0.0]),
+                rotation: SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]),
+                scale: SoaFloat3::new([0.0, 2.0, 4.0, 6.0], [8.0, 10.0, 12.0, 14.0], [16.0, 18.0, 20.0, 22.0]),
+            },
+        ];
+        let skeleton = Rc::new(Skeleton {
+            joint_rest_poses: rest_poses,
+            joint_parents: vec![0; 8],
+            joint_names: HashMap::with_hasher(DeterministicState::new()),
         });
 
-        let mut layers = new_layers1();
-        layers[0].joint_weights = vec![1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0];
-        layers[1].joint_weights = vec![1.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+        {
+            layers[0].weight = 0.5;
+            layers[1].weight = 0.5;
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![
+                    SoaFloat3::new([0.0, 0.0, -2.0, 13.0], [0.0, 0.0, -6.0, 17.0], [0.0, 0.0, -10.0, 21.0]),
+                    SoaFloat3::new(
+                        [12.0, -13.0, 0.0, 0.0],
+                        [16.0, -17.0, 0.0, 0.0],
+                        [20.0, -21.0, 0.0, 0.0],
+                    ),
+                ],
+                vec![],
+                vec![
+                    SoaFloat3::new([1.0, 1.0, 1.0, 3.0], [1.0, 1.0, 1.0, 7.0], [1.0, 1.0, 1.0, 11.0]),
+                    SoaFloat3::splat_col([1.0, 1.0, 1.0]),
+                ],
+                "joint weight - 1",
+            );
+        }
 
-        layers[0].weight = 0.5;
-        layers[1].weight = 0.5;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(-2.0, -6.0, -10.0),
-                Vector3::new(13.0, 17.0, 21.0),
-                Vector3::new(12.0, 16.0, 20.0),
-                Vector3::new(-13.0, -17.0, -21.0),
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(0.0, 0.0, 0.0),
-            ]),
-            None,
-            Some(vec![
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(3.0, 7.0, 11.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-            ]),
-            "joint weight - 1",
-        );
-
-        layers[0].weight = 0.0;
-        layers[1].weight = 1.0;
-        execute_test(
-            &skeleton,
-            layers,
-            Vec::new(),
-            Some(vec![
-                Vector3::new(0.0, -4.0, -8.0),
-                Vector3::new(-1.0, -5.0, -9.0),
-                Vector3::new(-2.0, -6.0, -10.0),
-                Vector3::new(13.0, 17.0, 21.0),
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(-13.0, -17.0, -21.0),
-                Vector3::new(-14.0, -18.0, -22.0),
-                Vector3::new(-15.0, -19.0, -23.0),
-            ]),
-            None,
-            Some(vec![
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(3.0, 7.0, 11.0),
-                Vector3::new(0.0, 8.0, 16.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-            ]),
-            "joint weight - 2",
-        );
+        {
+            layers[0].weight = 0.0;
+            layers[1].weight = 1.0;
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![
+                    SoaFloat3::new(
+                        [-0.0, -1.0, -2.0, 13.0],
+                        [-4.0, -5.0, -6.0, 17.0],
+                        [-8.0, -9.0, -10.0, 21.0],
+                    ),
+                    SoaFloat3::new(
+                        [0.0, -13.0, -14.0, -15.0],
+                        [0.0, -17.0, -18.0, -19.0],
+                        [0.0, -21.0, -22.0, -23.0],
+                    ),
+                ],
+                vec![],
+                vec![
+                    SoaFloat3::new([1.0, 1.0, 1.0, 3.0], [1.0, 1.0, 1.0, 7.0], [1.0, 1.0, 1.0, 11.0]),
+                    SoaFloat3::new([0.0, 1.0, 1.0, 1.0], [8.0, 1.0, 1.0, 1.0], [16.0, 1.0, 1.0, 1.0]),
+                ],
+                "joint weight - 2",
+            );
+        }
     }
 
-    fn new_skeleton1() -> OzzRes<Skeleton<f32>> {
-        let mut joint_bind_poses = vec![OzzTransform::default(); 4];
-        joint_bind_poses[0].scale = Vector3::new(0.0, 4.0, 8.0);
-        joint_bind_poses[1].scale = Vector3::new(1.0, 5.0, 9.0);
-        joint_bind_poses[2].scale = Vector3::new(2.0, 6.0, 10.0);
-        joint_bind_poses[3].scale = Vector3::new(3.0, 7.0, 11.0);
+    fn new_skeleton1() -> Rc<Skeleton> {
+        let mut joint_rest_poses = vec![IDENTITY];
+        joint_rest_poses[0].scale = SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
 
-        return ozz_res(Skeleton {
-            joint_bind_poses,
-            joint_parents: vec![],
-            joint_names: HashMap::new(),
+        return Rc::new(Skeleton {
+            joint_rest_poses,
+            joint_parents: vec![0; 4],
+            joint_names: HashMap::with_hasher(DeterministicState::new()),
         });
     }
-
     #[test]
     fn test_normalize() {
         let skeleton = new_skeleton1();
-        let mut layers = new_layers2();
 
-        let input1 = layers[0].input.as_ref().unwrap().clone();
-        input1.borrow_mut()[0].rotation = Quaternion::new(0.70710677, 0.70710677, 0.0, 0.0);
-        input1.borrow_mut()[1].rotation = Quaternion::identity();
-        input1.borrow_mut()[2].rotation = Quaternion::new(0.70710677, 0.0, 0.70710677, 0.0);
-        input1.borrow_mut()[3].rotation = Quaternion::new(0.9238795, 0.382683432, 0.0, 0.0);
+        let mut input1 = vec![IDENTITY; 1];
+        input1[0].rotation = SoaQuaternion::new(
+            [0.70710677, 0.0, 0.0, 0.382683432],
+            [0.0, 0.0, 0.70710677, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.70710677, 1.0, 0.70710677, 0.9238795],
+        );
+        let mut input2 = vec![IDENTITY; 1];
+        input2[0].rotation = SoaQuaternion::new(
+            [0.0, 0.70710677, -0.70710677, -0.382683432],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, -0.70710677, 0.0],
+            [1.0, 0.70710677, 0.0, -0.9238795],
+        );
+        let mut layers = vec![
+            BlendingLayer {
+                transform: ozz_buf(input1),
+                weight: 0.0,
+                joint_weights: Vec::new(),
+            },
+            BlendingLayer {
+                transform: ozz_buf(input2),
+                weight: 0.0,
+                joint_weights: Vec::new(),
+            },
+        ];
 
-        let input2 = layers[1].input.as_ref().unwrap().clone();
-        input2.borrow_mut()[0].rotation = Quaternion::identity();
-        input2.borrow_mut()[1].rotation = Quaternion::new(0.70710677, 0.70710677, 0.0, 0.0);
-        input2.borrow_mut()[2].rotation = Quaternion::new(0.0, -0.70710677, 0.0, -0.70710677);
-        input2.borrow_mut()[3].rotation = Quaternion::new(-0.9238795, -0.382683432, 0.0, 0.0);
+        {
+            layers[0].weight = 0.2;
+            layers[0].transform.vec_mut().unwrap()[0].translation =
+                SoaFloat3::new([2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0], [10.0, 11.0, 12.0, 13.0]);
+            layers[1].weight = 0.3;
+            layers[1].transform.vec_mut().unwrap()[0].translation =
+                SoaFloat3::new([3.0, 4.0, 5.0, 6.0], [7.0, 8.0, 9.0, 10.0], [11.0, 12.0, 13.0, 14.0]);
 
-        layers[0].weight = 0.2;
-        layers[1].weight = 0.3;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![
-                Vector3::new(2.6, 6.6, 10.6),
-                Vector3::new(3.6, 7.6, 11.6),
-                Vector3::new(4.6, 8.6, 12.6),
-                Vector3::new(5.6, 9.6, 13.6),
-            ]),
-            Some(vec![
-                Quaternion::new(0.95224595, 0.30507791, 0.0, 0.0),
-                Quaternion::new(0.88906217, 0.45761687, 0.0, 0.0),
-                Quaternion::new(0.39229235, -0.58843851, 0.39229235, -0.58843851),
-                Quaternion::new(0.92387962, 0.38268352, 0.0, 0.0),
-            ]),
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 4]),
-            "normalize - 1",
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![SoaFloat3::new(
+                    [2.6, 3.6, 4.6, 5.6],
+                    [6.6, 7.6, 8.6, 9.6],
+                    [10.6, 11.6, 12.6, 13.6],
+                )],
+                vec![SoaQuaternion::new(
+                    [0.30507791, 0.45761687, -0.58843851, 0.38268352],
+                    [0.0, 0.0, 0.39229235, 0.0],
+                    [0.0, 0.0, -0.58843851, 0.0],
+                    [0.95224595, 0.88906217, 0.39229235, 0.92387962],
+                )],
+                vec![SoaFloat3::splat_col([1.0, 1.0, 1.0])],
+                "normalize - 1",
+            );
+        }
+
+        layers[0].transform.vec_mut().unwrap()[0].translation = SoaFloat3::new(
+            [5.0, 10.0, 15.0, 20.0],
+            [25.0, 30.0, 35.0, 40.0],
+            [45.0, 50.0, 55.0, 60.0],
+        );
+        layers[1].transform.vec_mut().unwrap()[0].translation = SoaFloat3::new(
+            [10.0, 15.0, 20.0, 25.0],
+            [30.0, 35.0, 40.0, 45.0],
+            [50.0, 55.0, 60.0, 65.0],
         );
 
-        input1.borrow_mut()[0].translation = Vector3::new(5.0, 25.0, 45.0);
-        input1.borrow_mut()[1].translation = Vector3::new(10.0, 30.0, 50.0);
-        input1.borrow_mut()[2].translation = Vector3::new(15.0, 35.0, 55.0);
-        input1.borrow_mut()[3].translation = Vector3::new(20.0, 40.0, 60.0);
-        input2.borrow_mut()[0].translation = Vector3::new(10.0, 30.0, 50.0);
-        input2.borrow_mut()[1].translation = Vector3::new(15.0, 35.0, 55.0);
-        input2.borrow_mut()[2].translation = Vector3::new(20.0, 40.0, 60.0);
-        input2.borrow_mut()[3].translation = Vector3::new(25.0, 45.0, 65.0);
+        {
+            layers[0].weight = 2.0;
+            layers[1].weight = 3.0;
 
-        layers[0].weight = 2.0;
-        layers[1].weight = 3.0;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![
-                Vector3::new(8.0, 28.0, 48.0),
-                Vector3::new(13.0, 33.0, 53.0),
-                Vector3::new(18.0, 38.0, 58.0),
-                Vector3::new(23.0, 43.0, 63.0),
-            ]),
-            Some(vec![
-                Quaternion::new(0.95224595, 0.30507791, 0.0, 0.0),
-                Quaternion::new(0.88906217, 0.45761687, 0.0, 0.0),
-                Quaternion::new(0.39229235, -0.58843851, 0.39229235, -0.58843851),
-                Quaternion::new(0.92387962, 0.38268352, 0.0, 0.0),
-            ]),
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 4]),
-            "normalize - 2",
-        );
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![SoaFloat3::new(
+                    [8.0, 13.0, 18.0, 23.0],
+                    [28.0, 33.0, 38.0, 43.0],
+                    [48.0, 53.0, 58.0, 63.0],
+                )],
+                vec![SoaQuaternion::new(
+                    [0.30507791, 0.45761687, -0.58843851, 0.38268352],
+                    [0.0, 0.0, 0.39229235, 0.0],
+                    [0.0, 0.0, -0.58843851, 0.0],
+                    [0.95224595, 0.88906217, 0.39229235, 0.92387962],
+                )],
+                vec![SoaFloat3::splat_col([1.0, 1.0, 1.0])],
+                "normalize - 1",
+            );
+        }
 
-        layers[1].joint_weights = vec![1.0, -1.0, 2.0, 0.1];
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![
-                Vector3::new(8.0, 28.0, 48.0),
-                Vector3::new(10.0, 30.0, 50.0),
-                Vector3::new(150.0, 310.0, 470.0).scale(1.0 / 8.0),
-                Vector3::new(47.5, 93.5, 139.5).scale(1.0 / 2.3),
-            ]),
-            None,
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 4]),
-            "normalize - 3",
-        );
+        {
+            layers[1].joint_weights = vec![f32x4::from_array([1.0, -1.0, 2.0, 0.1])];
+
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![SoaFloat3::new(
+                    [8.0, 10.0, 150.0 / 8.0, 47.5 / 2.30],
+                    [28.0, 30.0, 310.0 / 8.0, 93.5 / 2.30],
+                    [48.0, 50.0, 470.0 / 8.0, 139.5 / 2.30],
+                )],
+                vec![],
+                vec![SoaFloat3::splat_col([1.0, 1.0, 1.0])],
+                "normalize - 3",
+            );
+        }
     }
 
     #[test]
     fn test_threshold() {
         let skeleton = new_skeleton1();
-        let mut layers = new_layers2();
 
-        layers[0].weight = 0.04;
-        layers[1].weight = 0.06;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![
-                Vector3::new(2.6, 6.6, 10.6),
-                Vector3::new(3.6, 7.6, 11.6),
-                Vector3::new(4.6, 8.6, 12.6),
-                Vector3::new(5.6, 9.6, 13.6),
-            ]),
-            Some(vec![Quaternion::identity(); 4]),
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 4]),
-            "threshold - 1",
-        );
-
-        layers[0].weight = 1.0e-27;
-        layers[1].weight = 0.0;
-        execute_test(
-            &skeleton,
-            layers.clone(),
-            Vec::new(),
-            Some(vec![Vector3::zeros(); 4]),
-            Some(vec![Quaternion::identity(); 4]),
-            Some(vec![
-                Vector3::new(0.0, 4.0, 8.0),
-                Vector3::new(1.0, 5.0, 9.0),
-                Vector3::new(2.0, 6.0, 10.0),
-                Vector3::new(3.0, 7.0, 11.0),
-            ]),
-            "threshold - 2",
-        );
-    }
-
-    fn new_layers3() -> Vec<BlendingLayer<f32>> {
-        let mut input1 = vec![OzzTransform::<f32>::default(); 4];
-        input1[0].translation = Vector3::new(0.0, 4.0, 8.0);
-        input1[1].translation = Vector3::new(1.0, 5.0, 9.0);
-        input1[2].translation = Vector3::new(2.0, 6.0, 10.0);
-        input1[3].translation = Vector3::new(3.0, 7.0, 11.0);
-        input1[0].rotation = Quaternion::new(0.70710677, 0.70710677, 0.0, 0.0);
-        input1[1].rotation = Quaternion::identity();
-        input1[2].rotation = Quaternion::new(-0.70710677, 0.0, 0.70710677, 0.0);
-        input1[3].rotation = Quaternion::new(0.9238795, 0.382683432, 0.0, 0.0);
-        input1[0].scale = Vector3::new(12.0, 16.0, 20.0);
-        input1[1].scale = Vector3::new(13.0, 17.0, 21.0);
-        input1[2].scale = Vector3::new(14.0, 18.0, 22.0);
-        input1[3].scale = Vector3::new(15.0, 19.0, 23.0);
-
-        let input2 = input1
-            .iter()
-            .map(|x| OzzTransform {
-                translation: x.translation.neg(),
-                rotation: x.rotation.conjugate(),
-                scale: x.scale.neg(),
-            })
-            .collect::<Vec<_>>();
-
-        return vec![
+        let mut input1 = vec![IDENTITY; 1];
+        input1[0].translation = SoaFloat3::new([2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0], [10.0, 11.0, 12.0, 13.0]);
+        let mut input2 = vec![IDENTITY; 1];
+        input2[0].translation = SoaFloat3::new([3.0, 4.0, 5.0, 6.0], [7.0, 8.0, 9.0, 10.0], [11.0, 12.0, 13.0, 14.0]);
+        let mut layers = vec![
             BlendingLayer {
-                input: ozz_buf_x(input1),
+                transform: ozz_buf(input1),
                 weight: 0.0,
                 joint_weights: Vec::new(),
             },
             BlendingLayer {
-                input: ozz_buf_x(input2),
+                transform: ozz_buf(input2),
                 weight: 0.0,
                 joint_weights: Vec::new(),
             },
         ];
+
+        {
+            layers[0].weight = 0.04;
+            layers[1].weight = 0.06;
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![SoaFloat3::new(
+                    [2.6, 3.6, 4.6, 5.6],
+                    [6.6, 7.6, 8.6, 9.6],
+                    [10.6, 11.6, 12.6, 13.6],
+                )],
+                vec![SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0])],
+                vec![SoaFloat3::splat_col([1.0, 1.0, 1.0])],
+                "threshold - 1",
+            );
+        }
+
+        {
+            layers[0].weight = 1.0e-27;
+            layers[1].weight = 0.0;
+            execute_test(
+                &skeleton,
+                layers.clone(),
+                Vec::new(),
+                vec![SoaFloat3::splat_col([0.0; 3])],
+                vec![SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0])],
+                vec![SoaFloat3::new(
+                    [0.0, 1.0, 2.0, 3.0],
+                    [4.0, 5.0, 6.0, 7.0],
+                    [8.0, 9.0, 10.0, 11.0],
+                )],
+                "threshold - 2",
+            );
+        }
     }
+
+    // fn new_layers3() -> Vec<BlendingLayer<f32>> {
+    //     let mut input1 = vec![SoaTransform::<f32>::default(); 4];
+    //     input1[0].translation = Vec3::new(0.0, 4.0, 8.0);
+    //     input1[1].translation = Vec3::new(1.0, 5.0, 9.0);
+    //     input1[2].translation = Vec3::new(2.0, 6.0, 10.0);
+    //     input1[3].translation = Vec3::new(3.0, 7.0, 11.0);
+    //     input1[0].rotation = Quat::new(0.70710677, 0.70710677, 0.0, 0.0);
+    //     input1[1].rotation = Quat::identity();
+    //     input1[2].rotation = Quat::new(-0.70710677, 0.0, 0.70710677, 0.0);
+    //     input1[3].rotation = Quat::new(0.9238795, 0.382683432, 0.0, 0.0);
+    //     input1[0].scale = Vec3::new(12.0, 16.0, 20.0);
+    //     input1[1].scale = Vec3::new(13.0, 17.0, 21.0);
+    //     input1[2].scale = Vec3::new(14.0, 18.0, 22.0);
+    //     input1[3].scale = Vec3::new(15.0, 19.0, 23.0);
+
+    //     let input2 = input1
+    //         .iter()
+    //         .map(|x| SoaTransform {
+    //             translation: x.translation.neg(),
+    //             rotation: x.rotation.conjugate(),
+    //             scale: x.scale.neg(),
+    //         })
+    //         .collect::<Vec<_>>();
+
+    //     return vec![
+    //         BlendingLayer {
+    //             input: ozz_buf(input1),
+    //             weight: 0.0,
+    //             joint_weights: Vec::new(),
+    //         },
+    //         BlendingLayer {
+    //             input: ozz_buf(input2),
+    //             weight: 0.0,
+    //             joint_weights: Vec::new(),
+    //         },
+    //     ];
+    // }
 
     #[test]
     fn test_additive_weight() {
-        let skeleton = ozz_res(Skeleton {
-            joint_bind_poses: vec![OzzTransform::default(); 4],
-            joint_parents: vec![],
-            joint_names: HashMap::new(),
+        let skeleton = Rc::new(Skeleton {
+            joint_rest_poses: vec![IDENTITY; 1],
+            joint_parents: vec![0; 4],
+            joint_names: HashMap::with_hasher(DeterministicState::new()),
         });
 
-        let mut layers = new_layers3();
-        layers.pop();
-        let input1 = layers[0].input.as_ref().unwrap().borrow().clone();
-
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(vec![Vector3::zeros(); 4]),
-            Some(vec![Quaternion::identity(); 4]),
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 4]),
-            "additive weight - 1",
+        let mut input1 = vec![IDENTITY; 1];
+        input1[0].translation = SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
+        input1[0].rotation = SoaQuaternion::new(
+            [0.70710677, 0.0, 0.0, 0.382683432],
+            [0.0, 0.0, 0.70710677, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.70710677, 1.0, -0.70710677, 0.9238795],
         );
-
-        layers[0].weight = 0.5;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(input1.iter().map(|x| x.translation.scale(0.5)).collect()),
-            Some(vec![
-                Quaternion::new(0.9238795, 0.3826834, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-                Quaternion::new(0.9238795, 0.0, -0.3826834, 0.0),
-                Quaternion::new(0.98078528, 0.19509032, 0.0, 0.0),
-            ]),
-            Some(vec![
-                Vector3::new(6.5, 8.5, 10.5),
-                Vector3::new(7.0, 9.0, 11.0),
-                Vector3::new(7.5, 9.5, 11.5),
-                Vector3::new(8.0, 10.0, 12.0),
-            ]),
-            "additive weight - 2",
+        input1[0].scale = SoaFloat3::new(
+            [12.0, 13.0, 14.0, 15.0],
+            [16.0, 17.0, 18.0, 19.0],
+            [20.0, 21.0, 22.0, 23.0],
         );
+        let mut input2 = vec![IDENTITY; 1];
+        input2[0].translation = input1[0].translation.neg();
+        input2[0].rotation = input1[0].rotation.conjugate();
+        input2[0].scale = input1[0].scale.neg();
 
-        layers[0].weight = 1.0;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(input1.iter().map(|x| x.translation).collect()),
-            Some(input1.iter().map(|x| x.rotation).collect()),
-            Some(input1.iter().map(|x| x.scale).collect()),
-            "additive weight - 3",
-        );
+        let mut layers = vec![BlendingLayer {
+            transform: ozz_buf(input1.clone()),
+            weight: 0.0,
+            joint_weights: Vec::new(),
+        }];
 
-        let mut layers = new_layers3();
-        let input2 = layers[1].input.as_ref().unwrap().borrow().clone();
+        {
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::splat_col([0.0; 3]); 4],
+                vec![SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
+                vec![SoaFloat3::splat_col([1.0; 3]); 4],
+                "additive weight - 1",
+            );
+        }
 
-        layers[0].weight = 0.0;
-        layers[1].weight = 1.0;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(input2.iter().map(|x| x.translation).collect()),
-            Some(input2.iter().map(|x| x.rotation).collect()),
-            Some(input2.iter().map(|x| x.scale).collect()),
-            "additive weight - 4",
-        );
+        {
+            layers[0].weight = 0.5;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::new(
+                    [0.0, 0.5, 1.0, 1.5],
+                    [2.0, 2.5, 3.0, 3.5],
+                    [4.0, 4.5, 5.0, 5.5],
+                )],
+                vec![SoaQuaternion::new(
+                    [0.3826834, 0.0, 0.0, 0.19509032],
+                    [0.0, 0.0, -0.3826834, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.9238795, 1.0, 0.9238795, 0.98078528],
+                )],
+                vec![SoaFloat3::new(
+                    [6.5, 7.0, 7.5, 8.0],
+                    [8.5, 9.0, 9.5, 10.0],
+                    [10.5, 11.0, 11.5, 12.0],
+                )],
+                "additive weight - 2",
+            );
+        }
 
-        layers[0].weight = 1.0;
-        layers[1].weight = 1.0;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(vec![Vector3::zeros(); 4]),
-            Some(vec![Quaternion::identity(); 4]),
-            Some(vec![
-                Vector3::new(-144.0, -256.0, -400.0),
-                Vector3::new(-169.0, -289.0, -441.0),
-                Vector3::new(-196.0, -324.0, -484.0),
-                Vector3::new(-225.0, -361.0, -529.0),
-            ]),
-            "additive weight - 5",
-        );
+        {
+            layers[0].weight = 1.0;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::new(
+                    [0.0, 1.0, 2.0, 3.0],
+                    [4.0, 5.0, 6.0, 7.0],
+                    [8.0, 9.0, 10.0, 11.0],
+                )],
+                vec![SoaQuaternion::new(
+                    [0.70710677, 0.0, 0.0, 0.382683432],
+                    [0.0, 0.0, -0.70710677, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.70710677, 1.0, 0.70710677, 0.9238795],
+                )],
+                vec![SoaFloat3::new(
+                    [12.0, 13.0, 14.0, 15.0],
+                    [16.0, 17.0, 18.0, 19.0],
+                    [20.0, 21.0, 22.0, 23.0],
+                )],
+                "additive weight - 3",
+            );
+        }
 
-        layers[0].weight = 0.5;
-        layers[1].input = ozz_buf_x(input1.clone());
-        layers[1].weight = -0.5;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(vec![Vector3::zeros(); 4]),
-            Some(vec![Quaternion::identity(); 4]),
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 4]),
-            "additive weight - 6",
-        );
+        let mut layers = vec![
+            BlendingLayer {
+                transform: ozz_buf(input1.clone()),
+                weight: 0.0,
+                joint_weights: Vec::new(),
+            },
+            BlendingLayer {
+                transform: ozz_buf(input2),
+                weight: 0.0,
+                joint_weights: Vec::new(),
+            },
+        ];
+
+        {
+            layers[0].weight = 0.0;
+            layers[1].weight = 1.0;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::new(
+                    [-0.0, -1.0, -2.0, -3.0],
+                    [-4.0, -5.0, -6.0, -7.0],
+                    [-8.0, -9.0, -10.0, -11.0],
+                )],
+                vec![SoaQuaternion::new(
+                    [-0.70710677, -0.0, -0.0, -0.382683432],
+                    [-0.0, -0.0, 0.70710677, -0.0],
+                    [-0.0, -0.0, -0.0, -0.0],
+                    [0.70710677, 1.0, 0.70710677, 0.9238795],
+                )],
+                vec![SoaFloat3::new(
+                    [-12.0, -13.0, -14.0, -15.0],
+                    [-16.0, -17.0, -18.0, -19.0],
+                    [-20.0, -21.0, -22.0, -23.0],
+                )],
+                "additive weight - 4",
+            );
+        }
+
+        {
+            layers[0].weight = 1.0;
+            layers[1].weight = 1.0;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::splat_col([0.0; 3]); 4],
+                vec![SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
+                vec![SoaFloat3::new(
+                    [-144.0, -169.0, -196.0, -225.0],
+                    [-256.0, -289.0, -324.0, -361.0],
+                    [-400.0, -441.0, -484.0, -529.0],
+                )],
+                "additive weight - 5",
+            );
+        }
+
+        {
+            layers[0].weight = 0.5;
+            layers[1].transform = ozz_buf(input1);
+            layers[1].weight = -0.5;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::splat_col([0.0; 3]); 4],
+                vec![SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
+                vec![SoaFloat3::splat_col([1.0; 3]); 4],
+                "additive weight - 6",
+            );
+        }
     }
 
     #[test]
     fn test_additive_joint_weight() {
-        let skeleton = ozz_res(Skeleton {
-            joint_bind_poses: vec![OzzTransform::default(); 4],
-            joint_parents: vec![],
-            joint_names: HashMap::new(),
+        let skeleton = Rc::new(Skeleton {
+            joint_rest_poses: vec![IDENTITY; 1],
+            joint_parents: vec![0; 4],
+            joint_names: HashMap::with_hasher(DeterministicState::new()),
         });
 
-        let mut layers = new_layers3();
-        layers.pop();
-        layers[0].joint_weights = vec![1.0, 0.5, 0.0, -1.0];
-
-        layers[0].weight = 0.0;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(vec![Vector3::zeros(); 4]),
-            Some(vec![Quaternion::identity(); 4]),
-            Some(vec![Vector3::new(1.0, 1.0, 1.0); 4]),
-            "additive joint weight - 1",
+        let mut input1 = vec![IDENTITY; 1];
+        input1[0].translation = SoaFloat3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
+        input1[0].rotation = SoaQuaternion::new(
+            [0.70710677, 0.0, 0.0, 0.382683432],
+            [0.0, 0.0, 0.70710677, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.70710677, 1.0, -0.70710677, 0.9238795],
         );
-
-        layers[0].weight = 0.5;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(vec![
-                Vector3::new(0.0, 2.0, 4.0),
-                Vector3::new(0.25, 1.25, 2.25),
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(0.0, 0.0, 0.0),
-            ]),
-            Some(vec![
-                Quaternion::new(0.92387950, 0.3826834, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-            ]),
-            Some(vec![
-                Vector3::new(6.5, 8.5, 10.5),
-                Vector3::new(4.0, 5.0, 6.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-            ]),
-            "additive joint weight - 2",
+        input1[0].scale = SoaFloat3::new(
+            [12.0, 13.0, 14.0, 15.0],
+            [16.0, 17.0, 18.0, 19.0],
+            [20.0, 21.0, 22.0, 23.0],
         );
+        let mut layers = vec![BlendingLayer {
+            transform: ozz_buf(input1.clone()),
+            weight: 0.0,
+            joint_weights: vec![f32x4::from_array([1.0, 0.5, 0.0, -1.0])],
+        }];
 
-        layers[0].weight = 1.0;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(vec![
-                Vector3::new(0.0, 4.0, 8.0),
-                Vector3::new(0.5, 2.5, 4.5),
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(0.0, 0.0, 0.0),
-            ]),
-            Some(vec![
-                Quaternion::new(0.70710677, 0.70710677, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-            ]),
-            Some(vec![
-                Vector3::new(12.0, 16.0, 20.0),
-                Vector3::new(7.0, 9.0, 11.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-            ]),
-            "additive joint weight - 3",
-        );
+        {
+            layers[0].weight = 0.0;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::splat_col([0.0; 3]); 4],
+                vec![SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
+                vec![SoaFloat3::splat_col([1.0; 3]); 4],
+                "additive joint weight - 1",
+            );
+        }
 
-        layers[0].weight = -1.0;
-        execute_test(
-            &skeleton,
-            vec![],
-            layers.clone(),
-            Some(vec![
-                Vector3::new(0.0, -4.0, -8.0),
-                Vector3::new(-0.5, -2.5, -4.5),
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(0.0, 0.0, 0.0),
-            ]),
-            Some(vec![
-                Quaternion::new(0.70710677, -0.70710677, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-                Quaternion::new(1.0, 0.0, 0.0, 0.0),
-            ]),
-            Some(vec![
-                Vector3::new(1.0 / 12.0, 1.0 / 16.0, 1.0 / 20.0),
-                Vector3::new(1.0 / 7.0, 1.0 / 9.0, 1.0 / 11.0),
-                Vector3::new(1.0, 1.0, 1.0),
-                Vector3::new(1.0, 1.0, 1.0),
-            ]),
-            "additive joint weight - 3",
-        );
+        {
+            layers[0].weight = 0.5;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::new(
+                    [0.0, 0.25, 0.0, 0.0],
+                    [2.0, 1.25, 0.0, 0.0],
+                    [4.0, 2.25, 0.0, 0.0],
+                )],
+                vec![SoaQuaternion::new(
+                    [0.3826834, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.9238795, 1.0, 1.0, 1.0],
+                )],
+                vec![SoaFloat3::new(
+                    [6.5, 4.0, 1.0, 1.0],
+                    [8.5, 5.0, 1.0, 1.0],
+                    [10.5, 6.0, 1.0, 1.0],
+                )],
+                "additive joint weight - 2",
+            );
+        }
+
+        {
+            layers[0].weight = 1.0;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::new(
+                    [0.0, 0.5, 0.0, 0.0],
+                    [4.0, 2.5, 0.0, 0.0],
+                    [8.0, 4.5, 0.0, 0.0],
+                )],
+                vec![SoaQuaternion::new(
+                    [0.70710677, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.70710677, 1.0, 1.0, 1.0],
+                )],
+                vec![SoaFloat3::new(
+                    [12.0, 7.0, 1.0, 1.0],
+                    [16.0, 9.0, 1.0, 1.0],
+                    [20.0, 11.0, 1.0, 1.0],
+                )],
+                "additive joint weight - 3",
+            );
+        }
+
+        {
+            layers[0].weight = -1.0;
+            execute_test(
+                &skeleton,
+                vec![],
+                layers.clone(),
+                vec![SoaFloat3::new(
+                    [0.0, -0.5, 0.0, 0.0],
+                    [-4.0, -2.5, 0.0, 0.0],
+                    [-8.0, -4.5, 0.0, 0.0],
+                )],
+                vec![SoaQuaternion::new(
+                    [-0.70710677, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0],
+                    [0.70710677, 1.0, 1.0, 1.0],
+                )],
+                vec![SoaFloat3::new(
+                    [1.0 / 12.0, 1.0 / 7.0, 1.0, 1.0],
+                    [1.0 / 16.0, 1.0 / 9.0, 1.0, 1.0],
+                    [1.0 / 20.0, 1.0 / 11.0, 1.0, 1.0],
+                )],
+                "additive joint weight - 4",
+            )
+        };
     }
-
-    // #[test]
-    // fn test_blending_job_run() {
-    //     let mut archive = IArchive::new("./test_files/animation-blending-1.ozz").unwrap();
-    //     let animation1 = Rc::new(Animation::read(&mut archive).unwrap());
-    //     let mut archive = IArchive::new("./test_files/animation-blending-2.ozz").unwrap();
-    //     let animation2 = Rc::new(Animation::read(&mut archive).unwrap());
-    //     let mut archive = IArchive::new("./test_files/animation-blending-3.ozz").unwrap();
-    //     let animation3 = Rc::new(Animation::read(&mut archive).unwrap());
-
-    //     let mut archive = IArchive::new("./test_files/skeleton-blending.ozz").unwrap();
-    //     let skeleton = Rc::new(Skeleton::read(&mut archive).unwrap());
-
-    //     let mut sampling1_job = SamplingJob::new(animation1);
-    //     let mut sampling2_job = SamplingJob::new(animation2);
-    //     let mut sampling3_job = SamplingJob::new(animation3);
-    //     let mut blending_job = BlendingJob::new(
-    //         skeleton,
-    //         vec![
-    //             BlendingLayer {
-    //                 input: sampling1_job.output(),
-    //                 weight: 0.399999976f32,
-    //                 joint_weights: Vec::new(),
-    //             },
-    //             BlendingLayer {
-    //                 input: sampling2_job.output(),
-    //                 weight: 0.600000024f32,
-    //                 joint_weights: Vec::new(),
-    //             },
-    //             BlendingLayer {
-    //                 input: sampling3_job.output(),
-    //                 weight: 0.0f32,
-    //                 joint_weights: Vec::new(),
-    //             },
-    //         ],
-    //         0.1f32,
-    //     );
-
-    //     let mut counter = 0;
-    //     let mut ratio = 0f32;
-    //     while ratio <= 1.0f32 {
-    //         counter += 1;
-    //         ratio += 0.005;
-
-    //         sampling1_job.run(ratio);
-    //         sampling2_job.run(ratio);
-    //         sampling3_job.run(ratio);
-
-    //         let file_no = match counter {
-    //             1 => 1,
-    //             100 => 2,
-    //             200 => 3,
-    //             _ => continue,
-    //         };
-
-    //         let (num_passes, accumulated_weight) = blending_job.blend_layers();
-    //         {
-    //             let file = format!("./test_files/blending/blend_layers_{}", file_no);
-    //             let chunk: Vec<OzzTransform<f32>> = read_chunk(&file).unwrap();
-    //             let output = blending_job.output.borrow();
-    //             for idx in 0..output.len() {
-    //                 assert_eq!(chunk[idx].translation, output[idx].translation);
-    //                 assert_eq!(chunk[idx].rotation, output[idx].rotation);
-    //                 assert_eq!(chunk[idx].scale, output[idx].scale);
-    //             }
-    //         }
-
-    //         let accumulated_weight = blending_job.blend_bind_pose(num_passes, accumulated_weight);
-    //         {
-    //             let file = format!("./test_files/blending/blend_bind_pose_{}", file_no);
-    //             let chunk: Vec<OzzTransform<f32>> = read_chunk(&file).unwrap();
-    //             let output = blending_job.output.borrow();
-    //             for idx in 0..output.len() {
-    //                 assert_eq!(chunk[idx].translation, output[idx].translation);
-    //                 assert_eq!(chunk[idx].rotation, output[idx].rotation);
-    //                 assert_eq!(chunk[idx].scale, output[idx].scale);
-    //             }
-    //         }
-
-    //         blending_job.normalize(accumulated_weight);
-    //         {
-    //             let file = format!("./test_files/blending/normalize_{}", file_no);
-    //             let chunk: Vec<OzzTransform<f32>> = read_chunk(&file).unwrap();
-    //             let output = blending_job.output.borrow();
-    //             for idx in 0..output.len() {
-    //                 assert_eq!(chunk[idx].translation, output[idx].translation);
-    //                 assert_eq!(chunk[idx].rotation, output[idx].rotation);
-    //                 assert_eq!(chunk[idx].scale, output[idx].scale);
-    //             }
-    //         }
-    //     }
-    // }
 }
