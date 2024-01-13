@@ -1,0 +1,34 @@
+version: 2.1
+
+jobs:
+  deterministic_x86_64:
+    docker:
+      - image: cimg/rust:1.75.0
+    resource_class: medium
+    steps:
+      - checkout
+      - run: cargo --version && cargo test --release && tar -czvf output_x86_64.tar.gz output
+      - store_artifacts:
+          path: ./output_x86_64.tar.gz
+  
+  deterministic_aarch64:
+    docker:
+      - image: cimg/rust:1.75.0
+    resource_class: arm.medium
+    steps:
+      - checkout
+      - run: cargo --version && cargo test --release && tar -czvf output_aarch64.tar.gz output
+      - store_artifacts:
+          path: ./output_aarch64.tar.gz
+
+workflows:
+  deterministic:
+    jobs:
+      - deterministic_x86_64:
+          filters:
+            branches:
+              only: [ "master", "test" ]
+      - deterministic_aarch64:
+          filters:
+            branches:
+              only: [ "master", "test" ]
