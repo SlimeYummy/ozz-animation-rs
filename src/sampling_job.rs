@@ -593,7 +593,7 @@ where
             None => return false,
         };
 
-        if ctx.max_soa_tracks() < animation.as_ref().num_soa_tracks() {
+        if ctx.max_soa_tracks() < animation.num_soa_tracks() {
             return false;
         }
 
@@ -604,7 +604,7 @@ where
             },
             None => return false,
         };
-        if output.len() < animation.as_ref().num_soa_tracks() {
+        if output.len() < animation.num_soa_tracks() {
             return false;
         }
 
@@ -619,7 +619,7 @@ where
             self.verified = true;
         }
 
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         if animation.num_soa_tracks() == 0 {
             return Ok(());
         }
@@ -641,7 +641,7 @@ where
     }
 
     fn step_context(&mut self) {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
         let animation_id = animation as *const _ as usize;
@@ -655,7 +655,7 @@ where
     }
 
     fn update_translation_cursor(&mut self) {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
         if ctx.translation_cursor() == 0 {
@@ -699,7 +699,7 @@ where
     }
 
     fn update_translation_key_frames(&mut self) {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
         let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
@@ -731,7 +731,7 @@ where
     }
 
     fn update_rotation_cursor(&mut self) {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
         if ctx.rotation_cursor() == 0 {
@@ -775,7 +775,7 @@ where
     }
 
     fn update_rotation_key_frames(&mut self) {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
         let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
@@ -807,7 +807,7 @@ where
     }
 
     fn update_scale_cursor(&mut self) {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
         if ctx.scale_cursor() == 0 {
@@ -849,7 +849,7 @@ where
     }
 
     fn update_scale_key_frames(&mut self) {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
         let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
@@ -881,7 +881,7 @@ where
     }
 
     fn interpolates(&mut self) -> Result<(), OzzError> {
-        let animation = self.animation.as_ref().unwrap().as_ref();
+        let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
         let mut output = self.output.as_mut().unwrap().vec_mut()?;
 

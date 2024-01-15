@@ -1,5 +1,5 @@
 ![github actions](https://github.com/FenQiDian/ozz-animation-rs/actions/workflows/main.yml/badge.svg)
-[![CircleCI](https://dl.circleci.com/status-badge/img/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/main.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/main)
+[![CircleCI](https://dl.circleci.com/status-badge/img/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/master)
 
 # Ozz-animation-rs
 
@@ -35,7 +35,7 @@ I have no plan to implement "unsupported" features, currently. Or you can try to
 
 Since rust simd features are not stable, you need a nightly version rust to compile this library.
 
-### platforms
+### Platforms
 
 In theory, ozz-animation-rs supports all platforms supported by rust. But I only tested on the following platforms:
 - Windows/Ubuntu/Mac x64 (Github actions)

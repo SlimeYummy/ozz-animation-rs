@@ -30,7 +30,7 @@ pub const SKELETON_NO_PARENT: i32 = -1;
 pub trait OzzRef<T>
 where
     T: ?Sized,
-    Self: Clone + AsRef<T>,
+    Self: Clone + AsRef<T> + Deref<Target = T>,
 {
 }
 
