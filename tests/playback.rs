@@ -1,3 +1,5 @@
+#![cfg(feature = "bincode")]
+
 use bincode::{Decode, Encode};
 use ozz_animation_rs::*;
 use std::rc::Rc;

@@ -1,20 +1,26 @@
 [package]
 name = "ozz-animation-rs"
-version = "0.1.0"
-authors = ["FenQiDian <email@fenqi.moe>"]
-edition = "2018"
+version = "0.7.0"
+authors = ["SlimeYummy <email@fenqi.moe>"]
+edition = "2021"
 resolver = "2"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+rust-version = "1.75"
+description = "A rust runtime library for ozz-animation with cross-platform deterministic."
+license = "MPL-2.0"
+homepage = "https://github.com/SlimeYummy/ozz-animation-rs"
+repository = "https://github.com/SlimeYummy/ozz-animation-rs"
+license-file = "LICENSE.txt"
+keywords = ["game", "animation", "skeletal-animation", "fixed-point", "deterministic", "deterministic-game", "ozz-animation"]
+categories = ["game-development", "rendering::data-formats", "api-bindings"]
+exclude = ["/.circleci", "/.github", "/expected", "/output", "/resource"]
 
 [features]
-default = ["serde", "bincode"]
-serde = ["dep:serde"]
+default = ["bincode"]
 bincode = ["dep:bincode"]
 
 [dependencies]
 bincode = { version = "2.0.0-rc.3", optional = true }
 glam = "0.24"
-serde = { version = "1", features = ["derive"], optional = true }
 static_assertions = "1.1.0"
 thiserror = "1.0.52"

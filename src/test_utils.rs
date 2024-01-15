@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+#[cfg(feature = "bincode")]
 use bincode::{Decode, Encode};
 use std::env::consts::{ARCH, OS};
 use std::error::Error;
@@ -25,6 +26,7 @@ pub fn f16(f: f32) -> u16 {
 
 static FOLDER: OnceLock<()> = OnceLock::new();
 
+#[cfg(feature = "bincode")]
 pub fn save_to_file<T: Encode>(folder: &str, name: &str, data: &T) -> Result<(), Box<dyn Error>> {
     FOLDER.get_or_init(|| {
         fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
@@ -42,6 +44,7 @@ pub fn save_to_file<T: Encode>(folder: &str, name: &str, data: &T) -> Result<(),
     return Ok(());
 }
 
+#[cfg(feature = "bincode")]
 pub fn compare_with_file<T: Decode + PartialEq>(folder: &str, name: &str, data: &T) -> Result<(), Box<dyn Error>> {
     if env::var("SAVE_TO_EXPECTED").is_ok() {
         return Ok(());

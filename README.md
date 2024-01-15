@@ -1,5 +1,5 @@
 ![github actions](https://github.com/FenQiDian/ozz-animation-rs/actions/workflows/main.yml/badge.svg)
-[![CircleCI](https://dl.circleci.com/status-badge/img/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/circleci/FydWtkGiDKrskUYY5Dwa1X/TorfFYVWfpUFa9BegTzrmo/tree/master)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/SlimeYummy/ozz-animation-rs/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/SlimeYummy/ozz-animation-rs/tree/master)
 
 # Ozz-animation-rs
 
@@ -39,7 +39,7 @@ Since rust simd features are not stable, you need a nightly version rust to comp
 
 In theory, ozz-animation-rs supports all platforms supported by rust. But I only tested on the following platforms:
 - Windows/Ubuntu/Mac x64 (Github actions)
-- X64/Arm64 docker (CircleCI)
+- X64/Arm64 docker ([CircleCI](https://dl.circleci.com/status-badge/redirect/gh/SlimeYummy/ozz-animation-rs/tree/master))
 
 Maybe you can run cross-platform deterministic test cases under [./tests](https://github.com/FenQiDian/ozz-animation-rs/tree/master/tests) on your target platform.
 
