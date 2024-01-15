@@ -107,7 +107,7 @@ where
 
     pub fn set_skeleton(&mut self, skeleton: S) {
         self.verified = false;
-        let joint_rest_poses = skeleton.as_ref().joint_rest_poses().len();
+        let joint_rest_poses = skeleton.joint_rest_poses().len();
         if self.accumulated_weights.len() < joint_rest_poses {
             self.accumulated_weights.resize(joint_rest_poses, ZERO);
         }
@@ -168,7 +168,7 @@ where
             },
             None => return false,
         };
-        if output.len() < skeleton.as_ref().joint_rest_poses().len() {
+        if output.len() < skeleton.joint_rest_poses().len() {
             return false;
         }
 
@@ -217,7 +217,7 @@ where
     }
 
     fn blend_layers(&mut self, output: &mut Vec<SoaTransform>) -> Result<(), OzzError> {
-        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let skeleton = self.skeleton.as_ref().unwrap();
         let num_soa_joints = skeleton.num_soa_joints();
 
         for layer in &self.layers {
@@ -265,7 +265,7 @@ where
     }
 
     fn blend_rest_pose(&mut self, output: &mut Vec<SoaTransform>) {
-        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let skeleton = self.skeleton.as_ref().unwrap();
         let joint_rest_poses = skeleton.joint_rest_poses();
 
         if self.num_partial_passes == 0 {
@@ -295,7 +295,7 @@ where
     }
 
     fn normalize(&mut self, output: &mut Vec<SoaTransform>) {
-        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let skeleton = self.skeleton.as_ref().unwrap();
         let joint_rest_poses = skeleton.joint_rest_poses();
 
         if self.num_partial_passes == 0 {
@@ -318,7 +318,7 @@ where
     }
 
     fn add_layers(&mut self, output: &mut Vec<SoaTransform>) -> Result<(), OzzError> {
-        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let skeleton = self.skeleton.as_ref().unwrap();
         let joint_rest_poses = skeleton.joint_rest_poses();
 
         for layer in &self.additive_layers {

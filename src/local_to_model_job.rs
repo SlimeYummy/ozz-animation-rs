@@ -140,7 +140,7 @@ where
             },
             None => return false,
         };
-        if input.len() < skeleton.as_ref().num_soa_joints() {
+        if input.len() < skeleton.num_soa_joints() {
             return false;
         }
 
@@ -151,7 +151,7 @@ where
             },
             None => return false,
         };
-        if output.len() < skeleton.as_ref().num_joints() {
+        if output.len() < skeleton.num_joints() {
             return false;
         }
 
@@ -166,7 +166,7 @@ where
             self.verified = true;
         }
 
-        let skeleton = self.skeleton.as_ref().unwrap().as_ref();
+        let skeleton = self.skeleton.as_ref().unwrap();
         let input = self.input.as_ref().unwrap().vec()?;
         let mut output = self.output.as_mut().unwrap().vec_mut()?;
 
