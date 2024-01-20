@@ -1,3 +1,5 @@
+[![Release Doc](https://docs.rs/ozz-animation-rs/badge.svg)](https://docs.rs/ozz-animation-rs)
+[![Crate](https://img.shields.io/crates/v/ozz-animation-rs.svg)](https://crates.io/crates/ozz-animation-rs)
 ![github actions](https://github.com/FenQiDian/ozz-animation-rs/actions/workflows/main.yml/badge.svg)
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/SlimeYummy/ozz-animation-rs/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/SlimeYummy/ozz-animation-rs/tree/master)
 
