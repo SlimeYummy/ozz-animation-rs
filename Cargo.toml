@@ -1,19 +1,17 @@
 [package]
 name = "ozz-animation-rs"
 version = "0.7.0"
-authors = ["SlimeYummy <email@fenqi.moe>"]
+authors = ["SlimeYummy <zzzcccnnn@outlook.com>"]
 edition = "2021"
-resolver = "2"
-
 rust-version = "1.75"
 description = "A rust runtime library for ozz-animation with cross-platform deterministic."
 license = "MPL-2.0"
 homepage = "https://github.com/SlimeYummy/ozz-animation-rs"
 repository = "https://github.com/SlimeYummy/ozz-animation-rs"
-license-file = "LICENSE.txt"
-keywords = ["game", "animation", "skeletal-animation", "fixed-point", "deterministic", "deterministic-game", "ozz-animation"]
+keywords = ["animation", "skeletal-animation", "fixed-point", "deterministic", "ozz-animation"]
 categories = ["game-development", "rendering::data-formats", "api-bindings"]
 exclude = ["/.circleci", "/.github", "/expected", "/output", "/resource"]
+resolver = "2"
 
 [features]
 default = ["bincode"]
