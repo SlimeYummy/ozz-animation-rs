@@ -1,23 +1,23 @@
+use glam::Mat4;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::base::{OzzBuf, OzzRef, SKELETON_MAX_JOINTS, SKELETON_NO_PARENT};
-use crate::math::{Float4x4, SoaFloat4x4, SoaTransform};
+use crate::base::{OzzBuf, OzzError, OzzRef, SKELETON_MAX_JOINTS, SKELETON_NO_PARENT};
+use crate::math::{AosMat4, SoaMat4, SoaTransform};
 use crate::skeleton::Skeleton;
-use crate::OzzError;
 
 #[derive(Debug)]
-pub struct LocalToModelJob<S = Rc<Skeleton>, I = Rc<RefCell<Vec<SoaTransform>>>, O = Rc<RefCell<Vec<Float4x4>>>>
+pub struct LocalToModelJob<S = Rc<Skeleton>, I = Rc<RefCell<Vec<SoaTransform>>>, O = Rc<RefCell<Vec<Mat4>>>>
 where
     S: OzzRef<Skeleton>,
     I: OzzBuf<SoaTransform>,
-    O: OzzBuf<Float4x4>,
+    O: OzzBuf<Mat4>,
 {
     skeleton: Option<S>,
     input: Option<I>,
     output: Option<O>,
     verified: bool,
-    root: Float4x4,
+    root: AosMat4,
     from: i32,
     to: i32,
     from_excluded: bool,
@@ -27,7 +27,7 @@ impl<S, I, O> Default for LocalToModelJob<S, I, O>
 where
     S: OzzRef<Skeleton>,
     I: OzzBuf<SoaTransform>,
-    O: OzzBuf<Float4x4>,
+    O: OzzBuf<Mat4>,
 {
     fn default() -> LocalToModelJob<S, I, O> {
         return LocalToModelJob {
@@ -35,7 +35,7 @@ where
             input: None,
             output: None,
             verified: false,
-            root: Float4x4::identity(),
+            root: AosMat4::identity(),
             from: SKELETON_NO_PARENT,
             to: SKELETON_MAX_JOINTS,
             from_excluded: false,
@@ -47,7 +47,7 @@ impl<S, I, O> LocalToModelJob<S, I, O>
 where
     S: OzzRef<Skeleton>,
     I: OzzBuf<SoaTransform>,
-    O: OzzBuf<Float4x4>,
+    O: OzzBuf<Mat4>,
 {
     pub fn new() -> LocalToModelJob {
         return LocalToModelJob::default();
@@ -95,12 +95,12 @@ where
         self.output = None;
     }
 
-    pub fn root(&self) -> Float4x4 {
-        return self.root;
+    pub fn root(&self) -> Mat4 {
+        return self.root.into();
     }
 
-    pub fn set_root(&mut self, root: &Float4x4) {
-        self.root = *root;
+    pub fn set_root(&mut self, root: &Mat4) {
+        self.root = (*root).into();
     }
 
     pub fn from(&self) -> i32 {
@@ -178,16 +178,16 @@ where
 
         while process {
             let transform = &input[idx / 4];
-            let soa_matrices = SoaFloat4x4::from_affine(&transform.translation, &transform.rotation, &transform.scale);
+            let soa_matrices = SoaMat4::from_affine(&transform.translation, &transform.rotation, &transform.scale);
             let aos_matrices = soa_matrices.to_aos();
 
             let soa_end = (idx + 4) & !3;
             while idx < soa_end && process {
                 let parent = skeleton.joint_parent(idx);
                 if parent == Skeleton::no_parent() {
-                    output[idx] = Float4x4::mul(&self.root, &aos_matrices[idx & 3]);
+                    output[idx] = AosMat4::mul(&self.root, &aos_matrices[idx & 3]).into();
                 } else {
-                    output[idx] = Float4x4::mul(&output[parent as usize], &aos_matrices[idx & 3]);
+                    output[idx] = AosMat4::mul(&output[parent as usize].into(), &aos_matrices[idx & 3]).into();
                 }
 
                 idx += 1;
@@ -203,12 +203,11 @@ where
 mod local_to_model_tests {
     use glam::{Mat4, Vec3};
     use std::collections::HashMap;
-    use std::mem;
 
     use super::*;
     use crate::archive::{ArchiveReader, IArchive};
     use crate::base::DeterministicState;
-    use crate::math::{SoaFloat3, SoaQuaternion};
+    use crate::math::{SoaQuat, SoaVec3};
     use crate::skeleton::Skeleton;
 
     #[test]
@@ -224,7 +223,7 @@ mod local_to_model_tests {
         // empty input
         let mut job: LocalToModelJob = LocalToModelJob::default();
         job.set_skeleton(skeleton.clone());
-        job.set_output(Rc::new(RefCell::new(vec![Float4x4::identity(); num_joints])));
+        job.set_output(Rc::new(RefCell::new(vec![Mat4::IDENTITY; num_joints])));
         assert!(!job.validate());
 
         // empty output
@@ -237,19 +236,19 @@ mod local_to_model_tests {
         let mut job = LocalToModelJob::default();
         job.set_skeleton(skeleton.clone());
         job.set_input(Rc::new(RefCell::new(vec![SoaTransform::default(); 1])));
-        job.set_output(Rc::new(RefCell::new(vec![Float4x4::identity(); num_joints + 10])));
+        job.set_output(Rc::new(RefCell::new(vec![Mat4::IDENTITY; num_joints + 10])));
         assert!(!job.validate());
 
         // invalid output
         let mut job = LocalToModelJob::default();
         job.set_skeleton(skeleton.clone());
         job.set_input(Rc::new(RefCell::new(vec![SoaTransform::default(); num_joints + 10])));
-        job.set_output(Rc::new(RefCell::new(vec![Float4x4::identity(); 1])));
+        job.set_output(Rc::new(RefCell::new(vec![Mat4::IDENTITY; 1])));
 
         let mut job = LocalToModelJob::default();
         job.set_skeleton(skeleton.clone());
         job.set_input(Rc::new(RefCell::new(vec![SoaTransform::default(); num_joints])));
-        job.set_output(Rc::new(RefCell::new(vec![Float4x4::identity(); num_joints])));
+        job.set_output(Rc::new(RefCell::new(vec![Mat4::IDENTITY; num_joints])));
 
         // bad from
         job.from = SKELETON_MAX_JOINTS;
@@ -274,9 +273,9 @@ mod local_to_model_tests {
         return Rc::new(Skeleton {
             joint_rest_poses: vec![
                 SoaTransform {
-                    translation: SoaFloat3::splat_col([0.0; 3]),
-                    rotation: SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]),
-                    scale: SoaFloat3::splat_col([0.0; 3]),
+                    translation: SoaVec3::splat_col([0.0; 3]),
+                    rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
+                    scale: SoaVec3::splat_col([0.0; 3]),
                 };
                 2
             ],
@@ -297,24 +296,24 @@ mod local_to_model_tests {
     fn new_input1() -> Rc<RefCell<Vec<SoaTransform>>> {
         return Rc::new(RefCell::new(vec![
             SoaTransform {
-                translation: SoaFloat3::new([2.0, 0.0, 1.0, -2.0], [2.0, 0.0, 2.0, -2.0], [2.0, 0.0, 4.0, -2.0]),
-                rotation: SoaQuaternion::new(
+                translation: SoaVec3::new([2.0, 0.0, 1.0, -2.0], [2.0, 0.0, 2.0, -2.0], [2.0, 0.0, 4.0, -2.0]),
+                rotation: SoaQuat::new(
                     [0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.70710677, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0],
                     [1.0, 0.70710677, 1.0, 1.0],
                 ),
-                scale: SoaFloat3::new([1.0, 1.0, 1.0, 10.0], [1.0, 1.0, 1.0, 10.0], [1.0, 1.0, 1.0, 10.0]),
+                scale: SoaVec3::new([1.0, 1.0, 1.0, 10.0], [1.0, 1.0, 1.0, 10.0], [1.0, 1.0, 1.0, 10.0]),
             },
             SoaTransform {
-                translation: SoaFloat3::new([12.0, 0.0, 0.0, 0.0], [46.0, 0.0, 0.0, 0.0], [-12.0, 0.0, 0.0, 0.0]),
-                rotation: SoaQuaternion::new(
+                translation: SoaVec3::new([12.0, 0.0, 0.0, 0.0], [46.0, 0.0, 0.0, 0.0], [-12.0, 0.0, 0.0, 0.0]),
+                rotation: SoaQuat::new(
                     [0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0],
                     [1.0, 1.0, 1.0, 1.0],
                 ),
-                scale: SoaFloat3::new([1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0]),
+                scale: SoaVec3::new([1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0]),
             },
         ]));
     }
@@ -333,9 +332,9 @@ mod local_to_model_tests {
         return Rc::new(Skeleton {
             joint_rest_poses: vec![
                 SoaTransform {
-                    translation: SoaFloat3::splat_col([0.0; 3]),
-                    rotation: SoaQuaternion::splat_col([0.0, 0.0, 0.0, 1.0]),
-                    scale: SoaFloat3::splat_col([0.0; 3]),
+                    translation: SoaVec3::splat_col([0.0; 3]),
+                    rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
+                    scale: SoaVec3::splat_col([0.0; 3]),
                 };
                 2
             ],
@@ -358,24 +357,24 @@ mod local_to_model_tests {
     fn new_input2() -> Rc<RefCell<Vec<SoaTransform>>> {
         return Rc::new(RefCell::new(vec![
             SoaTransform {
-                translation: SoaFloat3::new([2.0, 0.0, -2.0, 1.0], [2.0, 0.0, -2.0, 2.0], [2.0, 0.0, -2.0, 4.0]),
-                rotation: SoaQuaternion::new(
+                translation: SoaVec3::new([2.0, 0.0, -2.0, 1.0], [2.0, 0.0, -2.0, 2.0], [2.0, 0.0, -2.0, 4.0]),
+                rotation: SoaQuat::new(
                     [0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.70710677, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0],
                     [1.0, 0.70710677, 1.0, 1.0],
                 ),
-                scale: SoaFloat3::new([1.0, 1.0, 10.0, 1.0], [1.0, 1.0, 10.0, 1.0], [1.0, 1.0, 10.0, 1.0]),
+                scale: SoaVec3::new([1.0, 1.0, 10.0, 1.0], [1.0, 1.0, 10.0, 1.0], [1.0, 1.0, 10.0, 1.0]),
             },
             SoaTransform {
-                translation: SoaFloat3::new([12.0, 0.0, 3.0, 6.0], [46.0, 0.0, 4.0, 7.0], [-12.0, 0.0, 5.0, 8.0]),
-                rotation: SoaQuaternion::new(
+                translation: SoaVec3::new([12.0, 0.0, 3.0, 6.0], [46.0, 0.0, 4.0, 7.0], [-12.0, 0.0, 5.0, 8.0]),
+                rotation: SoaQuat::new(
                     [0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 0.0, 0.0],
                     [1.0, 1.0, 1.0, 1.0],
                 ),
-                scale: SoaFloat3::new([1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0]),
+                scale: SoaVec3::new([1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0]),
             },
         ]));
     }
@@ -383,28 +382,27 @@ mod local_to_model_tests {
     fn execute_test(
         skeleton: &Rc<Skeleton>,
         input: &Rc<RefCell<Vec<SoaTransform>>>,
-        output: &Rc<RefCell<Vec<Float4x4>>>,
-        root: Option<Float4x4>,
+        output: &Rc<RefCell<Vec<Mat4>>>,
+        root: Option<Mat4>,
         from: Option<i32>,
         to: Option<i32>,
         from_excluded: bool,
-        expected: &[Float4x4],
+        expected: &[Mat4],
         message: &str,
     ) {
         let mut job = LocalToModelJob::default();
         job.set_skeleton(skeleton.clone());
         job.set_input(input.clone());
         job.set_output(output.clone());
-        job.root = root.unwrap_or(Float4x4::identity());
+        job.set_root(&root.unwrap_or(Mat4::IDENTITY));
         job.from = from.unwrap_or(SKELETON_NO_PARENT);
         job.to = to.unwrap_or(SKELETON_MAX_JOINTS);
         job.from_excluded = from_excluded;
 
         job.run().unwrap();
         for idx in 0..skeleton.num_joints() {
-            let out = output.as_ref().borrow()[idx];
-            let a: Mat4 = unsafe { mem::transmute(out.cols) };
-            let b: Mat4 = unsafe { mem::transmute(expected[idx]) };
+            let a = output.as_ref().borrow()[idx];
+            let b = expected[idx];
             assert!(a.abs_diff_eq(b, 2e-6f32), "{} joint={} {} {}", message, idx, a, b,);
         }
     }
@@ -415,25 +413,25 @@ mod local_to_model_tests {
         let skeleton = new_skeleton1();
         let input = new_input1();
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 6]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 6]));
         execute_test(&skeleton, &input, &output, None, None, None, false, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 6.0, 4.0, 1.0, 1.0),
-            Float4x4::new(10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 120.0, 460.0, -120.0, 1.0),
-            Float4x4::new(-1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 6.0, 4.0, 1.0, 1.0]),
+            Mat4::from_cols_array(&[10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 120.0, 460.0, -120.0, 1.0]),
+            Mat4::from_cols_array(&[-1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "transformation default");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 6]));
-        let root = Float4x4::new_translation(Vec3::new(4.0, 3.0, 2.0));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 6]));
+        let root = Mat4::from_translation(Vec3::new(4.0, 3.0, 2.0));
         execute_test(&skeleton, &input, &output, Some(root), None, None, false, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 5.0, 4.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 6.0, 5.0, 4.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 10.0, 7.0, 3.0, 1.0),
-            Float4x4::new(10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 4.0, 3.0, 2.0, 1.0),
-            Float4x4::new(10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 124.0, 463.0, -118.0, 1.0),
-            Float4x4::new(-1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 4.0, 3.0, 2.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 5.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 6.0, 5.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 10.0, 7.0, 3.0, 1.0]),
+            Mat4::from_cols_array(&[10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 4.0, 3.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 10.0, 0.0, 124.0, 463.0, -118.0, 1.0]),
+            Mat4::from_cols_array(&[-1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 4.0, 3.0, 2.0, 1.0]),
         ], "transformation root");
     }
 
@@ -443,76 +441,76 @@ mod local_to_model_tests {
         let skeleton = new_skeleton2();
         let input = new_input2();
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         execute_test(&skeleton, &input, &output, None, None, None, false, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new(-0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 7.0, 8.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[-0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 7.0, 8.0, 1.0]),
         ], "from_to from=* to=*");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         execute_test(&skeleton, &input, &output, None, Some(0), Some(2), false, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to from=0 to=2");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         execute_test(&skeleton, &input, &output, None, Some(0), Some(6), false, &vec![
-            Float4x4::new( 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new( 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new( 0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0,10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0),
-            Float4x4::new( 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0),
-            Float4x4::new( 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new( -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0,0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new( 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0),
-            Float4x4::new( 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[ 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[ 0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0,10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0]),
+            Mat4::from_cols_array(&[ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[ -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0,0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0]),
+            Mat4::from_cols_array(&[ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to from=0 to=6");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         execute_test(&skeleton, &input, &output, None, Some(0), Some(46), false, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new(-0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[-0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to from=0 to=46");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         execute_test(&skeleton, &input, &output, None, Some(0), Some(-99), false, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to from=0 to=-99");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         execute_test(&skeleton, &input, &output, None, Some(93), None, false, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to from=* to=93");
     }
 
@@ -522,81 +520,81 @@ mod local_to_model_tests {
         let skeleton = new_skeleton2();
         let input = new_input2();
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         execute_test(&skeleton, &input, &output, None, None, None, true, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0),
-            Float4x4::new(0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new(-0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 7.0, 8.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 3.0, 4.0, 6.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[-0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 0.0, 0.0, 0.0, -0.1, 0.0, 15.0, 50.0, -6.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 8.0, 11.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 7.0, 8.0, 1.0]),
         ], "from_to_exclude from=* to=*");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
-        output.borrow_mut()[0] = Float4x4::new_scaling(Vec3::splat(2.0));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
+        output.borrow_mut()[0] = Mat4::from_scale(Vec3::splat(2.0));
         execute_test(&skeleton, &input, &output, None, Some(0), None, true, &vec![
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(0.0, 0.0, -2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(0.0, 0.0, -20.0, 0.0, 0.0, 20.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0, -4.0, -4.0, 4.0, 1.0),
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 2.0, 4.0, 8.0, 1.0),
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 26.0, 96.0, -16.0, 1.0),
-            Float4x4::new(-0.2, 0.0, 0.0, 0.0, 0.0, -0.2, 0.0, 0.0, 0.0, 0.0, -0.2, 0.0, 26.0, 96.0, -16.0, 1.0),
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 8.0, 12.0, 18.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[0.0, 0.0, -20.0, 0.0, 0.0, 20.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0, -4.0, -4.0, 4.0, 1.0]),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 2.0, 4.0, 8.0, 1.0]),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 26.0, 96.0, -16.0, 1.0]),
+            Mat4::from_cols_array(&[-0.2, 0.0, 0.0, 0.0, 0.0, -0.2, 0.0, 0.0, 0.0, 0.0, -0.2, 0.0, 26.0, 96.0, -16.0, 1.0]),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 8.0, 12.0, 18.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to_exclude from=0 to=*");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
-        output.borrow_mut()[1] = Float4x4::new_scaling(Vec3::splat(2.0));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
+        output.borrow_mut()[1] = Mat4::from_scale(Vec3::splat(2.0));
         execute_test(&skeleton, &input, &output, None, Some(1), None, true, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(20.0, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, -4.0, -4.0, -4.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[20.0, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, -4.0, -4.0, -4.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to_exclude from=1 to=*");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
-        output.borrow_mut()[2] = Float4x4::new_scaling(Vec3::splat(2.0));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
+        output.borrow_mut()[2] = Mat4::from_scale(Vec3::splat(2.0));
         execute_test(&skeleton, &input, &output, None, Some(2), None, true, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to_exclude from=2 to=*");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
-        output.borrow_mut()[7] = Float4x4::new_scaling(Vec3::splat(2.0));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
+        output.borrow_mut()[7] = Mat4::from_scale(Vec3::splat(2.0));
         execute_test(&skeleton, &input, &output, None, Some(7), None, true, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to_exclude from=7 to=*");
 
-        let output = Rc::new(RefCell::new(vec![Float4x4::identity(); 8]));
-        output.borrow_mut()[6] = Float4x4::new_scaling(Vec3::splat(2.0));
+        let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
+        output.borrow_mut()[6] = Mat4::from_scale(Vec3::splat(2.0));
         execute_test(&skeleton, &input, &output, None, Some(6), None, true, &vec![
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0),
-            Float4x4::new(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+            Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
         ], "from_to_exclude from=6 to=*");
     }
 }

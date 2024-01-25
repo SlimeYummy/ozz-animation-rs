@@ -1,10 +1,11 @@
-#![cfg(feature = "bincode")]
+#![cfg(feature = "rkyv")]
 
-use bincode::{Decode, Encode};
+use glam::Mat4;
 use ozz_animation_rs::*;
+use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 
-#[derive(Encode, Decode, PartialEq)]
+#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
 struct TestData {
     ratio: f32,
     sample_out1: Vec<SoaTransform>,
@@ -14,7 +15,7 @@ struct TestData {
     sample_out3: Vec<SoaTransform>,
     sample_ctx3: SamplingContext,
     blending_out: Vec<SoaTransform>,
-    l2m_out: Vec<Float4x4>,
+    l2m_out: Vec<Mat4>,
 }
 
 #[test]
@@ -53,7 +54,7 @@ fn test_deterministic_blend() {
     let mut l2m_job: LocalToModelJob = LocalToModelJob::default();
     l2m_job.set_skeleton(skeleton.clone());
     l2m_job.set_input(blending_out.clone());
-    let l2m_out = ozz_buf(vec![Float4x4::default(); skeleton.num_joints()]);
+    let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
     l2m_job.set_output(l2m_out.clone());
 
     for i in -1..=11 {
@@ -98,8 +99,6 @@ fn test_deterministic_blend() {
             l2m_out: l2m_out.vec().unwrap().clone(),
         };
 
-        test_utils::save_to_file("blend", &format!("{:+.2}.bincode", r), &data).unwrap();
-
-        test_utils::compare_with_file("blend", &format!("{:+.2}.bincode", r), &data).unwrap();
+        test_utils::compare_with_rkyv("blend", &format!("blend{:+.2}", r), &data).unwrap();
     }
 }

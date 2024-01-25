@@ -2,8 +2,8 @@ use glam::{Mat4, Quat, Vec3A};
 use std::simd::prelude::*;
 use std::simd::StdFloat;
 
+use crate::base::OzzError;
 use crate::math::*;
-use crate::{Float4x4, OzzError};
 
 #[derive(Debug)]
 pub struct IKAimJob {
@@ -14,7 +14,7 @@ pub struct IKAimJob {
     pole_vector: f32x4,
     twist_angle: f32,
     weight: f32,
-    joint: Float4x4,
+    joint: AosMat4,
 
     joint_correction: f32x4,
     reached: bool,
@@ -30,7 +30,7 @@ impl Default for IKAimJob {
             pole_vector: Y_AXIS,
             twist_angle: 0.0,
             weight: 1.0,
-            joint: Float4x4::identity(),
+            joint: AosMat4::identity(),
 
             joint_correction: QUAT_UNIT,
             reached: false,
@@ -315,7 +315,7 @@ mod ik_aim_job_tests {
             job.run().unwrap();
             assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
         }
-        
+
         {
             job.set_forward(-Vec3A::X);
             job.run().unwrap();
@@ -323,7 +323,7 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Y, -consts::PI), 2e-3));
         }
-        
+
         {
             job.set_forward(Vec3A::Z);
             job.run().unwrap();
@@ -345,7 +345,7 @@ mod ik_aim_job_tests {
             job.run().unwrap();
             assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
         }
-        
+
         {
             job.set_up(-Vec3A::Y);
             job.run().unwrap();
@@ -353,24 +353,27 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, consts::PI), 2e-3));
         }
-        
-        { // up z
+
+        {
+            // up z
             job.set_up(Vec3A::Z);
             job.run().unwrap();
             assert!(job
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, -consts::FRAC_PI_2), 2e-3));
         }
-        
-        { // up 2z
+
+        {
+            // up 2z
             job.set_up(Vec3A::Z * 2.0);
             job.run().unwrap();
             assert!(job
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, -consts::FRAC_PI_2), 2e-3));
         }
-        
-        { // up small z
+
+        {
+            // up small z
             job.set_up(Vec3A::Z * 1e-9);
             job.run().unwrap();
             assert!(job
@@ -378,7 +381,8 @@ mod ik_aim_job_tests {
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, -consts::FRAC_PI_2), 2e-3));
         }
 
-        { // up 0z
+        {
+            // up 0z
             job.set_up(Vec3A::ZERO);
             job.run().unwrap();
             assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
@@ -406,24 +410,27 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, consts::PI), 2e-3));
         }
-        
-        { // pole z
+
+        {
+            // pole z
             job.set_pole_vector(Vec3A::Z);
             job.run().unwrap();
             assert!(job
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, consts::FRAC_PI_2), 2e-3));
         }
-        
-        { // pole 2z
+
+        {
+            // pole 2z
             job.set_pole_vector(Vec3A::Z * 2.0);
             job.run().unwrap();
             assert!(job
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, consts::FRAC_PI_2), 2e-3));
         }
-        
-        { // pole small z
+
+        {
+            // pole small z
             job.set_pole_vector(Vec3A::Z * 1e-9);
             job.run().unwrap();
             assert!(job
@@ -448,7 +455,7 @@ mod ik_aim_job_tests {
             assert!(job.reached());
             assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3))
         }
-        
+
         {
             // inside target sphere
             job.set_offset(Vec3A::new(0.0, consts::FRAC_1_SQRT_2, 0.0));
@@ -458,7 +465,7 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_4), 2e-3));
         }
-        
+
         {
             // inside target sphere
             job.set_offset(Vec3A::new(0.5, 0.5, 0.0));
@@ -468,7 +475,7 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_6), 2e-3));
         }
-        
+
         {
             // inside target sphere
             job.set_offset(Vec3A::new(-0.5, 0.5, 0.0));
@@ -478,7 +485,7 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_6), 2e-3));
         }
-        
+
         {
             // inside target sphere
             job.set_offset(Vec3A::new(0.5, 0.0, 0.5));
@@ -488,7 +495,7 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Y, consts::FRAC_PI_6), 2e-3));
         }
-        
+
         {
             // on target sphere
             job.set_offset(Vec3A::new(0.0, 1.0, 0.0));
@@ -498,7 +505,7 @@ mod ik_aim_job_tests {
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_2), 2e-3));
         }
-        
+
         {
             // outside target sphere
             job.set_offset(Vec3A::new(0.0, 2.0, 0.0));
@@ -506,7 +513,7 @@ mod ik_aim_job_tests {
             assert!(!job.reached());
             assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
         }
-        
+
         {
             // inside target sphere
             job.set_offset(Vec3A::new(0.0, 1.0, 0.0));
@@ -546,13 +553,17 @@ mod ik_aim_job_tests {
             job.set_pole_vector(Vec3A::Y);
             job.set_twist_angle(-consts::FRAC_PI_2);
             job.run().unwrap();
-            println!("{:?} {:?}", job.joint_correction(), Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_4));
+            println!(
+                "{:?} {:?}",
+                job.joint_correction(),
+                Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_4)
+            );
             assert!(job
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, -consts::FRAC_PI_2), 2e-3));
         }
     }
-    
+
     #[test]
     fn test_aligned_target_up() {
         let mut job = IKAimJob::default();
@@ -598,7 +609,7 @@ mod ik_aim_job_tests {
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_2), 2e-3));
         }
     }
-    
+
     #[test]
     fn test_aligned_target_pole() {
         let mut job = IKAimJob::default();
@@ -622,7 +633,7 @@ mod ik_aim_job_tests {
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, consts::FRAC_PI_2), 2e-3));
         }
     }
-    
+
     #[test]
     fn test_target_too_close() {
         let mut job = IKAimJob::default();
@@ -634,7 +645,7 @@ mod ik_aim_job_tests {
         job.run().unwrap();
         assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
     }
-    
+
     #[test]
     fn test_weight() {
         let mut job = IKAimJob::default();
@@ -685,7 +696,7 @@ mod ik_aim_job_tests {
             assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
         }
     }
-    
+
     #[test]
     fn test_zero_scale() {
         let mut job = IKAimJob::default();
