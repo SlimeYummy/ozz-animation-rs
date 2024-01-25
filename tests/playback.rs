@@ -1,15 +1,16 @@
-#![cfg(feature = "bincode")]
+#![cfg(feature = "rkyv")]
 
-use bincode::{Decode, Encode};
+use glam::Mat4;
 use ozz_animation_rs::*;
+use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 
-#[derive(Encode, Decode, PartialEq)]
+#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
 struct TestData {
     ratio: f32,
     sample_out: Vec<SoaTransform>,
     sample_ctx: SamplingContext,
-    l2m_out: Vec<Float4x4>,
+    l2m_out: Vec<Mat4>,
 }
 
 #[test]
@@ -30,24 +31,22 @@ fn test_deterministic_playback() {
     let mut l2m_job: LocalToModelJob = LocalToModelJob::default();
     l2m_job.set_skeleton(skeleton.clone());
     l2m_job.set_input(sample_out.clone());
-    let l2m_out = ozz_buf(vec![Float4x4::default(); skeleton.num_joints()]);
+    let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
     l2m_job.set_output(l2m_out.clone());
 
     for i in -1..=11 {
-        let t = i as f32 / 10.0;
-        sample_job.set_ratio(t);
+        let r = i as f32 / 10.0;
+        sample_job.set_ratio(r);
         sample_job.run().unwrap();
         l2m_job.run().unwrap();
 
         let data = TestData {
-            ratio: t,
+            ratio: r,
             sample_out: sample_out.vec().unwrap().clone(),
             sample_ctx: sample_job.context().unwrap().clone_without_animation_id(),
             l2m_out: l2m_out.vec().unwrap().clone(),
         };
 
-        test_utils::save_to_file("playback", &format!("{:+.2}.bincode", t), &data).unwrap();
-
-        test_utils::compare_with_file("playback", &format!("{:+.2}.bincode", t), &data).unwrap();
+        test_utils::compare_with_rkyv("playback", &format!("playback{:+.2}", r), &data).unwrap();
     }
 }

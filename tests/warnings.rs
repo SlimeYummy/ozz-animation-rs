@@ -7,7 +7,7 @@ fn save_to_expected_warning() {
 }
 
 #[test]
-fn bincode_deterministic_warning() {
-    #[cfg(not(feature = "bincode"))]
-    assert!(false, "Disable bincode will skip deterministic test cases");
+fn rkyv_deterministic_warning() {
+    #[cfg(not(feature = "rkyv"))]
+    assert!(false, "Disable rkyv will skip deterministic test cases");
 }

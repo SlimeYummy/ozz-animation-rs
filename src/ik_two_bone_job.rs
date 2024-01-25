@@ -2,12 +2,12 @@ use glam::{Mat4, Quat, Vec3A};
 use std::simd::prelude::*;
 use std::simd::StdFloat;
 
+use crate::base::OzzError;
 use crate::math::*;
-use crate::{Float4x4, OzzError};
 
 #[derive(Debug)]
 struct IKConstantSetup {
-    inv_start_joint: Float4x4,
+    inv_start_joint: AosMat4,
     start_mid_ms: f32x4,
     mid_end_ms: f32x4,
     start_mid_ss: f32x4,
@@ -51,9 +51,9 @@ pub struct IKTwoBoneJob {
     twist_angle: f32,
     soften: f32,
     weight: f32,
-    start_joint: Float4x4,
-    mid_joint: Float4x4,
-    end_joint: Float4x4,
+    start_joint: AosMat4,
+    mid_joint: AosMat4,
+    end_joint: AosMat4,
 
     start_joint_correction: f32x4,
     mid_joint_correction: f32x4,
@@ -69,9 +69,9 @@ impl Default for IKTwoBoneJob {
             twist_angle: 0.0,
             soften: 1.0,
             weight: 1.0,
-            start_joint: Float4x4::identity(),
-            mid_joint: Float4x4::identity(),
-            end_joint: Float4x4::identity(),
+            start_joint: AosMat4::identity(),
+            mid_joint: AosMat4::identity(),
+            end_joint: AosMat4::identity(),
             start_joint_correction: QUAT_UNIT,
             mid_joint_correction: QUAT_UNIT,
             reached: false,
@@ -257,7 +257,7 @@ impl IKTwoBoneJob {
     fn compute_mid_joint(&self, setup: &IKConstantSetup, start_target_ss_len2: f32x4) -> f32x4 {
         let start_mid_end_sum_ss_len2 = setup.start_mid_ss_len2 + setup.mid_end_ss_len2;
         let start_mid_end_ss_half_rlen =
-            f32x4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).sqrt()); // first
+            f32x4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).recip().sqrt()); // first
 
         let mid_cos_angles_unclamped = (f32x4_splat_x(start_mid_end_sum_ss_len2)
             - f32x4_set_y(start_target_ss_len2, setup.start_end_ss_len2))

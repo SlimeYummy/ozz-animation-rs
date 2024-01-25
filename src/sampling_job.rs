@@ -1,57 +1,45 @@
-#[cfg(feature = "bincode")]
-use bincode::{
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-    BorrowDecode, Decode, Encode,
-};
 use std::alloc::{self, Layout};
 use std::cell::RefCell;
-use std::mem;
+use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 use std::simd::prelude::*;
+use std::{mem, slice};
 
 use crate::animation::{Animation, Float3Key, QuaternionKey};
-use crate::base::{OzzBuf, OzzRef};
-use crate::math::{SoaFloat3, SoaQuaternion, SoaTransform};
-use crate::OzzError;
+use crate::base::{OzzBuf, OzzError, OzzRef};
+use crate::math::{SoaQuat, SoaTransform, SoaVec3};
 
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct InterpSoaFloat3 {
     pub ratio: [f32x4; 2],
-    pub value: [SoaFloat3; 2],
+    pub value: [SoaVec3; 2],
 }
 
-#[cfg(feature = "bincode")]
-impl Encode for InterpSoaFloat3 {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(self.ratio[0].as_array(), encoder)?;
-        Encode::encode(self.ratio[1].as_array(), encoder)?;
-        Encode::encode(&self.value[0], encoder)?;
-        Encode::encode(&self.value[1], encoder)?;
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for InterpSoaFloat3 {
+    type Archived = InterpSoaFloat3;
+    type Resolver = ();
+
+    #[inline]
+    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+        out.write(rkyv::to_archived!(*self as Self));
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for InterpSoaFloat3 {
+    #[inline]
+    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
         return Ok(());
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Decode for InterpSoaFloat3 {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<InterpSoaFloat3, DecodeError> {
-        let r0 = f32x4::from_array(Decode::decode(decoder)?);
-        let r1 = f32x4::from_array(Decode::decode(decoder)?);
-        let v0 = Decode::decode(decoder)?;
-        let v1 = Decode::decode(decoder)?;
-        return Ok(InterpSoaFloat3 {
-            ratio: [r0, r1],
-            value: [v0, v1],
-        });
-    }
-}
-
-#[cfg(feature = "bincode")]
-impl<'de> BorrowDecode<'de> for InterpSoaFloat3 {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<InterpSoaFloat3, DecodeError> {
-        return InterpSoaFloat3::decode(decoder);
+#[cfg(feature = "rkyv")]
+impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<InterpSoaFloat3, D> for InterpSoaFloat3 {
+    #[inline]
+    fn deserialize(&self, _: &mut D) -> Result<InterpSoaFloat3, D::Error> {
+        return Ok(rkyv::from_archived!(*self));
     }
 }
 
@@ -59,50 +47,45 @@ impl<'de> BorrowDecode<'de> for InterpSoaFloat3 {
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct InterpSoaQuaternion {
     pub ratio: [f32x4; 2],
-    pub value: [SoaQuaternion; 2],
+    pub value: [SoaQuat; 2],
 }
 
-#[cfg(feature = "bincode")]
-impl Encode for InterpSoaQuaternion {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(self.ratio[0].as_array(), encoder)?;
-        Encode::encode(self.ratio[1].as_array(), encoder)?;
-        Encode::encode(&self.value[0], encoder)?;
-        Encode::encode(&self.value[1], encoder)?;
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for InterpSoaQuaternion {
+    type Archived = InterpSoaQuaternion;
+    type Resolver = ();
+
+    #[inline]
+    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+        out.write(rkyv::to_archived!(*self as Self));
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for InterpSoaQuaternion {
+    #[inline]
+    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
         return Ok(());
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Decode for InterpSoaQuaternion {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<InterpSoaQuaternion, DecodeError> {
-        let r0 = f32x4::from_array(Decode::decode(decoder)?);
-        let r1 = f32x4::from_array(Decode::decode(decoder)?);
-        let v0 = Decode::decode(decoder)?;
-        let v1 = Decode::decode(decoder)?;
-        return Ok(InterpSoaQuaternion {
-            ratio: [r0, r1],
-            value: [v0, v1],
-        });
+#[cfg(feature = "rkyv")]
+impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<InterpSoaQuaternion, D> for InterpSoaQuaternion {
+    #[inline]
+    fn deserialize(&self, _: &mut D) -> Result<InterpSoaQuaternion, D::Error> {
+        return Ok(rkyv::from_archived!(*self));
     }
 }
 
-#[cfg(feature = "bincode")]
-impl<'de> BorrowDecode<'de> for InterpSoaQuaternion {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<InterpSoaQuaternion, DecodeError> {
-        return InterpSoaQuaternion::decode(decoder);
-    }
-}
-
-#[derive(Debug)]
 #[repr(align(16))]
+#[derive(Debug)]
 struct SamplingContextInner {
     size: usize,
     max_tracks: usize,
     max_soa_tracks: usize,
     num_outdated: usize,
 
-    animation_id: usize,
+    animation_id: u64,
     ratio: f32,
 
     translations_ptr: *mut InterpSoaFloat3,
@@ -121,9 +104,6 @@ struct SamplingContextInner {
     outdated_rotations_ptr: *mut u8,
     outdated_scales_ptr: *mut u8,
 }
-
-#[derive(Debug)]
-pub struct SamplingContext(*mut SamplingContextInner);
 
 impl Default for SamplingContextInner {
     fn default() -> SamplingContextInner {
@@ -152,6 +132,14 @@ impl Default for SamplingContextInner {
             outdated_rotations_ptr: std::ptr::null_mut(),
             outdated_scales_ptr: std::ptr::null_mut(),
         };
+    }
+}
+
+pub struct SamplingContext(*mut SamplingContextInner);
+
+impl Debug for SamplingContext {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        return self.inner().fmt(f);
     }
 }
 
@@ -264,7 +252,7 @@ impl SamplingContext {
 
     pub fn from_animation(animation: &Animation) -> SamplingContext {
         let mut ctx = SamplingContext::new(animation.num_tracks());
-        ctx.inner_mut().animation_id = animation as *const _ as usize;
+        ctx.inner_mut().animation_id = animation as *const _ as u64;
         return ctx;
     }
 
@@ -297,11 +285,11 @@ impl SamplingContext {
         return self.inner().num_outdated;
     }
 
-    pub fn animation_id(&self) -> usize {
+    pub fn animation_id(&self) -> u64 {
         return self.inner().animation_id;
     }
 
-    pub fn set_animation_id(&mut self, id: usize) {
+    pub fn set_animation_id(&mut self, id: u64) {
         self.inner_mut().animation_id = id;
     }
 
@@ -428,74 +416,242 @@ impl SamplingContext {
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Encode for SamplingContext {
-    #[rustfmt::skip]
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.max_tracks(), encoder)?;
-        Encode::encode(&self.max_soa_tracks(), encoder)?;
-        Encode::encode(&self.num_outdated(), encoder)?;
-        Encode::encode(&self.ratio(), encoder)?;
+#[cfg(feature = "rkyv")]
+pub struct ArchivedSamplingContext {
+    pub size: u32,
+    pub max_tracks: u32,
+    pub max_soa_tracks: u32,
+    pub num_outdated: u32,
 
-        self.translations().iter().try_for_each(|x| Encode::encode(x, encoder))?;
-        self.rotations().iter().try_for_each(|x| Encode::encode(x, encoder))?;
-        self.scales().iter().try_for_each(|x| Encode::encode(x, encoder))?;
+    pub animation_id: u64,
+    pub ratio: f32,
 
-        self.translation_keys().iter().try_for_each(|x| Encode::encode(x, encoder))?;
-        self.rotation_keys().iter().try_for_each(|x| Encode::encode(x, encoder))?;
-        self.scale_keys().iter().try_for_each(|x| Encode::encode(x, encoder))?;
+    translations_ptr: rkyv::RelPtr<InterpSoaFloat3>,
+    rotations_ptr: rkyv::RelPtr<InterpSoaQuaternion>,
+    scales_ptr: rkyv::RelPtr<InterpSoaFloat3>,
 
-        Encode::encode(&self.translation_cursor(), encoder)?;
-        Encode::encode(&self.rotation_cursor(), encoder)?;
-        Encode::encode(&self.scale_cursor(), encoder)?;
+    translation_keys_ptr: rkyv::RelPtr<i32>,
+    rotation_keys_ptr: rkyv::RelPtr<i32>,
+    scale_keys_ptr: rkyv::RelPtr<i32>,
 
-        self.outdated_translations().iter().try_for_each(|x| Encode::encode(x, encoder))?;
-        self.outdated_rotations().iter().try_for_each(|x| Encode::encode(x, encoder))?;
-        self.outdated_scales().iter().try_for_each(|x| Encode::encode(x, encoder))?;
+    pub translation_cursor: u32,
+    pub rotation_cursor: u32,
+    pub scale_cursor: u32,
 
-        return Ok(());
+    outdated_translations_ptr: rkyv::RelPtr<u8>,
+    outdated_rotations_ptr: rkyv::RelPtr<u8>,
+    outdated_scales_ptr: rkyv::RelPtr<u8>,
+}
+
+#[cfg(feature = "rkyv")]
+impl ArchivedSamplingContext {
+    pub fn translations(&self) -> &[InterpSoaFloat3] {
+        return unsafe { slice::from_raw_parts(self.translations_ptr.as_ptr(), self.max_soa_tracks as usize) };
+    }
+
+    pub fn rotations(&self) -> &[InterpSoaQuaternion] {
+        return unsafe { slice::from_raw_parts(self.rotations_ptr.as_ptr(), self.max_soa_tracks as usize) };
+    }
+
+    pub fn scales(&self) -> &[InterpSoaFloat3] {
+        return unsafe { slice::from_raw_parts(self.scales_ptr.as_ptr(), self.max_soa_tracks as usize) };
+    }
+
+    pub fn translation_keys(&self) -> &[i32] {
+        return unsafe { slice::from_raw_parts(self.translation_keys_ptr.as_ptr(), self.max_tracks as usize * 2) };
+    }
+
+    pub fn rotation_keys(&self) -> &[i32] {
+        return unsafe { slice::from_raw_parts(self.rotation_keys_ptr.as_ptr(), self.max_tracks as usize * 2) };
+    }
+
+    pub fn scale_keys(&self) -> &[i32] {
+        return unsafe { slice::from_raw_parts(self.scale_keys_ptr.as_ptr(), self.max_tracks as usize * 2) };
+    }
+
+    pub fn outdated_translations(&self) -> &[u8] {
+        return unsafe { slice::from_raw_parts(self.outdated_translations_ptr.as_ptr(), self.num_outdated as usize) };
+    }
+
+    pub fn outdated_rotations(&self) -> &[u8] {
+        return unsafe { slice::from_raw_parts(self.outdated_rotations_ptr.as_ptr(), self.num_outdated as usize) };
+    }
+
+    pub fn outdated_scales(&self) -> &[u8] {
+        return unsafe { slice::from_raw_parts(self.outdated_scales_ptr.as_ptr(), self.num_outdated as usize) };
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Decode for SamplingContext {
-    #[rustfmt::skip]
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<SamplingContext, DecodeError> {
-        let max_tracks = Decode::decode(decoder)?;
-        let mut ctx = SamplingContext::new(max_tracks);
+#[derive(Default)]
+#[cfg(feature = "rkyv")]
+pub struct SamplingContextResolver {
+    translations_pos: usize,
+    rotations_pos: usize,
+    scales_pos: usize,
 
-        if ctx.max_soa_tracks() != Decode::decode(decoder)? {
-            return Err(DecodeError::Other("max_soa_tracks mismatch"));
-        }
-        if ctx.num_outdated() != Decode::decode(decoder)? {
-            return Err(DecodeError::Other("num_outdated mismatch"));
-        }
-        ctx.set_ratio(Decode::decode(decoder)?);
+    translation_keys_pos: usize,
+    rotation_keys_pos: usize,
+    scale_keys_pos: usize,
 
-        for i in 0..ctx.translations().len() { ctx.translations_mut()[i] = Decode::decode(decoder)? };
-        for i in 0..ctx.rotations().len() { ctx.rotations_mut()[i] = Decode::decode(decoder)? };
-        for i in 0..ctx.scales().len() { ctx.scales_mut()[i] = Decode::decode(decoder)? };
+    outdated_translations_pos: usize,
+    outdated_rotations_pos: usize,
+    outdated_scales_pos: usize,
+}
 
-        for i in 0..ctx.translation_keys().len() { ctx.translation_keys_mut()[i] = Decode::decode(decoder)? };
-        for i in 0..ctx.rotation_keys().len() { ctx.rotation_keys_mut()[i] = Decode::decode(decoder)? };
-        for i in 0..ctx.scale_keys().len() { ctx.scale_keys_mut()[i] = Decode::decode(decoder)? };
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for SamplingContext {
+    type Archived = ArchivedSamplingContext;
+    type Resolver = SamplingContextResolver;
 
-        ctx.set_translation_cursor(Decode::decode(decoder)?);
-        ctx.set_rotation_cursor(Decode::decode(decoder)?);
-        ctx.set_scale_cursor(Decode::decode(decoder)?);
+    unsafe fn resolve(&self, pos: usize, resolver: SamplingContextResolver, out: *mut ArchivedSamplingContext) {
+        let (fp, fo) = rkyv::out_field!(out.size);
+        usize::resolve(&self.size(), pos + fp, (), fo);
+        let (fp, fo) = rkyv::out_field!(out.max_tracks);
+        usize::resolve(&self.max_tracks(), pos + fp, (), fo);
+        let (fp, fo) = rkyv::out_field!(out.max_soa_tracks);
+        usize::resolve(&self.max_soa_tracks(), pos + fp, (), fo);
+        let (fp, fo) = rkyv::out_field!(out.num_outdated);
+        usize::resolve(&self.num_outdated(), pos + fp, (), fo);
 
-        for i in 0..ctx.outdated_translations().len() { ctx.outdated_translations_mut()[i] = Decode::decode(decoder)? };
-        for i in 0..ctx.outdated_rotations().len() { ctx.outdated_rotations_mut()[i] = Decode::decode(decoder)? };
-        for i in 0..ctx.outdated_scales().len() { ctx.outdated_scales_mut()[i] = Decode::decode(decoder)? };
+        let (fp, fo) = rkyv::out_field!(out.animation_id);
+        u64::resolve(&self.animation_id(), pos + fp, (), fo);
+        let (fp, fo) = rkyv::out_field!(out.ratio);
+        f32::resolve(&self.ratio(), pos + fp, (), fo);
 
-        return Ok(ctx);
+        let (fp, fo) = rkyv::out_field!(out.translations_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.translations_pos, fo);
+        let (fp, fo) = rkyv::out_field!(out.rotations_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.rotations_pos, fo);
+        let (fp, fo) = rkyv::out_field!(out.scales_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.scales_pos, fo);
+
+        let (fp, fo) = rkyv::out_field!(out.translation_keys_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.translation_keys_pos, fo);
+        let (fp, fo) = rkyv::out_field!(out.rotation_keys_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.rotation_keys_pos, fo);
+        let (fp, fo) = rkyv::out_field!(out.scale_keys_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.scale_keys_pos, fo);
+
+        let (fp, fo) = rkyv::out_field!(out.translation_cursor);
+        usize::resolve(&self.translation_cursor(), pos + fp, (), fo);
+        let (fp, fo) = rkyv::out_field!(out.rotation_cursor);
+        usize::resolve(&self.rotation_cursor(), pos + fp, (), fo);
+        let (fp, fo) = rkyv::out_field!(out.scale_cursor);
+        usize::resolve(&self.scale_cursor(), pos + fp, (), fo);
+
+        let (fp, fo) = rkyv::out_field!(out.outdated_translations_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.outdated_translations_pos, fo);
+        let (fp, fo) = rkyv::out_field!(out.outdated_rotations_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.outdated_rotations_pos, fo);
+        let (fp, fo) = rkyv::out_field!(out.outdated_scales_ptr);
+        rkyv::RelPtr::emplace(pos + fp, resolver.outdated_scales_pos, fo);
     }
 }
 
-#[cfg(feature = "bincode")]
-impl<'de> BorrowDecode<'de> for SamplingContext {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        return SamplingContext::decode(decoder);
+impl<S: rkyv::ser::Serializer + ?Sized> rkyv::Serialize<S> for SamplingContext {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        let mut resolver = SamplingContextResolver::default();
+
+        resolver.translations_pos = serializer.align_for::<InterpSoaFloat3>()?;
+        serializer.write(unsafe {
+            slice::from_raw_parts(
+                self.translations().as_ptr() as *const u8,
+                self.translations().len() * mem::size_of::<InterpSoaFloat3>(),
+            )
+        })?;
+        resolver.rotations_pos = serializer.align_for::<InterpSoaQuaternion>()?;
+        serializer.write(unsafe {
+            slice::from_raw_parts(
+                self.rotations().as_ptr() as *const u8,
+                self.rotations().len() * mem::size_of::<InterpSoaQuaternion>(),
+            )
+        })?;
+        resolver.scales_pos = serializer.align_for::<InterpSoaFloat3>()?;
+        serializer.write(unsafe {
+            slice::from_raw_parts(
+                self.scales().as_ptr() as *const u8,
+                self.scales().len() * mem::size_of::<InterpSoaFloat3>(),
+            )
+        })?;
+
+        resolver.translation_keys_pos = serializer.align_for::<i32>()?;
+        serializer.write(unsafe {
+            slice::from_raw_parts(
+                self.translation_keys().as_ptr() as *const u8,
+                self.translation_keys().len() * mem::size_of::<i32>(),
+            )
+        })?;
+        resolver.rotation_keys_pos = serializer.align_for::<i32>()?;
+        serializer.write(unsafe {
+            slice::from_raw_parts(
+                self.rotation_keys().as_ptr() as *const u8,
+                self.rotation_keys().len() * mem::size_of::<i32>(),
+            )
+        })?;
+        resolver.scale_keys_pos = serializer.align_for::<i32>()?;
+        serializer.write(unsafe {
+            slice::from_raw_parts(
+                self.scale_keys().as_ptr() as *const u8,
+                self.scale_keys().len() * mem::size_of::<i32>(),
+            )
+        })?;
+
+        resolver.outdated_translations_pos = serializer.align_for::<u8>()?;
+        serializer.write(self.outdated_translations())?;
+        resolver.outdated_rotations_pos = serializer.align_for::<u8>()?;
+        serializer.write(self.outdated_rotations())?;
+        resolver.outdated_scales_pos = serializer.align_for::<u8>()?;
+        serializer.write(self.outdated_scales())?;
+
+        return Ok(resolver);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SamplingContext, D> for ArchivedSamplingContext {
+    #[inline]
+    fn deserialize(&self, _: &mut D) -> Result<SamplingContext, D::Error> {
+        let archived = rkyv::from_archived!(self);
+        let mut context = SamplingContext::new(archived.max_tracks as usize);
+        context.set_animation_id(archived.animation_id);
+        context.set_ratio(archived.ratio);
+        context.translations_mut().copy_from_slice(archived.translations());
+        context.rotations_mut().copy_from_slice(archived.rotations());
+        context.scales_mut().copy_from_slice(archived.scales());
+        context
+            .translation_keys_mut()
+            .copy_from_slice(archived.translation_keys());
+        context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
+        context.scale_keys_mut().copy_from_slice(archived.scale_keys());
+        context.set_translation_cursor(archived.translation_cursor as usize);
+        context.set_rotation_cursor(archived.rotation_cursor as usize);
+        context.set_scale_cursor(archived.scale_cursor as usize);
+        context
+            .outdated_translations_mut()
+            .copy_from_slice(archived.outdated_translations());
+        context
+            .outdated_rotations_mut()
+            .copy_from_slice(archived.outdated_rotations());
+        context
+            .outdated_scales_mut()
+            .copy_from_slice(archived.outdated_scales());
+        return Ok(context);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<C: ?Sized> bytecheck::CheckBytes<C> for ArchivedSamplingContext {
+    type Error = std::io::Error;
+
+    #[inline]
+    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+        if value as usize % mem::align_of::<ArchivedSamplingContext>() != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "must be aligned to 16 bytes",
+            ));
+        }
+        return Ok(&*value);
     }
 }
 
@@ -644,7 +800,7 @@ where
         let animation = self.animation.as_ref().unwrap();
         let ctx = self.context.as_mut().unwrap();
 
-        let animation_id = animation as *const _ as usize;
+        let animation_id = animation as *const _ as u64;
         if (ctx.animation_id() != animation_id) || self.ratio < ctx.ratio() {
             ctx.set_animation_id(animation_id);
             ctx.set_translation_cursor(0);
@@ -889,15 +1045,15 @@ where
         for idx in 0..animation.num_soa_tracks() {
             let translation = &ctx.translations()[idx];
             let translation_ratio = (ratio4 - translation.ratio[0]) / (translation.ratio[1] - translation.ratio[0]);
-            output[idx].translation = SoaFloat3::lerp(&translation.value[0], &translation.value[1], translation_ratio);
+            output[idx].translation = SoaVec3::lerp(&translation.value[0], &translation.value[1], translation_ratio);
 
             let rotation = &ctx.rotations()[idx];
             let rotation_ratio = (ratio4 - rotation.ratio[0]) / (rotation.ratio[1] - rotation.ratio[0]);
-            output[idx].rotation = SoaQuaternion::nlerp(&rotation.value[0], &rotation.value[1], rotation_ratio);
+            output[idx].rotation = SoaQuat::nlerp(&rotation.value[0], &rotation.value[1], rotation_ratio);
 
             let scale = &ctx.scales()[idx];
             let scale_ratio = (ratio4 - scale.ratio[0]) / (scale.ratio[1] - scale.ratio[0]);
-            output[idx].scale = SoaFloat3::lerp(&scale.value[0], &scale.value[1], scale_ratio);
+            output[idx].scale = SoaVec3::lerp(&scale.value[0], &scale.value[1], scale_ratio);
         }
 
         return Ok(());
@@ -987,9 +1143,9 @@ mod sampling_tests {
     const V1: Vec3 = Vec3::new(1.0, 1.0, 1.0);
     const QU: Quat = Quat::from_xyzw(0.0, 0.0, 0.0, 1.0);
     const TX: SoaTransform = SoaTransform {
-        translation: SoaFloat3::splat_col([1234.5678; 3]),
-        rotation: SoaQuaternion::splat_col([1234.5678; 4]),
-        scale: SoaFloat3::splat_col([1234.5678; 3]),
+        translation: SoaVec3::splat_col([1234.5678; 3]),
+        rotation: SoaQuat::splat_col([1234.5678; 4]),
+        scale: SoaVec3::splat_col([1234.5678; 3]),
     };
 
     struct Frame<const S: usize> {
@@ -1029,21 +1185,21 @@ mod sampling_tests {
             for idx in 0..T {
                 let out = output.borrow()[idx / 4];
                 assert_eq!(
-                    out.translation.at(idx % 4),
+                    out.translation.col(idx % 4),
                     frame.transform[idx].0,
                     "ratio={} translation idx={}",
                     frame.ratio,
                     idx
                 );
                 assert_eq!(
-                    out.rotation.at(idx % 4),
+                    out.rotation.col(idx % 4),
                     frame.transform[idx].1,
                     "ratio={} rotation idx={}",
                     frame.ratio,
                     idx
                 );
                 assert_eq!(
-                    out.scale.at(idx % 4),
+                    out.scale.col(idx % 4),
                     frame.transform[idx].2,
                     "ratio={} scale idx={}",
                     frame.ratio,
@@ -1281,9 +1437,9 @@ mod sampling_tests {
             job.set_output(output.clone());
             job.run()?;
             for item in output.vec().unwrap().iter() {
-                assert_eq!(item.translation.at(0), Vec3::new(1.0, -1.0, 5.0));
-                assert_eq!(item.rotation.at(0), Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
-                assert_eq!(item.scale.at(0), Vec3::new(1.0, 1.0, 1.0));
+                assert_eq!(item.translation.col(0), Vec3::new(1.0, -1.0, 5.0));
+                assert_eq!(item.rotation.col(0), Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
+                assert_eq!(item.scale.col(0), Vec3::new(1.0, 1.0, 1.0));
             }
             return Ok(());
         }
@@ -1307,28 +1463,56 @@ mod sampling_tests {
         run_test(&mut job).unwrap();
     }
 
-    // #[test]
-    // fn test_cache_resize() {
-    //     let animation = Rc::new(Animation {
-    //         duration: 46.0,
-    //         num_tracks: 7,
-    //         name: String::new(),
-    //         translations: vec![],
-    //         rotations: vec![],
-    //         scales: vec![],
-    //     });
+    #[cfg(feature = "rkyv")]
+    #[test]
+    fn test_rkyv() {
+        use rkyv::Deserialize;
 
-    //     let mut job = SamplingJob::new(0);
-    //     job.set_animation(&animation);
-    //     let output = ozz_buf(vec![TX; animation.num_tracks()]);
-    //     job.set_output(&output);
+        let mut archive = IArchive::new("./resource/animation-blending-1.ozz").unwrap();
+        let animation = Rc::new(Animation::read(&mut archive).unwrap());
+        let aligned_tracks = animation.num_aligned_tracks();
 
-    //     assert!(!job.validate());
+        let mut job = SamplingJob::default();
+        job.set_animation(animation.clone());
+        job.set_context(SamplingContext::new(aligned_tracks));
+        job.set_output(ozz_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
+        job.set_ratio(0.5);
+        job.run().unwrap();
 
-    //     job.resize_cache(7);
-    //     assert!(job.validate());
+        let ctx: SamplingContext = job.context().unwrap().clone();
+        let bytes = rkyv::to_bytes::<_, 256>(&ctx).unwrap();
+        let archived = rkyv::check_archived_root::<SamplingContext>(&bytes[..]).unwrap();
+        assert_eq!(archived.size as usize, ctx.size());
+        assert_eq!(archived.animation_id, ctx.animation_id());
+        assert_eq!(archived.ratio, ctx.ratio());
+        assert_eq!(archived.translation_cursor as usize, ctx.translation_cursor());
+        assert_eq!(archived.rotation_cursor as usize, ctx.rotation_cursor());
+        assert_eq!(archived.scale_cursor as usize, ctx.scale_cursor());
+        assert_eq!(archived.translations(), ctx.translations());
+        assert_eq!(archived.rotations(), ctx.rotations());
+        assert_eq!(archived.scales(), ctx.scales());
+        assert_eq!(archived.translation_keys(), ctx.translation_keys());
+        assert_eq!(archived.rotation_keys(), ctx.rotation_keys());
+        assert_eq!(archived.scale_keys(), ctx.scale_keys());
+        assert_eq!(archived.outdated_translations(), ctx.outdated_translations());
+        assert_eq!(archived.outdated_rotations(), ctx.outdated_rotations());
+        assert_eq!(archived.outdated_scales(), ctx.outdated_scales());
 
-    //     job.resize_cache(1);
-    //     assert!(!job.validate());
-    // }
+        let ctx_de: SamplingContext = archived.deserialize(&mut rkyv::Infallible).unwrap();
+        assert_eq!(ctx_de.size(), ctx.size());
+        assert_eq!(ctx_de.animation_id(), ctx.animation_id());
+        assert_eq!(ctx_de.ratio(), ctx.ratio());
+        assert_eq!(ctx_de.translation_cursor(), ctx.translation_cursor());
+        assert_eq!(ctx_de.rotation_cursor(), ctx.rotation_cursor());
+        assert_eq!(ctx_de.scale_cursor(), ctx.scale_cursor());
+        assert_eq!(ctx_de.translations(), ctx.translations());
+        assert_eq!(ctx_de.rotations(), ctx.rotations());
+        assert_eq!(ctx_de.scales(), ctx.scales());
+        assert_eq!(ctx_de.translation_keys(), ctx.translation_keys());
+        assert_eq!(ctx_de.rotation_keys(), ctx.rotation_keys());
+        assert_eq!(ctx_de.scale_keys(), ctx.scale_keys());
+        assert_eq!(ctx_de.outdated_translations(), ctx.outdated_translations());
+        assert_eq!(ctx_de.outdated_rotations(), ctx.outdated_rotations());
+        assert_eq!(ctx_de.outdated_scales(), ctx.outdated_scales());
+    }
 }
