@@ -1,5 +1,3 @@
-#[cfg(feature = "bincode")]
-use bincode::{Decode, Encode};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -8,7 +6,7 @@ use crate::math::SoaTransform;
 use crate::{DeterministicState, OzzError};
 
 #[derive(Debug)]
-#[cfg_attr(feature = "bincode", derive(Encode, Decode))]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Skeleton {
     pub(crate) joint_rest_poses: Vec<SoaTransform>,
     pub(crate) joint_parents: Vec<i16>,
@@ -138,7 +136,7 @@ mod tests {
     use std::simd::prelude::*;
 
     use super::*;
-    use crate::math::{SoaFloat3, SoaQuaternion};
+    use crate::math::{SoaQuat, SoaVec3};
 
     #[test]
     fn test_read_skeleton() {
@@ -148,7 +146,7 @@ mod tests {
         assert_eq!(skeleton.joint_rest_poses().len(), 17);
         assert_eq!(
             skeleton.joint_rest_poses()[0].translation,
-            SoaFloat3 {
+            SoaVec3 {
                 x: f32x4::from_array([-4.01047945e-10, 0.00000000, 0.0710870326, 0.110522307]),
                 y: f32x4::from_array([1.04666960, 0.00000000, -8.79573781e-05, -7.82728166e-05]),
                 z: f32x4::from_array([-0.0151103791, 0.00000000, 9.85883801e-08, -2.17094467e-10]),
@@ -156,7 +154,7 @@ mod tests {
         );
         assert_eq!(
             skeleton.joint_rest_poses()[16].translation,
-            SoaFloat3 {
+            SoaVec3 {
                 x: f32x4::from_array([0.458143145, 0.117970668, 0.0849116519, 0.00000000]),
                 y: f32x4::from_array([2.64545919e-09, 0.148304969, 0.00000000, 0.00000000]),
                 z: f32x4::from_array([-4.97557555e-14, -7.47846236e-15, -1.77635680e-17, 0.00000000]),
@@ -165,7 +163,7 @@ mod tests {
 
         assert_eq!(
             skeleton.joint_rest_poses()[0].rotation,
-            SoaQuaternion {
+            SoaQuat {
                 x: f32x4::from_array([-0.500000000, -0.499999702, -1.41468570e-06, -3.05311332e-14]),
                 y: f32x4::from_array([-0.500000000, -0.500000358, -6.93941161e-07, 1.70812796e-22]),
                 z: f32x4::from_array([-0.500000000, -0.499999702, 0.000398159056, 1.08420217e-19]),
@@ -174,7 +172,7 @@ mod tests {
         );
         assert_eq!(
             skeleton.joint_rest_poses()[16].rotation,
-            SoaQuaternion {
+            SoaQuat {
                 x: f32x4::from_array([-2.20410801e-09, 4.11812209e-07, -6.55128745e-32, 0.00000000]),
                 y: f32x4::from_array([4.60687737e-08, -4.11812152e-07, -1.30968591e-21, 0.00000000]),
                 z: f32x4::from_array([0.0498105064, 0.707106829, -2.46519033e-32, 0.00000000]),
@@ -184,7 +182,7 @@ mod tests {
 
         assert_eq!(
             skeleton.joint_rest_poses()[0].scale,
-            SoaFloat3 {
+            SoaVec3 {
                 x: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),
                 y: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),
                 z: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),
@@ -192,7 +190,7 @@ mod tests {
         );
         assert_eq!(
             skeleton.joint_rest_poses()[16].scale,
-            SoaFloat3 {
+            SoaVec3 {
                 x: f32x4::from_array([0.999999940, 1.0, 1.0, 1.0]),
                 y: f32x4::from_array([0.999999940, 1.0, 1.0, 1.0]),
                 z: f32x4::from_array([1.0, 1.0, 1.0, 1.0]),

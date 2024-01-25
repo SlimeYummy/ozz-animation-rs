@@ -1,5 +1,3 @@
-#[cfg(feature = "bincode")]
-use bincode::{Decode, Encode};
 use glam::{Quat, Vec3, Vec4};
 use std::mem;
 use std::path::Path;
@@ -7,12 +5,12 @@ use std::simd::prelude::*;
 use std::simd::*;
 
 use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
-use crate::math::{as_f32x4, as_i32x4, f16_to_f32, simd_f16_to_f32, SoaFloat3, SoaQuaternion};
-use crate::OzzError;
+use crate::base::OzzError;
+use crate::math::{as_f32x4, as_i32x4, f16_to_f32, simd_f16_to_f32, SoaQuat, SoaVec3};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "bincode", derive(Encode, Decode))]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Float3Key {
     pub ratio: f32,
     pub track: u16,
@@ -32,7 +30,7 @@ impl Float3Key {
         );
     }
 
-    pub fn simd_decompress(k0: &Float3Key, k1: &Float3Key, k2: &Float3Key, k3: &Float3Key, soa: &mut SoaFloat3) {
+    pub fn simd_decompress(k0: &Float3Key, k1: &Float3Key, k2: &Float3Key, k3: &Float3Key, soa: &mut SoaVec3) {
         soa.x = simd_f16_to_f32([k0.value[0], k1.value[0], k2.value[0], k3.value[0]]);
         soa.y = simd_f16_to_f32([k0.value[1], k1.value[1], k2.value[1], k3.value[1]]);
         soa.z = simd_f16_to_f32([k0.value[2], k1.value[2], k2.value[2], k3.value[2]]);
@@ -50,7 +48,7 @@ impl ArchiveReader<Float3Key> for Float3Key {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "bincode", derive(Encode, Decode))]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct QuaternionKey {
     pub ratio: f32,
     // track: 13 => The track this key frame belongs to.
@@ -120,7 +118,7 @@ impl QuaternionKey {
         k1: &QuaternionKey,
         k2: &QuaternionKey,
         k3: &QuaternionKey,
-        soa: &mut SoaQuaternion,
+        soa: &mut SoaQuat,
     ) {
         const INT_2_FLOAT: f32x4 = f32x4::from_array([1.0f32 / (32767.0f32 * core::f32::consts::SQRT_2); 4]);
 
@@ -191,7 +189,7 @@ impl ArchiveReader<QuaternionKey> for QuaternionKey {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "bincode", derive(Encode, Decode))]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Animation {
     pub(crate) duration: f32,
     pub(crate) num_tracks: usize,
@@ -337,11 +335,11 @@ mod tests {
             track: 0,
             value: [9839, 1, 0],
         };
-        let mut soa = SoaFloat3::default();
+        let mut soa = SoaVec3::default();
         Float3Key::simd_decompress(&k0, &k1, &k2, &k3, &mut soa);
         assert_eq!(
             soa,
-            SoaFloat3 {
+            SoaVec3 {
                 x: f32x4::from_array([0.0711059570, 0.0251312255859375, 0.0711059570, 0.0251312255859375]),
                 y: f32x4::from_array([
                     -8.77380371e-05,
@@ -433,11 +431,11 @@ mod tests {
             bit_field: (2 << 1) | 1,
             value: [-23255, -23498, 21462],
         };
-        let mut soa = SoaQuaternion::default();
+        let mut soa = SoaQuat::default();
         QuaternionKey::simd_decompress(&quat0, &quat1, &quat2, &quat3, &mut soa);
         assert_eq!(
             soa,
-            SoaQuaternion {
+            SoaQuat {
                 x: f32x4::from_array([0.008545618438802194, 0.767303715540273, 0.00000000, -0.501839280]),
                 y: f32x4::from_array([0.008826156417853781, 0.11342366291501094, 0.00000000, -0.507083178]),
                 z: f32x4::from_array([0.006085516160965199, -0.3139651582478109, -0.00420806976, -0.525850952]),

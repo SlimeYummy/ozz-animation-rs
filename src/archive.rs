@@ -3,8 +3,8 @@ use std::io::Read;
 use std::path::Path;
 use std::{mem, slice, str};
 
+use crate::base::OzzError;
 use crate::endian::{Endian, SwapEndian};
-use crate::OzzError;
 
 pub trait ArchiveVersion {
     fn version() -> u32;

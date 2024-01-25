@@ -1,12 +1,5 @@
 #![allow(dead_code)]
 
-#[cfg(feature = "bincode")]
-use bincode::{
-    de::{BorrowDecoder, Decoder},
-    enc::Encoder,
-    error::{DecodeError, EncodeError},
-    BorrowDecode, Decode, Encode,
-};
 use glam::{Mat4, Quat, Vec3, Vec3A};
 use static_assertions::const_assert_eq;
 use std::fmt::Debug;
@@ -15,10 +8,7 @@ use std::simd::prelude::*;
 use std::simd::*;
 
 use crate::archive::{ArchiveReader, IArchive};
-use crate::OzzError;
-
-// #[cfg(feature = "serde")]
-// use serde::{de::Deserializer, ser::SerializeSeq, Deserialize, Serialize};
+use crate::base::OzzError;
 
 pub const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
 pub const ONE: f32x4 = f32x4::from_array([1.0; 4]);
@@ -37,18 +27,22 @@ pub const Z_AXIS: f32x4 = f32x4::from_array([0.0, 0.0, 1.0, 0.0]);
 
 pub const QUAT_UNIT: f32x4 = f32x4::from_array([0.0, 0.0, 0.0, 1.0]);
 
+//
+// SoaVec3
+//
+
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct SoaFloat3 {
-    pub(crate) x: f32x4,
-    pub(crate) y: f32x4,
-    pub(crate) z: f32x4,
+pub struct SoaVec3 {
+    pub x: f32x4,
+    pub y: f32x4,
+    pub z: f32x4,
 }
 
-impl SoaFloat3 {
+impl SoaVec3 {
     #[inline]
-    pub(crate) const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4]) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4]) -> SoaVec3 {
+        return SoaVec3 {
             x: f32x4::from_array(x),
             y: f32x4::from_array(y),
             z: f32x4::from_array(z),
@@ -56,8 +50,13 @@ impl SoaFloat3 {
     }
 
     #[inline]
-    pub(crate) const fn splat_col(v: [f32; 3]) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub const fn splat_row(v: f32x4) -> SoaVec3 {
+        return SoaVec3 { x: v, y: v, z: v };
+    }
+
+    #[inline]
+    pub const fn splat_col(v: [f32; 3]) -> SoaVec3 {
+        return SoaVec3 {
             x: f32x4::from_array([v[0]; 4]),
             y: f32x4::from_array([v[1]; 4]),
             z: f32x4::from_array([v[2]; 4]),
@@ -65,18 +64,20 @@ impl SoaFloat3 {
     }
 
     #[inline]
-    pub(crate) const fn splat_row(v: f32x4) -> SoaFloat3 {
-        return SoaFloat3 { x: v, y: v, z: v };
-    }
-
-    #[inline]
-    pub(crate) fn at(&self, idx: usize) -> Vec3 {
+    pub fn col(&self, idx: usize) -> Vec3 {
         return Vec3::new(self.x[idx], self.y[idx], self.z[idx]);
     }
 
     #[inline]
-    pub(crate) fn neg(&self) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub fn set_col(&mut self, idx: usize, v: Vec3) {
+        self.x[idx] = v.x;
+        self.y[idx] = v.y;
+        self.z[idx] = v.z;
+    }
+
+    #[inline]
+    pub fn neg(&self) -> SoaVec3 {
+        return SoaVec3 {
             x: -self.x,
             y: -self.y,
             z: -self.z,
@@ -84,8 +85,8 @@ impl SoaFloat3 {
     }
 
     #[inline]
-    pub(crate) fn add(&self, other: &SoaFloat3) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub fn add(&self, other: &SoaVec3) -> SoaVec3 {
+        return SoaVec3 {
             x: self.x + other.x,
             y: self.y + other.y,
             z: self.z + other.z,
@@ -93,8 +94,8 @@ impl SoaFloat3 {
     }
 
     #[inline]
-    pub(crate) fn sub(&self, other: &SoaFloat3) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub fn sub(&self, other: &SoaVec3) -> SoaVec3 {
+        return SoaVec3 {
             x: self.x - other.x,
             y: self.y - other.y,
             z: self.z - other.z,
@@ -102,8 +103,8 @@ impl SoaFloat3 {
     }
 
     #[inline]
-    pub(crate) fn component_mul(&self, other: &SoaFloat3) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub fn component_mul(&self, other: &SoaVec3) -> SoaVec3 {
+        return SoaVec3 {
             x: self.x * other.x,
             y: self.y * other.y,
             z: self.z * other.z,
@@ -111,8 +112,8 @@ impl SoaFloat3 {
     }
 
     #[inline]
-    pub(crate) fn mul_num(&self, f: f32x4) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub fn mul_num(&self, f: f32x4) -> SoaVec3 {
+        return SoaVec3 {
             x: self.x * f,
             y: self.y * f,
             z: self.z * f,
@@ -120,8 +121,8 @@ impl SoaFloat3 {
     }
 
     #[inline]
-    pub(crate) fn lerp(from: &SoaFloat3, to: &SoaFloat3, alpha: f32x4) -> SoaFloat3 {
-        return SoaFloat3 {
+    pub fn lerp(from: &SoaVec3, to: &SoaVec3, alpha: f32x4) -> SoaVec3 {
+        return SoaVec3 {
             x: (to.x - from.x) * alpha + from.x,
             y: (to.y - from.y) * alpha + from.y,
             z: (to.z - from.z) * alpha + from.z,
@@ -129,46 +130,66 @@ impl SoaFloat3 {
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Encode for SoaFloat3 {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(self.x.as_array(), encoder)?;
-        Encode::encode(self.y.as_array(), encoder)?;
-        Encode::encode(self.z.as_array(), encoder)?;
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for SoaVec3 {
+    type Archived = SoaVec3;
+    type Resolver = ();
+
+    #[inline]
+    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+        out.write(rkyv::to_archived!(*self as Self));
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for SoaVec3 {
+    #[inline]
+    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
         return Ok(());
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Decode for SoaFloat3 {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<SoaFloat3, DecodeError> {
-        let x = f32x4::from_array(Decode::decode(decoder)?);
-        let y = f32x4::from_array(Decode::decode(decoder)?);
-        let z = f32x4::from_array(Decode::decode(decoder)?);
-        return Ok(SoaFloat3 { x, y, z });
+#[cfg(feature = "rkyv")]
+impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SoaVec3, D> for SoaVec3 {
+    #[inline]
+    fn deserialize(&self, _: &mut D) -> Result<SoaVec3, D::Error> {
+        return Ok(rkyv::from_archived!(*self));
     }
 }
 
-#[cfg(feature = "bincode")]
-impl<'de> BorrowDecode<'de> for SoaFloat3 {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<SoaFloat3, DecodeError> {
-        return SoaFloat3::decode(decoder);
+#[cfg(feature = "rkyv")]
+impl<C: ?Sized> bytecheck::CheckBytes<C> for SoaVec3 {
+    type Error = std::io::Error;
+
+    #[inline]
+    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+        if value as usize % mem::align_of::<SoaVec3>() != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "must be aligned to 16 bytes",
+            ));
+        }
+        return Ok(&*value);
     }
 }
+
+//
+// SoaQuat
+//
 
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct SoaQuaternion {
-    pub(crate) x: f32x4,
-    pub(crate) y: f32x4,
-    pub(crate) z: f32x4,
-    pub(crate) w: f32x4,
+pub struct SoaQuat {
+    pub x: f32x4,
+    pub y: f32x4,
+    pub z: f32x4,
+    pub w: f32x4,
 }
 
-impl SoaQuaternion {
+impl SoaQuat {
     #[inline]
-    pub(crate) const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4], w: [f32; 4]) -> SoaQuaternion {
-        return SoaQuaternion {
+    pub const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4], w: [f32; 4]) -> SoaQuat {
+        return SoaQuat {
             x: f32x4::from_array(x),
             y: f32x4::from_array(y),
             z: f32x4::from_array(z),
@@ -177,8 +198,13 @@ impl SoaQuaternion {
     }
 
     #[inline]
-    pub(crate) const fn splat_col(v: [f32; 4]) -> SoaQuaternion {
-        return SoaQuaternion {
+    pub const fn splat_row(v: f32x4) -> SoaQuat {
+        return SoaQuat { x: v, y: v, z: v, w: v };
+    }
+
+    #[inline]
+    pub const fn splat_col(v: [f32; 4]) -> SoaQuat {
+        return SoaQuat {
             x: f32x4::from_array([v[0]; 4]),
             y: f32x4::from_array([v[1]; 4]),
             z: f32x4::from_array([v[2]; 4]),
@@ -187,13 +213,21 @@ impl SoaQuaternion {
     }
 
     #[inline]
-    pub(crate) fn at(&self, idx: usize) -> Quat {
+    pub fn col(&self, idx: usize) -> Quat {
         return Quat::from_xyzw(self.x[idx], self.y[idx], self.z[idx], self.w[idx]);
     }
 
     #[inline]
-    pub(crate) fn conjugate(&self) -> SoaQuaternion {
-        return SoaQuaternion {
+    pub fn set_col(&mut self, idx: usize, v: Quat) {
+        self.x[idx] = v.x;
+        self.y[idx] = v.y;
+        self.z[idx] = v.z;
+        self.w[idx] = v.w;
+    }
+
+    #[inline]
+    pub fn conjugate(&self) -> SoaQuat {
+        return SoaQuat {
             x: -self.x,
             y: -self.y,
             z: -self.z,
@@ -202,8 +236,8 @@ impl SoaQuaternion {
     }
 
     #[inline]
-    pub(crate) fn add(&self, other: &SoaQuaternion) -> SoaQuaternion {
-        return SoaQuaternion {
+    pub fn add(&self, other: &SoaQuat) -> SoaQuat {
+        return SoaQuat {
             x: self.x + other.x,
             y: self.y + other.y,
             z: self.z + other.z,
@@ -212,17 +246,17 @@ impl SoaQuaternion {
     }
 
     #[inline]
-    pub(crate) fn mul(&self, other: &SoaQuaternion) -> SoaQuaternion {
+    pub fn mul(&self, other: &SoaQuat) -> SoaQuat {
         let x = self.w * other.x + self.x * other.w + self.y * other.z - self.z * other.y;
         let y = self.w * other.y + self.y * other.w + self.z * other.x - self.x * other.z;
         let z = self.w * other.z + self.z * other.w + self.x * other.y - self.y * other.x;
         let w = self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z;
-        return SoaQuaternion { x, y, z, w };
+        return SoaQuat { x, y, z, w };
     }
 
     #[inline]
-    pub(crate) fn mul_num(&self, f: f32x4) -> SoaQuaternion {
-        return SoaQuaternion {
+    pub fn mul_num(&self, f: f32x4) -> SoaQuat {
+        return SoaQuat {
             x: self.x * f,
             y: self.y * f,
             z: self.z * f,
@@ -231,10 +265,10 @@ impl SoaQuaternion {
     }
 
     #[inline]
-    pub(crate) fn normalize(&self) -> SoaQuaternion {
+    pub fn normalize(&self) -> SoaQuat {
         let len2 = self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w;
         let inv_len = len2.sqrt().recip();
-        return SoaQuaternion {
+        return SoaQuat {
             x: self.x * inv_len,
             y: self.y * inv_len,
             z: self.z * inv_len,
@@ -243,19 +277,19 @@ impl SoaQuaternion {
     }
 
     #[inline]
-    pub(crate) fn dot(&self, other: &SoaQuaternion) -> f32x4 {
+    pub fn dot(&self, other: &SoaQuat) -> f32x4 {
         return self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w;
     }
 
     #[inline]
-    pub(crate) fn nlerp(&self, other: &SoaQuaternion, f: f32x4) -> SoaQuaternion {
+    pub fn nlerp(&self, other: &SoaQuat, f: f32x4) -> SoaQuat {
         let lerp_x = (other.x - self.x) * f + self.x;
         let lerp_y = (other.y - self.y) * f + self.y;
         let lerp_z = (other.z - self.z) * f + self.z;
         let lerp_w = (other.w - self.w) * f + self.w;
         let len2 = lerp_x * lerp_x + lerp_y * lerp_y + lerp_z * lerp_z + lerp_w * lerp_w;
         let inv_len = len2.sqrt().recip();
-        return SoaQuaternion {
+        return SoaQuat {
             x: lerp_x * inv_len,
             y: lerp_y * inv_len,
             z: lerp_z * inv_len,
@@ -264,8 +298,8 @@ impl SoaQuaternion {
     }
 
     #[inline]
-    pub(crate) fn xor_num(&self, i: i32x4) -> SoaQuaternion {
-        return SoaQuaternion {
+    pub fn xor_num(&self, i: i32x4) -> SoaQuat {
+        return SoaQuat {
             x: as_f32x4(as_i32x4(self.x) ^ i),
             y: as_f32x4(as_i32x4(self.y) ^ i),
             z: as_f32x4(as_i32x4(self.z) ^ i),
@@ -274,42 +308,59 @@ impl SoaQuaternion {
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Encode for SoaQuaternion {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(self.x.as_array(), encoder)?;
-        Encode::encode(self.y.as_array(), encoder)?;
-        Encode::encode(self.z.as_array(), encoder)?;
-        Encode::encode(self.w.as_array(), encoder)?;
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for SoaQuat {
+    type Archived = SoaQuat;
+    type Resolver = ();
+
+    #[inline]
+    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+        out.write(rkyv::to_archived!(*self as Self));
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for SoaQuat {
+    #[inline]
+    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
         return Ok(());
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Decode for SoaQuaternion {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<SoaQuaternion, DecodeError> {
-        let x = f32x4::from_array(Decode::decode(decoder)?);
-        let y = f32x4::from_array(Decode::decode(decoder)?);
-        let z = f32x4::from_array(Decode::decode(decoder)?);
-        let w = f32x4::from_array(Decode::decode(decoder)?);
-        return Ok(SoaQuaternion { x, y, z, w });
+#[cfg(feature = "rkyv")]
+impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SoaQuat, D> for SoaQuat {
+    #[inline]
+    fn deserialize(&self, _: &mut D) -> Result<SoaQuat, D::Error> {
+        return Ok(rkyv::from_archived!(*self));
     }
 }
 
-#[cfg(feature = "bincode")]
-impl<'de> BorrowDecode<'de> for SoaQuaternion {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<SoaQuaternion, DecodeError> {
-        return SoaQuaternion::decode(decoder);
+#[cfg(feature = "rkyv")]
+impl<C: ?Sized> bytecheck::CheckBytes<C> for SoaQuat {
+    type Error = std::io::Error;
+
+    #[inline]
+    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+        if value as usize % mem::align_of::<SoaQuat>() != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "must be aligned to 16 bytes",
+            ));
+        }
+        return Ok(&*value);
     }
 }
+
+//
+// SoaTransform
+//
 
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-#[cfg_attr(feature = "bincode", derive(Encode, Decode))]
 pub struct SoaTransform {
-    pub(crate) translation: SoaFloat3,
-    pub(crate) rotation: SoaQuaternion,
-    pub(crate) scale: SoaFloat3,
+    pub translation: SoaVec3,
+    pub rotation: SoaQuat,
+    pub scale: SoaVec3,
 }
 
 impl ArchiveReader<SoaTransform> for SoaTransform {
@@ -323,27 +374,84 @@ impl ArchiveReader<SoaTransform> for SoaTransform {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct Float4x4 {
-    pub(crate) cols: [f32x4; 4],
+impl SoaTransform {
+    pub fn new(translation: SoaVec3, rotation: SoaQuat, scale: SoaVec3) -> SoaTransform {
+        return SoaTransform {
+            translation,
+            rotation,
+            scale,
+        };
+    }
 }
 
-const_assert_eq!(mem::size_of::<Float4x4>(), mem::size_of::<Mat4>());
+#[cfg(feature = "rkyv")]
+impl rkyv::Archive for SoaTransform {
+    type Archived = SoaTransform;
+    type Resolver = ();
 
-impl From<Mat4> for Float4x4 {
-    fn from(mat: Mat4) -> Float4x4 {
+    #[inline]
+    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+        out.write(rkyv::to_archived!(*self as Self));
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for SoaTransform {
+    #[inline]
+    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
+        return Ok(());
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SoaTransform, D> for SoaTransform {
+    #[inline]
+    fn deserialize(&self, _: &mut D) -> Result<SoaTransform, D::Error> {
+        return Ok(rkyv::from_archived!(*self));
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<C: ?Sized> bytecheck::CheckBytes<C> for SoaTransform {
+    type Error = std::io::Error;
+
+    #[inline]
+    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+        if value as usize % mem::align_of::<SoaTransform>() != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "must be aligned to 16 bytes",
+            ));
+        }
+        return Ok(&*value);
+    }
+}
+
+//
+// AosMat4
+//
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub(crate) struct AosMat4 {
+    pub cols: [f32x4; 4],
+}
+
+const_assert_eq!(mem::size_of::<AosMat4>(), mem::size_of::<Mat4>());
+
+impl From<Mat4> for AosMat4 {
+    fn from(mat: Mat4) -> AosMat4 {
         return unsafe { mem::transmute(mat) };
     }
 }
 
-impl Into<Mat4> for Float4x4 {
+impl Into<Mat4> for AosMat4 {
     fn into(self) -> Mat4 {
         return unsafe { mem::transmute(self) };
     }
 }
 
-impl Float4x4 {
+impl AosMat4 {
     #[rustfmt::skip]
     #[inline]
     pub(crate) fn new(
@@ -351,8 +459,8 @@ impl Float4x4 {
         n10: f32, n11: f32, n12: f32, n13: f32,
         n20: f32, n21: f32, n22: f32, n23: f32,
         n30: f32, n31: f32, n32: f32, n33: f32,
-    ) -> Float4x4 {
-        return Float4x4 {
+    ) -> AosMat4 {
+        return AosMat4 {
             cols: [
                 f32x4::from_array([n00, n01, n02, n03]),
                 f32x4::from_array([n10, n11, n12, n13]),
@@ -363,8 +471,8 @@ impl Float4x4 {
     }
 
     #[inline]
-    pub(crate) fn new_translation(t: Vec3) -> Float4x4 {
-        return Float4x4 {
+    pub(crate) fn new_translation(t: Vec3) -> AosMat4 {
+        return AosMat4 {
             cols: [
                 f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
                 f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
@@ -375,8 +483,8 @@ impl Float4x4 {
     }
 
     #[inline]
-    pub(crate) fn new_scaling(s: Vec3) -> Float4x4 {
-        return Float4x4 {
+    pub(crate) fn new_scaling(s: Vec3) -> AosMat4 {
+        return AosMat4 {
             cols: [
                 f32x4::from_array([s.x, 0.0, 0.0, 0.0]),
                 f32x4::from_array([0.0, s.y, 0.0, 0.0]),
@@ -387,8 +495,8 @@ impl Float4x4 {
     }
 
     #[inline]
-    pub(crate) fn identity() -> Float4x4 {
-        return Float4x4 {
+    pub(crate) fn identity() -> AosMat4 {
+        return AosMat4 {
             cols: [
                 f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
                 f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
@@ -398,14 +506,13 @@ impl Float4x4 {
         };
     }
 
-    pub fn mul(&self, other: &Float4x4) -> Float4x4 {
-        // TODO: use shuffle command
+    pub(crate) fn mul(&self, other: &AosMat4) -> AosMat4 {
         const X: [usize; 4] = [0, 0, 0, 0];
         const Y: [usize; 4] = [1, 1, 1, 1];
         const Z: [usize; 4] = [2, 2, 2, 2];
         const W: [usize; 4] = [3, 3, 3, 3];
 
-        let mut result = Float4x4::default();
+        let mut result = AosMat4::default();
 
         let xxxx = simd_swizzle!(other.cols[0], X) * self.cols[0];
         let zzzz = simd_swizzle!(other.cols[0], Z) * self.cols[2];
@@ -434,7 +541,7 @@ impl Float4x4 {
         return result;
     }
 
-    pub fn invert(&self) -> Float4x4 {
+    pub(crate) fn invert(&self) -> AosMat4 {
         const IB1: [usize; 4] = [1, 0, 3, 2]; // 0xB1
         const I4E: [usize; 4] = [2, 3, 0, 1]; // 0x4E
 
@@ -511,21 +618,21 @@ impl Float4x4 {
         tmp1 = as_f32x4((as_i32x4(det_recip) & invertible) | (!invertible & as_i32x4(ZERO))); // first
         det = (tmp1 + tmp1) - det * (tmp1 * tmp1); // first
         det = simd_swizzle!(det, [0; 4]);
-        return Float4x4 {
+        return AosMat4 {
             cols: [det * minor0, det * minor1, det * minor2, det * minor3],
         };
     }
 
     #[inline]
-    pub fn transform_point(&self, p: f32x4) -> f32x4 {
+    pub(crate) fn transform_point(&self, p: f32x4) -> f32x4 {
         let xxxx = simd_swizzle!(p, [0; 4]) * self.cols[0];
         let a23 = simd_swizzle!(p, [2; 4]) * self.cols[2] + self.cols[3];
         let a01 = simd_swizzle!(p, [1; 4]) * self.cols[1] + xxxx;
-        return (a01 + a23).into();
+        return a01 + a23;
     }
 
     #[inline]
-    pub fn transform_vector(&self, p: f32x4) -> f32x4 {
+    pub(crate) fn transform_vector(&self, p: f32x4) -> f32x4 {
         let xxxx = simd_swizzle!(p, [0; 4]) * self.cols[0];
         let zzzz = simd_swizzle!(p, [1; 4]) * self.cols[1];
         let a21 = simd_swizzle!(p, [2; 4]) * self.cols[2] + xxxx;
@@ -533,42 +640,18 @@ impl Float4x4 {
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Encode for Float4x4 {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        for idx in 0..4 {
-            Encode::encode(self.cols[idx].as_array(), encoder)?;
-        }
-        return Ok(());
-    }
-}
-
-#[cfg(feature = "bincode")]
-impl Decode for Float4x4 {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Float4x4, DecodeError> {
-        let mut res = Float4x4::default();
-        for idx in 0..4 {
-            res.cols[idx] = f32x4::from_array(Decode::decode(decoder)?);
-        }
-        return Ok(res);
-    }
-}
-
-#[cfg(feature = "bincode")]
-impl<'de> BorrowDecode<'de> for Float4x4 {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Float4x4, DecodeError> {
-        return Float4x4::decode(decoder);
-    }
-}
+//
+// SoaVec3
+//
 
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct SoaFloat4x4 {
-    pub(crate) cols: [f32x4; 16],
+pub struct SoaMat4 {
+    pub cols: [f32x4; 16],
 }
 
-impl SoaFloat4x4 {
-    pub(crate) fn from_affine(translation: &SoaFloat3, rotation: &SoaQuaternion, scale: &SoaFloat3) -> SoaFloat4x4 {
+impl SoaMat4 {
+    pub fn from_affine(translation: &SoaVec3, rotation: &SoaQuat, scale: &SoaVec3) -> SoaMat4 {
         let xx = rotation.x * rotation.x;
         let xy = rotation.x * rotation.y;
         let xz = rotation.x * rotation.z;
@@ -578,7 +661,7 @@ impl SoaFloat4x4 {
         let yw = rotation.y * rotation.w;
         let zz = rotation.z * rotation.z;
         let zw = rotation.z * rotation.w;
-        return SoaFloat4x4 {
+        return SoaMat4 {
             cols: [
                 scale.x * (ONE - TWO * (yy + zz)),
                 scale.x * TWO * (xy + zw),
@@ -600,7 +683,7 @@ impl SoaFloat4x4 {
         };
     }
 
-    pub(crate) fn to_aos(&self) -> [Float4x4; 4] {
+    pub(crate) fn to_aos(&self) -> [AosMat4; 4] {
         const LOW: [usize; 4] = [0, 4, 1, 5];
         const HIGH: [usize; 4] = [2, 6, 3, 7];
 
@@ -643,35 +726,11 @@ impl SoaFloat4x4 {
     }
 }
 
-#[cfg(feature = "bincode")]
-impl Encode for SoaFloat4x4 {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        for idx in 0..16 {
-            Encode::encode(self.cols[idx].as_array(), encoder)?;
-        }
-        return Ok(());
-    }
-}
+//
+// functions
+//
 
-#[cfg(feature = "bincode")]
-impl Decode for SoaFloat4x4 {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<SoaFloat4x4, DecodeError> {
-        let mut res = SoaFloat4x4::default();
-        for idx in 0..16 {
-            res.cols[idx] = f32x4::from_array(Decode::decode(decoder)?);
-        }
-        return Ok(res);
-    }
-}
-
-#[cfg(feature = "bincode")]
-impl<'de> BorrowDecode<'de> for SoaFloat4x4 {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<SoaFloat4x4, DecodeError> {
-        return SoaFloat4x4::decode(decoder);
-    }
-}
-
-pub fn f16_to_f32(n: u16) -> f32 {
+pub(crate) fn f16_to_f32(n: u16) -> f32 {
     let sign = (n & 0x8000) as u32;
     let expo = (n & 0x7C00) as u32;
     let base = (n & 0x03FF) as u32;
@@ -694,7 +753,7 @@ pub fn f16_to_f32(n: u16) -> f32 {
     };
 }
 
-pub fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
+pub(crate) fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
     const MASK_NO_SIGN: i32x4 = i32x4::from_array([0x7FFF; 4]);
     const MAGIC: f32x4 = as_f32x4(i32x4::from_array([(254 - 15) << 23; 4]));
     const WAS_INFNAN: i32x4 = i32x4::from_array([0x7BFF; 4]);
@@ -713,80 +772,80 @@ pub fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
 }
 
 #[inline(always)]
-pub const fn as_f32x4(v: i32x4) -> f32x4 {
+pub(crate) const fn as_f32x4(v: i32x4) -> f32x4 {
     return unsafe { mem::transmute(v) };
 }
 
 #[inline(always)]
-pub const fn as_i32x4(v: f32x4) -> i32x4 {
+pub(crate) const fn as_i32x4(v: f32x4) -> i32x4 {
     return unsafe { mem::transmute(v) };
 }
 
 const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Vec3A>());
 
 #[inline(always)]
-pub fn f32x4_from_vec3a(v: Vec3A) -> f32x4 {
+pub(crate) fn f32x4_from_vec3a(v: Vec3A) -> f32x4 {
     return unsafe { mem::transmute(v) };
 }
 
 #[inline(always)]
-pub fn f32x4_to_vec3a(v: f32x4) -> Vec3A {
+pub(crate) fn f32x4_to_vec3a(v: f32x4) -> Vec3A {
     return unsafe { mem::transmute(v) };
 }
 
 const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Quat>());
 
 #[inline(always)]
-pub fn f32x4_from_quat(q: Quat) -> f32x4 {
+pub(crate) fn f32x4_from_quat(q: Quat) -> f32x4 {
     return unsafe { mem::transmute(q) };
 }
 
 #[inline(always)]
-pub fn f32x4_to_quat(q: f32x4) -> Quat {
+pub(crate) fn f32x4_to_quat(q: f32x4) -> Quat {
     return unsafe { mem::transmute(q) };
 }
 
 #[inline(always)]
-pub fn f32x4_set_y(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn f32x4_set_y(a: f32x4, b: f32x4) -> f32x4 {
     return simd_swizzle!(a, b, [0, 4, 2, 3]);
 }
 
 #[inline(always)]
-pub fn f32x4_set_z(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn f32x4_set_z(a: f32x4, b: f32x4) -> f32x4 {
     return simd_swizzle!(a, b, [0, 1, 4, 3]);
 }
 
 #[inline(always)]
-pub fn f32x4_set_w(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn f32x4_set_w(a: f32x4, b: f32x4) -> f32x4 {
     return simd_swizzle!(a, b, [0, 1, 2, 4]);
 }
 
 #[inline(always)]
-pub fn f32x4_splat_x(v: f32x4) -> f32x4 {
+pub(crate) fn f32x4_splat_x(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [0, 0, 0, 0]);
 }
 
 #[inline(always)]
-pub fn f32x4_splat_y(v: f32x4) -> f32x4 {
+pub(crate) fn f32x4_splat_y(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [1, 1, 1, 1]);
 }
 
 #[inline(always)]
-pub fn f32x4_splat_z(v: f32x4) -> f32x4 {
+pub(crate) fn f32x4_splat_z(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [2, 2, 2, 2]);
 }
 
 #[inline(always)]
-pub fn f32x4_splat_w(v: f32x4) -> f32x4 {
+pub(crate) fn f32x4_splat_w(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [3, 3, 3, 3]);
 }
 
 #[inline(always)]
-pub fn f32x4_extract_sign(v: f32x4) -> i32x4 {
+pub(crate) fn f32x4_extract_sign(v: f32x4) -> i32x4 {
     return as_i32x4(v) & SIGN;
 }
 
-pub fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
+pub(crate) fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
 
@@ -861,7 +920,7 @@ pub fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     return (out_sin, out_cos);
 }
 
-pub fn f32x4_asin(v: f32x4) -> f32x4 {
+pub(crate) fn f32x4_asin(v: f32x4) -> f32x4 {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
 
@@ -902,18 +961,46 @@ pub fn f32x4_asin(v: f32x4) -> f32x4 {
 }
 
 #[inline]
-pub fn f32x4_acos(v: f32x4) -> f32x4 {
+pub(crate) fn f32x4_acos(v: f32x4) -> f32x4 {
     const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
     return FRAC_PI_2 - f32x4_asin(v);
 }
 
 #[inline]
-pub fn f32x4_lerp(from: f32x4, to: f32x4, alpha: f32x4) -> f32x4 {
+pub(crate) fn f32x4_lerp(from: f32x4, to: f32x4, alpha: f32x4) -> f32x4 {
     return alpha * (to - from) + from;
 }
 
 #[inline]
-pub fn vec3_is_normalized(v: f32x4) -> bool {
+pub fn f32_sin_cos(x: f32) -> (f32, f32) {
+    let (sin, cos) = f32x4_sin_cos(f32x4::splat(x));
+    return (sin[0], cos[0]);
+}
+
+#[inline]
+pub fn f32_sin(x: f32) -> f32 {
+    let (sin, _) = f32x4_sin_cos(f32x4::splat(x));
+    return sin[0];
+}
+
+#[inline]
+pub fn f32_cos(x: f32) -> f32 {
+    let (_, cos) = f32x4_sin_cos(f32x4::splat(x));
+    return cos[0];
+}
+
+#[inline]
+pub fn f32_asin(x: f32) -> f32 {
+    return f32x4_asin(f32x4::splat(x))[0];
+}
+
+#[inline]
+pub fn f32_acos(x: f32) -> f32 {
+    return f32x4_acos(f32x4::splat(x))[0];
+}
+
+#[inline]
+pub(crate) fn vec3_is_normalized(v: f32x4) -> bool {
     const MAX: f32 = 1.0 + 0.002;
     const MIN: f32 = 1.0 - 0.002;
     let len2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
@@ -921,30 +1008,30 @@ pub fn vec3_is_normalized(v: f32x4) -> bool {
 }
 
 #[inline]
-pub fn vec3_length2_s(v: f32x4) -> f32x4 {
+pub(crate) fn vec3_length2_s(v: f32x4) -> f32x4 {
     return vec3_dot_s(v, v);
 }
 
 #[inline]
-pub fn vec3_dot_s(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn vec3_dot_s(a: f32x4, b: f32x4) -> f32x4 {
     let tmp = a * b;
     return tmp + simd_swizzle!(tmp, [1; 4]) + simd_swizzle!(tmp, [2; 4]);
 }
 
-pub fn vec3_cross(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn vec3_cross(a: f32x4, b: f32x4) -> f32x4 {
     let shufa = simd_swizzle!(a, [1, 2, 0, 3]);
     let shufb = simd_swizzle!(b, [1, 2, 0, 3]);
     let shufc = a * shufb - b * shufa;
     return simd_swizzle!(shufc, [1, 2, 0, 3]);
 }
 
-pub fn quat_from_axis_angle(axis: f32x4, angle: f32x4) -> f32x4 {
+pub(crate) fn quat_from_axis_angle(axis: f32x4, angle: f32x4) -> f32x4 {
     let half_angle = f32x4_splat_x(angle) * FRAC_1_2;
     let (half_sin, half_cos) = f32x4_sin_cos(half_angle);
     return f32x4_set_w(axis * half_sin, half_cos);
 }
 
-pub fn quat_from_cos_angle(axis: f32x4, cos: f32x4) -> f32x4 {
+pub(crate) fn quat_from_cos_angle(axis: f32x4, cos: f32x4) -> f32x4 {
     let half_cos2 = (ONE + cos) * FRAC_1_2;
     let half_sin2 = ONE - half_cos2;
     let half_cossin2 = f32x4_set_y(half_cos2, half_sin2);
@@ -953,7 +1040,7 @@ pub fn quat_from_cos_angle(axis: f32x4, cos: f32x4) -> f32x4 {
     return f32x4_set_w(axis * half_sin, half_cossin);
 }
 
-pub fn quat_from_vectors(from: f32x4, to: f32x4) -> f32x4 {
+pub(crate) fn quat_from_vectors(from: f32x4, to: f32x4) -> f32x4 {
     let norm_from_norm_to = (vec3_length2_s(from) * vec3_length2_s(to)).sqrt();
     let norm_from_norm_to_x = norm_from_norm_to[0];
     if norm_from_norm_to_x < 1.0e-6 {
@@ -978,13 +1065,13 @@ pub fn quat_from_vectors(from: f32x4, to: f32x4) -> f32x4 {
 }
 
 #[inline]
-pub fn quat_length2_s(q: f32x4) -> f32x4 {
+pub(crate) fn quat_length2_s(q: f32x4) -> f32x4 {
     let q2 = (q * q).reduce_sum();
     return f32x4::splat(q2);
 }
 
 #[inline]
-pub fn quat_normalize(q: f32x4) -> f32x4 {
+pub(crate) fn quat_normalize(q: f32x4) -> f32x4 {
     let q2 = q * q;
     let len2 = q2.reduce_sum();
     let inv_len = f32x4::splat(len2).sqrt().recip();
@@ -992,14 +1079,14 @@ pub fn quat_normalize(q: f32x4) -> f32x4 {
 }
 
 #[inline]
-pub fn quat_transform_vector(q: f32x4, v: f32x4) -> f32x4 {
+pub(crate) fn quat_transform_vector(q: f32x4, v: f32x4) -> f32x4 {
     let cross1 = f32x4_splat_w(q) * v + vec3_cross(q, v);
     let cross2 = vec3_cross(q, cross1);
     return v + cross2 + cross2;
 }
 
 #[inline]
-pub fn quat_mul(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn quat_mul(a: f32x4, b: f32x4) -> f32x4 {
     let p1 = simd_swizzle!(a, [3, 3, 3, 2]) * simd_swizzle!(b, [0, 1, 2, 2]);
     let p2 = simd_swizzle!(a, [0, 1, 2, 0]) * simd_swizzle!(b, [3, 3, 3, 0]);
     let p13 = simd_swizzle!(a, [1, 2, 0, 1]) * simd_swizzle!(b, [2, 0, 1, 1]) + p1;
@@ -1050,32 +1137,32 @@ mod tests {
     #[test]
     #[rustfmt::skip]
     fn test_matrix_invert() {
-        let m = Float4x4::new(
+        let m = AosMat4::new(
             1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
         );
         let m_inv = m.invert();
-        assert_eq!(m_inv, Float4x4::new(
+        assert_eq!(m_inv, AosMat4::new(
             1.0, 0.0, 0.0, 0.0,
             0.0, 1.0, 0.0, 0.0,
             0.0, 0.0, 1.0, 0.0,
             0.0, 0.0, 0.0, 1.0,
         ));
 
-        let m = Float4x4::new(
+        let m = AosMat4::new(
             5.0, 0.0, 0.0, 0.0,
             0.0, 5.0, 0.0, 0.0,
             0.0, 0.0, 5.0, 0.0,
             0.0, 0.0, 0.0, 5.0,
         );
         let m_inv = m.invert();
-        assert_eq!(m_inv, Float4x4::new(
+        assert_eq!(m_inv, AosMat4::new(
             0.2, 0.0, 0.0, 0.0,
             0.0, 0.2, 0.0, 0.0,
             0.0, 0.0, 0.2, 0.0,
             0.0, 0.0, 0.0, 0.2,
         ));
 
-        let m = Float4x4::new(
+        let m = AosMat4::new(
             -1.82742070e-08, 0.988180459, 0.153295174, 0.0,
             1.17800290e-07, 0.153295159, -0.988180578, 0.0,
             -1.00000012, 0.0, -1.19209290e-07, 0.0,
@@ -1084,7 +1171,7 @@ mod tests {
         let m_inv = m.invert();
         assert_eq!(
             m_inv,
-            Float4x4::new(
+            AosMat4::new(
                 -1.82742035e-08, 1.17800262e-07, -0.999999881, 0.0,
                 0.988180459, 0.153295159, 0.0, 0.0,
                 0.153295144, -0.988180339, -1.19209261e-07, 0.0,
@@ -1189,5 +1276,36 @@ mod tests {
         }
 
         assert!(ma < 3.5e-7);
+    }
+
+    #[cfg(feature = "rkyv")]
+    #[test]
+    fn test_rkyv() {
+        use rkyv::Deserialize;
+
+        let vec3 = SoaVec3::splat_col([2.0, 3.0, 4.0]);
+        let bytes = rkyv::to_bytes::<_, 256>(&vec3).unwrap();
+        let archived = rkyv::check_archived_root::<SoaVec3>(&bytes[..]).unwrap();
+        assert_eq!(archived, &vec3);
+        let vec3_de: SoaVec3 = archived.deserialize(&mut rkyv::Infallible).unwrap();
+        assert_eq!(vec3_de, vec3);
+
+        let quat = SoaQuat::splat_col([2.0, 3.0, 4.0, 5.0]);
+        let bytes = rkyv::to_bytes::<_, 256>(&quat).unwrap();
+        let archived = rkyv::check_archived_root::<SoaQuat>(&bytes[..]).unwrap();
+        assert_eq!(archived, &quat);
+        let quat_de: SoaQuat = archived.deserialize(&mut rkyv::Infallible).unwrap();
+        assert_eq!(quat_de, quat);
+
+        let transform = SoaTransform::new(
+            SoaVec3::splat_col([9.0, 8.0, 7.0]),
+            SoaQuat::splat_col([6.0, 5.0, 4.0, 3.0]),
+            SoaVec3::splat_col([-1.0, -2.0, -3.0]),
+        );
+        let bytes = rkyv::to_bytes::<_, 256>(&transform).unwrap();
+        let archived = rkyv::check_archived_root::<SoaTransform>(&bytes[..]).unwrap();
+        assert_eq!(archived, &transform);
+        let transform_de: SoaTransform = archived.deserialize(&mut rkyv::Infallible).unwrap();
+        assert_eq!(transform_de, transform);
     }
 }
