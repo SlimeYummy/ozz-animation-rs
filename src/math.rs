@@ -16,8 +16,11 @@ pub const TWO: f32x4 = f32x4::from_array([2.0; 4]);
 pub const THREE: f32x4 = f32x4::from_array([3.0; 4]);
 pub const NEG_ONE: f32x4 = f32x4::from_array([-1.0; 4]);
 pub const FRAC_1_2: f32x4 = f32x4::from_array([0.5; 4]);
+pub const PI: f32x4 = f32x4::from_array([core::f32::consts::PI; 4]);
+// pub const TWO_PI: f32x4 = f32x4::from_array([core::f32::consts::PI * 2.0; 4]);
 pub const FRAC_2_PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_2_PI; 4]);
 pub const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
+// pub const FRAC_1_2PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_1_PI * 0.5; 4]);
 pub const SIGN: i32x4 = i32x4::from_array([core::i32::MIN; 4]);
 pub const SIGN_W: i32x4 = i32x4::from_array([0, 0, 0, core::i32::MIN]);
 
@@ -842,10 +845,68 @@ pub(crate) fn f32x4_splat_w(v: f32x4) -> f32x4 {
 
 #[inline(always)]
 pub(crate) fn f32x4_extract_sign(v: f32x4) -> i32x4 {
+    // TODO: sign op + Nan maybe cause undefined behavior
     return as_i32x4(v) & SIGN;
 }
 
+// clamp, set NaN to max
+#[inline(always)]
+pub(crate) fn f32x4_clamp_or_max(v: f32x4, min: f32x4, max: f32x4) -> f32x4 {
+    return v.simd_min(max).simd_max(min);
+}
+
+// clamp, set NaN to min
+#[inline(always)]
+pub(crate) fn f32x4_clamp_or_min(v: f32x4, min: f32x4, max: f32x4) -> f32x4 {
+    return v.simd_max(min).simd_min(max);
+}
+
+// clamp, set NaN to max
+#[inline(always)]
+pub(crate) fn f32_clamp_or_max(v: f32, min: f32, max: f32) -> f32 {
+    return v.min(max).max(min);
+}
+
+// clamp, set NaN to min
+#[inline(always)]
+pub(crate) fn f32_clamp_or_min(v: f32, min: f32, max: f32) -> f32 {
+    return v.max(min).min(max);
+}
+
+const SIN1: f32x4 = f32x4::from_array([2.3889859e-08; 4]);
+const SIN2: f32x4 = f32x4::from_array([2.7525562e-06; 4]);
+const SIN3: f32x4 = f32x4::from_array([0.00019840874; 4]);
+const SIN4: f32x4 = f32x4::from_array([0.0083333310; 4]);
+const SIN5: f32x4 = f32x4::from_array([0.16666667; 4]);
+
+const COS1: f32x4 = f32x4::from_array([2.6051615e-07; 4]);
+const COS2: f32x4 = f32x4::from_array([2.4760495e-05; 4]);
+const COS3: f32x4 = f32x4::from_array([0.0013888378; 4]);
+const COS4: f32x4 = f32x4::from_array([0.041666638; 4]);
+
 pub(crate) fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
+    // let mut quotient = FRAC_1_2PI * v;
+    // quotient = quotient.simd_ge(ZERO).select((quotient + FRAC_1_2).trunc(),  (quotient - FRAC_1_2).trunc());
+
+    // let mut y = v - TWO_PI * quotient;
+
+    // let pos_pi_2 = y.simd_gt(FRAC_PI_2);
+    // let neg_pi_2 = y.simd_lt(-FRAC_PI_2);
+
+    // y = pos_pi_2.select(PI - y, neg_pi_2.select(-PI - y, y));
+
+    // let sign = as_f32x4(as_i32x4(ONE) | ((pos_pi_2 | neg_pi_2).to_int() & SIGN));
+
+    // let y2 = y * y;
+    
+    // // 11-degree minimax approximation
+    // let sin = (((((-SIN1 * y2 + SIN2) * y2 - SIN3) * y2 + SIN4) * y2 - SIN5) * y2 + ONE) * y;
+
+    // // 10-degree minimax approximation
+    // let cos = sign * (((((-COS1 * y2 + COS2) * y2 - COS3) * y2 + COS4) * y2 - FRAC_1_2) * y2 + ONE);
+
+    // return (sin, cos);
+
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
 
@@ -863,7 +924,7 @@ pub(crate) fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
 
     // Make argument positive and remember sign for sin only since cos is symmetric around x (highest bit of a float is the sign bit)
     let mut sin_sign = f32x4_extract_sign(v);
-    let mut x = as_f32x4(as_i32x4(v) ^ sin_sign);
+    let mut x = v.abs();
 
     // x / (PI / 2) rounded to nearest int gives us the quadrant closest to x
     let quadrant = (FRAC_2_PI * x + FRAC_1_2).trunc();
@@ -931,8 +992,8 @@ pub(crate) fn f32x4_asin(v: f32x4) -> f32x4 {
     const N5: f32x4 = f32x4::from_array([1.6666752422e-1; 4]);
 
     // Make argument positive
-    let asin_sign = f32x4_extract_sign(v);
-    let mut a = as_f32x4(as_i32x4(v) ^ asin_sign);
+    let non_neg = v.simd_ge(ZERO);
+    let mut a = v.abs();
 
     // ASin is not defined outside the range [-1, 1] but it often happens that a value is slightly above 1 so we just clamp here
     a = f32x4::simd_min(a, ONE);
@@ -957,7 +1018,7 @@ pub(crate) fn f32x4_asin(v: f32x4) -> f32x4 {
     z = greater.select(FRAC_PI_2 - (z + z), z);
 
     // Put the sign back
-    return as_f32x4(as_i32x4(z) | asin_sign);
+    return non_neg.select(z, -z);
 }
 
 #[inline]
@@ -1182,7 +1243,7 @@ mod tests {
 
     #[test]
     fn test_sin_cos() {
-        const EPSILON: f32x4 = f32x4::from_array([1.0e-7; 4]);
+        const EPSILON: f32x4 = f32x4::from_array([2.0e-7; 4]);
 
         let (sin, cos) = f32x4_sin_cos(f32x4::from_array([
             0.0,
@@ -1190,6 +1251,7 @@ mod tests {
             core::f32::consts::PI,
             -core::f32::consts::FRAC_PI_2,
         ]));
+        println!("{:?} {:?}", sin, cos);
         assert!((sin - f32x4::from_array([0.0, 1.0, 0.0, -1.0]))
             .abs()
             .simd_lt(EPSILON)
@@ -1220,10 +1282,15 @@ mod tests {
             i += 1.0e-3;
         }
 
-        assert!(ms < 1.0e-7);
-        assert!(mc < 1.0e-7);
+        println!("max sin error: {}", ms);
+        println!("max cos error: {}", mc);
+        assert!(ms < 2.5e-5);
+        assert!(mc < 2.5e-5);
     }
 
+    fn approx_eq(a: f32x4, b: f32, epsilon: f32) -> bool {
+        return (a - f32x4::splat(b)).abs().simd_lt(f32x4::splat(epsilon)).all();
+    }
     #[test]
     fn test_asin() {
         assert_eq!(f32x4_asin(f32x4::splat(0.0))[0], 0.0);

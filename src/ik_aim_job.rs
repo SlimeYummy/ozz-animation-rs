@@ -166,7 +166,7 @@ impl IKAimJob {
                 joint_normal_js * f32x4_splat_y(rsqrts),
                 ref_joint_normal_js * f32x4_splat_z(rsqrts),
             );
-            let axis_flip = as_i32x4(f32x4_splat_x(vec3_dot_s(ref_joint_normal_js, corrected_up_js))) & SIGN;
+            let axis_flip = f32x4_extract_sign(f32x4_splat_x(vec3_dot_s(ref_joint_normal_js, corrected_up_js)));
             let rotate_plane_axis_flipped_js = as_f32x4(as_i32x4(rotate_plane_axis_js) ^ axis_flip);
             rotate_plane_js = quat_from_cos_angle(
                 rotate_plane_axis_flipped_js,

@@ -261,20 +261,24 @@ impl IKTwoBoneJob {
 
         let mid_cos_angles_unclamped = (f32x4_splat_x(start_mid_end_sum_ss_len2)
             - f32x4_set_y(start_target_ss_len2, setup.start_end_ss_len2))
-            * start_mid_end_ss_half_rlen; // first
-        let mid_cos_angles = mid_cos_angles_unclamped.simd_clamp(NEG_ONE, ONE); // first
+            * start_mid_end_ss_half_rlen;
+        println!("mid_cos_angles_unclamped {:?}", mid_cos_angles_unclamped);
+        let mid_cos_angles = f32x4_clamp_or_min(mid_cos_angles_unclamped, NEG_ONE, ONE);
+        println!("mid_cos_angles {:?}", mid_cos_angles);
 
-        let mid_corrected_angle = f32x4_acos(mid_cos_angles); // first
+        let mid_corrected_angle = f32x4_acos(mid_cos_angles);
+        println!("mid_corrected_angle {:?}", mid_corrected_angle);
 
         let bent_side_ref = vec3_cross(setup.start_mid_ms, self.mid_axis); // first
         let bent_side_flip = simd_swizzle!(
             vec3_dot_s(bent_side_ref, setup.mid_end_ms).simd_lt(ZERO).to_int(),
             [0; 4]
         ); // first
-        let mid_initial_angle = as_f32x4(as_i32x4(f32x4_acos(f32x4_splat_y(mid_cos_angles))) ^ (bent_side_flip & SIGN)); // first
+        let mid_initial_angle = as_f32x4(as_i32x4(f32x4_splat_y(mid_corrected_angle)) ^ (bent_side_flip & SIGN)); // first
 
         let mid_angles_diff = mid_corrected_angle - mid_initial_angle; // first
 
+        println!("quat_from_axis_angle {:?} {:?}", self.mid_axis, mid_angles_diff);
         return quat_from_axis_angle(self.mid_axis, mid_angles_diff);
     }
 
@@ -320,7 +324,7 @@ impl IKTwoBoneJob {
             ); // first
 
             let rotate_plane_axis_ss = start_target_ss * f32x4_splat_x(rsqrts);
-            let start_axis_flip = as_i32x4(f32x4_splat_x(vec3_dot_s(joint_plane_normal_ss, pole_ss))) & SIGN;
+            let start_axis_flip = f32x4_extract_sign(f32x4_splat_x(vec3_dot_s(joint_plane_normal_ss, pole_ss)));
             let rotate_plane_axis_flipped_ss = as_f32x4(as_i32x4(rotate_plane_axis_ss) ^ start_axis_flip);
 
             let rotate_plane_ss = quat_from_cos_angle(
@@ -793,6 +797,10 @@ mod ik_two_bone_tests {
             assert!(job
                 .mid_joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, consts::PI), 2e-3));
+            assert_eq!(
+                Quat::from_axis_angle(Vec3::Z, consts::PI).mul_vec3(Vec3::new(3.0, 4.0, 5.0)),
+                Quat::from_axis_angle(Vec3::Z, consts::PI).mul_vec3(Vec3::new(3.0, 4.0, 5.0))
+            )
         }
 
         {

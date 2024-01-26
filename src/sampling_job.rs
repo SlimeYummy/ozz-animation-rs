@@ -7,7 +7,7 @@ use std::{mem, slice};
 
 use crate::animation::{Animation, Float3Key, QuaternionKey};
 use crate::base::{OzzBuf, OzzError, OzzRef};
-use crate::math::{SoaQuat, SoaTransform, SoaVec3};
+use crate::math::{f32_clamp_or_max, SoaQuat, SoaTransform, SoaVec3};
 
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -736,7 +736,7 @@ where
     }
 
     pub fn set_ratio(&mut self, ratio: f32) {
-        self.ratio = f32::clamp(ratio, 0.0f32, 1.0f32);
+        self.ratio = f32_clamp_or_max(ratio, 0.0f32, 1.0f32);
     }
 
     pub fn validate(&self) -> bool {
@@ -1207,7 +1207,7 @@ mod sampling_tests {
                 );
             }
 
-            assert_eq!(job.context().unwrap().ratio(), frame.ratio.clamp(0.0, 1.0));
+            assert_eq!(job.context().unwrap().ratio(), f32_clamp_or_max(frame.ratio, 0.0, 1.0));
         }
     }
 
