@@ -3,7 +3,7 @@
 use std::env::consts::{ARCH, OS};
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::sync::OnceLock;
 use std::{env, mem};
 

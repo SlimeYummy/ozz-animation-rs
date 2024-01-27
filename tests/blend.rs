@@ -77,14 +77,6 @@ fn test_deterministic_blend() {
         }
         blending_job.run().unwrap();
 
-        println!(
-            "r={:+.2}, w1={:.2}, w2={:.2}, w3={:.2}",
-            r,
-            blending_job.layers()[0].weight,
-            blending_job.layers()[1].weight,
-            blending_job.layers()[2].weight
-        );
-
         l2m_job.run().unwrap();
 
         let data = TestData {

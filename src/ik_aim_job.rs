@@ -40,43 +40,43 @@ impl Default for IKAimJob {
 
 impl IKAimJob {
     pub fn target(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.target);
+        return fx4_to_vec3a(self.target);
     }
 
     pub fn set_target(&mut self, target: Vec3A) {
-        self.target = f32x4_from_vec3a(target);
+        self.target = fx4_from_vec3a(target);
     }
 
     pub fn forward(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.forward);
+        return fx4_to_vec3a(self.forward);
     }
 
     pub fn set_forward(&mut self, forward: Vec3A) {
-        self.forward = f32x4_from_vec3a(forward);
+        self.forward = fx4_from_vec3a(forward);
     }
 
     pub fn offset(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.offset);
+        return fx4_to_vec3a(self.offset);
     }
 
     pub fn set_offset(&mut self, offset: Vec3A) {
-        self.offset = f32x4_from_vec3a(offset);
+        self.offset = fx4_from_vec3a(offset);
     }
 
     pub fn up(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.up);
+        return fx4_to_vec3a(self.up);
     }
 
     pub fn set_up(&mut self, up: Vec3A) {
-        self.up = f32x4_from_vec3a(up);
+        self.up = fx4_from_vec3a(up);
     }
 
     pub fn pole_vector(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.pole_vector);
+        return fx4_to_vec3a(self.pole_vector);
     }
 
     pub fn set_pole_vector(&mut self, pole_vector: Vec3A) {
-        self.pole_vector = f32x4_from_vec3a(pole_vector);
+        self.pole_vector = fx4_from_vec3a(pole_vector);
     }
 
     pub fn twist_angle(&self) -> f32 {
@@ -104,7 +104,7 @@ impl IKAimJob {
     }
 
     pub fn joint_correction(&self) -> Quat {
-        return f32x4_to_quat(self.joint_correction);
+        return fx4_to_quat(self.joint_correction);
     }
 
     pub fn clear_joint_correction(&mut self) {
@@ -151,8 +151,8 @@ impl IKAimJob {
         let joint_normal_js = vec3_cross(corrected_up_js, joint_to_target_js);
         let ref_joint_normal_js_len2 = vec3_length2_s(ref_joint_normal_js);
         let joint_normal_js_len2 = vec3_length2_s(joint_normal_js);
-        let denoms = f32x4_set_z(
-            f32x4_set_y(joint_to_target_js_len2, joint_normal_js_len2),
+        let denoms = fx4_set_z(
+            fx4_set_y(joint_to_target_js_len2, joint_normal_js_len2),
             ref_joint_normal_js_len2,
         );
 
@@ -160,20 +160,20 @@ impl IKAimJob {
         let rotate_plane_js;
         if denoms.simd_ne(ZERO).to_bitmask() & 0x7 == 0x7 {
             let rsqrts = denoms.recip().sqrt();
-            rotate_plane_axis_js = joint_to_target_js * f32x4_splat_x(rsqrts);
+            rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(rsqrts);
 
             let rotate_plane_cos_angle = vec3_dot_s(
-                joint_normal_js * f32x4_splat_y(rsqrts),
-                ref_joint_normal_js * f32x4_splat_z(rsqrts),
+                joint_normal_js * fx4_splat_y(rsqrts),
+                ref_joint_normal_js * fx4_splat_z(rsqrts),
             );
-            let axis_flip = f32x4_extract_sign(f32x4_splat_x(vec3_dot_s(ref_joint_normal_js, corrected_up_js)));
-            let rotate_plane_axis_flipped_js = as_f32x4(as_i32x4(rotate_plane_axis_js) ^ axis_flip);
+            let axis_flip = fx4_sign(fx4_splat_x(vec3_dot_s(ref_joint_normal_js, corrected_up_js)));
+            let rotate_plane_axis_flipped_js = fx4_xor(rotate_plane_axis_js, axis_flip);
             rotate_plane_js = quat_from_cos_angle(
                 rotate_plane_axis_flipped_js,
-                rotate_plane_cos_angle.simd_clamp(-ONE, ONE),
+                rotate_plane_cos_angle.simd_clamp(NEG_ONE, ONE),
             );
         } else {
-            rotate_plane_axis_js = joint_to_target_js * f32x4_splat_x(denoms.sqrt());
+            rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(denoms.sqrt());
             rotate_plane_js = QUAT_UNIT;
         }
 
@@ -185,10 +185,10 @@ impl IKAimJob {
             twisted = quat_mul(rotate_plane_js, joint_to_target_rot_js);
         }
 
-        let twisted_fu = as_f32x4(as_i32x4(twisted) ^ (SIGN & f32x4_splat_w(twisted).simd_lt(ZERO).to_int()));
+        let twisted_fu = quat_positive_w(twisted);
         if self.weight < 1.0 {
             let simd_weight = f32x4::splat(self.weight).simd_max(ZERO);
-            self.joint_correction = quat_normalize(f32x4_lerp(QUAT_UNIT, twisted_fu, simd_weight));
+            self.joint_correction = quat_normalize(fx4_lerp(QUAT_UNIT, twisted_fu, simd_weight));
         } else {
             self.joint_correction = twisted_fu;
         }
@@ -207,7 +207,7 @@ impl IKAimJob {
             return None;
         }
         let ai_l = (r2 - ac_l2).sqrt();
-        let offsetted_forward = offset + forward * f32x4_splat_x(ai_l - ao_l);
+        let offsetted_forward = offset + forward * fx4_splat_x(ai_l - ao_l);
         return Some(offsetted_forward);
     }
 }
@@ -553,11 +553,6 @@ mod ik_aim_job_tests {
             job.set_pole_vector(Vec3A::Y);
             job.set_twist_angle(-consts::FRAC_PI_2);
             job.run().unwrap();
-            println!(
-                "{:?} {:?}",
-                job.joint_correction(),
-                Quat::from_axis_angle(Vec3::Z, -consts::FRAC_PI_4)
-            );
             assert!(job
                 .joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::X, -consts::FRAC_PI_2), 2e-3));

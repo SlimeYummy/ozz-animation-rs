@@ -6,7 +6,7 @@ use std::simd::*;
 
 use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
 use crate::base::OzzError;
-use crate::math::{as_f32x4, as_i32x4, f16_to_f32, simd_f16_to_f32, SoaQuat, SoaVec3};
+use crate::math::{f16_to_f32, fx4, ix4, simd_f16_to_f32, SoaQuat, SoaVec3};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -158,12 +158,12 @@ impl QuaternionKey {
         let ww0 = f32x4::simd_max(SMALL, ONE - dot);
         let w0 = ww0 * ww0.recip().sqrt();
         let sign = i32x4::from_array([k0.sign() as i32, k1.sign() as i32, k2.sign() as i32, k3.sign() as i32]) << 31;
-        let restored = as_i32x4(w0) | sign;
+        let restored = ix4(w0) | sign;
 
-        cpnt[k0.largest() as usize] = as_f32x4(as_i32x4(cpnt[k0.largest() as usize]) | (restored & MASK_F000));
-        cpnt[k1.largest() as usize] = as_f32x4(as_i32x4(cpnt[k1.largest() as usize]) | (restored & MASK_0F00));
-        cpnt[k2.largest() as usize] = as_f32x4(as_i32x4(cpnt[k2.largest() as usize]) | (restored & MASK_00F0));
-        cpnt[k3.largest() as usize] = as_f32x4(as_i32x4(cpnt[k3.largest() as usize]) | (restored & MASK_000F));
+        cpnt[k0.largest() as usize] = fx4(ix4(cpnt[k0.largest() as usize]) | (restored & MASK_F000));
+        cpnt[k1.largest() as usize] = fx4(ix4(cpnt[k1.largest() as usize]) | (restored & MASK_0F00));
+        cpnt[k2.largest() as usize] = fx4(ix4(cpnt[k2.largest() as usize]) | (restored & MASK_00F0));
+        cpnt[k3.largest() as usize] = fx4(ix4(cpnt[k3.largest() as usize]) | (restored & MASK_000F));
 
         soa.x = unsafe { mem::transmute(cpnt[0]) };
         soa.y = unsafe { mem::transmute(cpnt[1]) };
