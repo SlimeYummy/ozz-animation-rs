@@ -17,18 +17,17 @@ pub const THREE: f32x4 = f32x4::from_array([3.0; 4]);
 pub const NEG_ONE: f32x4 = f32x4::from_array([-1.0; 4]);
 pub const FRAC_1_2: f32x4 = f32x4::from_array([0.5; 4]);
 pub const PI: f32x4 = f32x4::from_array([core::f32::consts::PI; 4]);
-// pub const TWO_PI: f32x4 = f32x4::from_array([core::f32::consts::PI * 2.0; 4]);
 pub const FRAC_2_PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_2_PI; 4]);
 pub const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
-// pub const FRAC_1_2PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_1_PI * 0.5; 4]);
-pub const SIGN: i32x4 = i32x4::from_array([core::i32::MIN; 4]);
-pub const SIGN_W: i32x4 = i32x4::from_array([0, 0, 0, core::i32::MIN]);
 
 pub const X_AXIS: f32x4 = f32x4::from_array([1.0, 0.0, 0.0, 0.0]);
 pub const Y_AXIS: f32x4 = f32x4::from_array([0.0, 1.0, 0.0, 0.0]);
 pub const Z_AXIS: f32x4 = f32x4::from_array([0.0, 0.0, 1.0, 0.0]);
 
 pub const QUAT_UNIT: f32x4 = f32x4::from_array([0.0, 0.0, 0.0, 1.0]);
+
+const SIGN: i32x4 = i32x4::from_array([core::i32::MIN; 4]);
+const SIGN_W: i32x4 = i32x4::from_array([0, 0, 0, core::i32::MIN]);
 
 //
 // SoaVec3
@@ -129,6 +128,33 @@ impl SoaVec3 {
             x: (to.x - from.x) * alpha + from.x,
             y: (to.y - from.y) * alpha + from.y,
             z: (to.z - from.z) * alpha + from.z,
+        };
+    }
+
+    #[inline]
+    pub fn and_num(&self, i: i32x4) -> SoaVec3 {
+        return SoaVec3 {
+            x: fx4_and(self.x, i),
+            y: fx4_and(self.y, i),
+            z: fx4_and(self.z, i),
+        };
+    }
+
+    #[inline]
+    pub fn or_num(&self, i: i32x4) -> SoaVec3 {
+        return SoaVec3 {
+            x: fx4_or(self.x, i),
+            y: fx4_or(self.y, i),
+            z: fx4_or(self.z, i),
+        };
+    }
+
+    #[inline]
+    pub fn xor_num(&self, i: i32x4) -> SoaVec3 {
+        return SoaVec3 {
+            x: fx4_xor(self.x, i),
+            y: fx4_xor(self.y, i),
+            z: fx4_xor(self.z, i),
         };
     }
 }
@@ -301,12 +327,43 @@ impl SoaQuat {
     }
 
     #[inline]
+    pub fn and_num(&self, i: i32x4) -> SoaQuat {
+        return SoaQuat {
+            x: fx4_and(self.x, i),
+            y: fx4_and(self.y, i),
+            z: fx4_and(self.z, i),
+            w: fx4_and(self.w, i),
+        };
+    }
+
+    #[inline]
+    pub fn or_num(&self, i: i32x4) -> SoaQuat {
+        return SoaQuat {
+            x: fx4_or(self.x, i),
+            y: fx4_or(self.y, i),
+            z: fx4_or(self.z, i),
+            w: fx4_or(self.w, i),
+        };
+    }
+
+    #[inline]
     pub fn xor_num(&self, i: i32x4) -> SoaQuat {
         return SoaQuat {
-            x: as_f32x4(as_i32x4(self.x) ^ i),
-            y: as_f32x4(as_i32x4(self.y) ^ i),
-            z: as_f32x4(as_i32x4(self.z) ^ i),
-            w: as_f32x4(as_i32x4(self.w) ^ i),
+            x: fx4_xor(self.x, i),
+            y: fx4_xor(self.y, i),
+            z: fx4_xor(self.z, i),
+            w: fx4_xor(self.w, i),
+        };
+    }
+
+    #[inline]
+    pub fn positive_w(&self) -> SoaQuat {
+        let sign = fx4_sign(self.w);
+        return SoaQuat {
+            x: fx4_xor(self.x, sign),
+            y: fx4_xor(self.y, sign),
+            z: fx4_xor(self.z, sign),
+            w: fx4_xor(self.w, sign),
         };
     }
 }
@@ -618,9 +675,9 @@ impl AosMat4 {
 
         let det_recip = det.recip(); // first
                                      // det_recip = (det_recip + det_recip) - det_recip * det_recip * det; // first
-        tmp1 = as_f32x4((as_i32x4(det_recip) & invertible) | (!invertible & as_i32x4(ZERO))); // first
+        tmp1 = fx4((ix4(det_recip) & invertible) | (!invertible & ix4(ZERO))); // first
         det = (tmp1 + tmp1) - det * (tmp1 * tmp1); // first
-        det = simd_swizzle!(det, [0; 4]);
+        det = fx4_splat_x(det);
         return AosMat4 {
             cols: [det * minor0, det * minor1, det * minor2, det * minor3],
         };
@@ -758,155 +815,159 @@ pub(crate) fn f16_to_f32(n: u16) -> f32 {
 
 pub(crate) fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
     const MASK_NO_SIGN: i32x4 = i32x4::from_array([0x7FFF; 4]);
-    const MAGIC: f32x4 = as_f32x4(i32x4::from_array([(254 - 15) << 23; 4]));
+    const MAGIC: f32x4 = fx4(i32x4::from_array([(254 - 15) << 23; 4]));
     const WAS_INFNAN: i32x4 = i32x4::from_array([0x7BFF; 4]);
     const EXP_INFNAN: i32x4 = i32x4::from_array([255 << 23; 4]);
 
     let int4 = i32x4::from([half4[0] as i32, half4[1] as i32, half4[2] as i32, half4[3] as i32]);
     let expmant = MASK_NO_SIGN & int4;
     let shifted = expmant << 13;
-    let scaled = as_f32x4(shifted) * MAGIC;
+    let scaled = fx4(shifted) * MAGIC;
     let was_infnan = i32x4::simd_ge(expmant, WAS_INFNAN).to_int();
     let sign = (int4 ^ expmant) << 16;
     let infnanexp = was_infnan & EXP_INFNAN;
     let sign_inf = sign | infnanexp;
-    let float4 = as_i32x4(scaled) | sign_inf;
-    return as_f32x4(float4);
+    let float4 = ix4(scaled) | sign_inf;
+    return fx4(float4);
 }
 
 #[inline(always)]
-pub(crate) const fn as_f32x4(v: i32x4) -> f32x4 {
+pub(crate) const fn fx4(v: i32x4) -> f32x4 {
     return unsafe { mem::transmute(v) };
 }
 
 #[inline(always)]
-pub(crate) const fn as_i32x4(v: f32x4) -> i32x4 {
+pub(crate) const fn ix4(v: f32x4) -> i32x4 {
     return unsafe { mem::transmute(v) };
 }
 
 const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Vec3A>());
 
 #[inline(always)]
-pub(crate) fn f32x4_from_vec3a(v: Vec3A) -> f32x4 {
+pub(crate) fn fx4_from_vec3a(v: Vec3A) -> f32x4 {
     return unsafe { mem::transmute(v) };
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_to_vec3a(v: f32x4) -> Vec3A {
+pub(crate) fn fx4_to_vec3a(v: f32x4) -> Vec3A {
     return unsafe { mem::transmute(v) };
 }
 
 const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Quat>());
 
 #[inline(always)]
-pub(crate) fn f32x4_from_quat(q: Quat) -> f32x4 {
+pub(crate) fn fx4_from_quat(q: Quat) -> f32x4 {
     return unsafe { mem::transmute(q) };
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_to_quat(q: f32x4) -> Quat {
+pub(crate) fn fx4_to_quat(q: f32x4) -> Quat {
     return unsafe { mem::transmute(q) };
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_set_y(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn fx4_set_y(a: f32x4, b: f32x4) -> f32x4 {
     return simd_swizzle!(a, b, [0, 4, 2, 3]);
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_set_z(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn fx4_set_z(a: f32x4, b: f32x4) -> f32x4 {
     return simd_swizzle!(a, b, [0, 1, 4, 3]);
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_set_w(a: f32x4, b: f32x4) -> f32x4 {
+pub(crate) fn fx4_set_w(a: f32x4, b: f32x4) -> f32x4 {
     return simd_swizzle!(a, b, [0, 1, 2, 4]);
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_splat_x(v: f32x4) -> f32x4 {
+pub(crate) fn fx4_splat_x(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [0, 0, 0, 0]);
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_splat_y(v: f32x4) -> f32x4 {
+pub(crate) fn fx4_splat_y(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [1, 1, 1, 1]);
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_splat_z(v: f32x4) -> f32x4 {
+pub(crate) fn fx4_splat_z(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [2, 2, 2, 2]);
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_splat_w(v: f32x4) -> f32x4 {
+pub(crate) fn fx4_splat_w(v: f32x4) -> f32x4 {
     return simd_swizzle!(v, [3, 3, 3, 3]);
 }
 
 #[inline(always)]
-pub(crate) fn f32x4_extract_sign(v: f32x4) -> i32x4 {
-    // TODO: sign op + Nan maybe cause undefined behavior
-    return as_i32x4(v) & SIGN;
+pub(crate) fn ix4_splat_x(v: i32x4) -> i32x4 {
+    return simd_swizzle!(v, [0, 0, 0, 0]);
 }
 
-// clamp, set NaN to max
 #[inline(always)]
-pub(crate) fn f32x4_clamp_or_max(v: f32x4, min: f32x4, max: f32x4) -> f32x4 {
+pub(crate) fn ix4_splat_y(v: i32x4) -> i32x4 {
+    return simd_swizzle!(v, [1, 1, 1, 1]);
+}
+
+#[inline(always)]
+pub(crate) fn ix4_splat_z(v: i32x4) -> i32x4 {
+    return simd_swizzle!(v, [2, 2, 2, 2]);
+}
+
+#[inline(always)]
+pub(crate) fn ix4_splat_w(v: i32x4) -> i32x4 {
+    return simd_swizzle!(v, [3, 3, 3, 3]);
+}
+
+#[inline(always)]
+pub(crate) fn fx4_sign(v: f32x4) -> i32x4 {
+    // In some case, x86 and aarch64 may produce different sign NaN (+NaN/NaN) in same command.
+    // So the result of `NaN | SIGN` may be different.
+    // We want to make sure the sign of NaN is always 0, to keep cross-platform deterministic.
+    return v.simd_lt(ZERO).to_int() & SIGN;
+}
+
+#[inline(always)]
+pub(crate) fn fx4_and(v: f32x4, s: i32x4) -> f32x4 {
+    return fx4(ix4(v) & s);
+}
+
+#[inline(always)]
+pub(crate) fn fx4_or(v: f32x4, s: i32x4) -> f32x4 {
+    return fx4(ix4(v) | s);
+}
+
+#[inline(always)]
+pub(crate) fn fx4_xor(v: f32x4, s: i32x4) -> f32x4 {
+    return fx4(ix4(v) ^ s);
+}
+
+#[inline(always)]
+pub(crate) fn fx4_clamp_or_max(v: f32x4, min: f32x4, max: f32x4) -> f32x4 {
+    // f32x4::clamp may produce NaN if self is NaN.
+    // This implementation always returns max if self is NaN.
     return v.simd_min(max).simd_max(min);
 }
 
-// clamp, set NaN to min
 #[inline(always)]
-pub(crate) fn f32x4_clamp_or_min(v: f32x4, min: f32x4, max: f32x4) -> f32x4 {
+pub(crate) fn fx4_clamp_or_min(v: f32x4, min: f32x4, max: f32x4) -> f32x4 {
+    // f32x4::clamp may produce NaN if self is NaN.
+    // This implementation always returns min if self is NaN.
     return v.simd_max(min).simd_min(max);
 }
 
-// clamp, set NaN to max
 #[inline(always)]
 pub(crate) fn f32_clamp_or_max(v: f32, min: f32, max: f32) -> f32 {
     return v.min(max).max(min);
 }
 
-// clamp, set NaN to min
 #[inline(always)]
 pub(crate) fn f32_clamp_or_min(v: f32, min: f32, max: f32) -> f32 {
     return v.max(min).min(max);
 }
 
-const SIN1: f32x4 = f32x4::from_array([2.3889859e-08; 4]);
-const SIN2: f32x4 = f32x4::from_array([2.7525562e-06; 4]);
-const SIN3: f32x4 = f32x4::from_array([0.00019840874; 4]);
-const SIN4: f32x4 = f32x4::from_array([0.0083333310; 4]);
-const SIN5: f32x4 = f32x4::from_array([0.16666667; 4]);
-
-const COS1: f32x4 = f32x4::from_array([2.6051615e-07; 4]);
-const COS2: f32x4 = f32x4::from_array([2.4760495e-05; 4]);
-const COS3: f32x4 = f32x4::from_array([0.0013888378; 4]);
-const COS4: f32x4 = f32x4::from_array([0.041666638; 4]);
-
-pub(crate) fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
-    // let mut quotient = FRAC_1_2PI * v;
-    // quotient = quotient.simd_ge(ZERO).select((quotient + FRAC_1_2).trunc(),  (quotient - FRAC_1_2).trunc());
-
-    // let mut y = v - TWO_PI * quotient;
-
-    // let pos_pi_2 = y.simd_gt(FRAC_PI_2);
-    // let neg_pi_2 = y.simd_lt(-FRAC_PI_2);
-
-    // y = pos_pi_2.select(PI - y, neg_pi_2.select(-PI - y, y));
-
-    // let sign = as_f32x4(as_i32x4(ONE) | ((pos_pi_2 | neg_pi_2).to_int() & SIGN));
-
-    // let y2 = y * y;
-    
-    // // 11-degree minimax approximation
-    // let sin = (((((-SIN1 * y2 + SIN2) * y2 - SIN3) * y2 + SIN4) * y2 - SIN5) * y2 + ONE) * y;
-
-    // // 10-degree minimax approximation
-    // let cos = sign * (((((-COS1 * y2 + COS2) * y2 - COS3) * y2 + COS4) * y2 - FRAC_1_2) * y2 + ONE);
-
-    // return (sin, cos);
-
+pub(crate) fn fx4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
 
@@ -923,7 +984,7 @@ pub(crate) fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     const S3: f32x4 = f32x4::from_array([1.6666654611e-1; 4]);
 
     // Make argument positive and remember sign for sin only since cos is symmetric around x (highest bit of a float is the sign bit)
-    let mut sin_sign = f32x4_extract_sign(v);
+    let mut sin_sign = fx4_sign(v);
     let mut x = v.abs();
 
     // x / (PI / 2) rounded to nearest int gives us the quadrant closest to x
@@ -976,12 +1037,30 @@ pub(crate) fn f32x4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     let cos_sign = bit1 ^ bit2;
 
     // Correct the signs
-    let out_sin = as_f32x4(as_i32x4(s) ^ sin_sign);
-    let out_cos = as_f32x4(as_i32x4(c) ^ cos_sign);
+    let out_sin = sin_sign.simd_eq(SIGN).select(-s, s);
+    let out_cos = cos_sign.simd_eq(SIGN).select(-c, c);
     return (out_sin, out_cos);
 }
 
-pub(crate) fn f32x4_asin(v: f32x4) -> f32x4 {
+#[inline]
+pub fn f32_sin_cos(x: f32) -> (f32, f32) {
+    let (sin, cos) = fx4_sin_cos(f32x4::splat(x));
+    return (sin[0], cos[0]);
+}
+
+#[inline]
+pub fn f32_sin(x: f32) -> f32 {
+    let (sin, _) = fx4_sin_cos(f32x4::splat(x));
+    return sin[0];
+}
+
+#[inline]
+pub fn f32_cos(x: f32) -> f32 {
+    let (_, cos) = fx4_sin_cos(f32x4::splat(x));
+    return cos[0];
+}
+
+pub(crate) fn fx4_asin(v: f32x4) -> f32x4 {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
 
@@ -1022,42 +1101,24 @@ pub(crate) fn f32x4_asin(v: f32x4) -> f32x4 {
 }
 
 #[inline]
-pub(crate) fn f32x4_acos(v: f32x4) -> f32x4 {
+pub(crate) fn fx4_acos(v: f32x4) -> f32x4 {
     const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
-    return FRAC_PI_2 - f32x4_asin(v);
-}
-
-#[inline]
-pub(crate) fn f32x4_lerp(from: f32x4, to: f32x4, alpha: f32x4) -> f32x4 {
-    return alpha * (to - from) + from;
-}
-
-#[inline]
-pub fn f32_sin_cos(x: f32) -> (f32, f32) {
-    let (sin, cos) = f32x4_sin_cos(f32x4::splat(x));
-    return (sin[0], cos[0]);
-}
-
-#[inline]
-pub fn f32_sin(x: f32) -> f32 {
-    let (sin, _) = f32x4_sin_cos(f32x4::splat(x));
-    return sin[0];
-}
-
-#[inline]
-pub fn f32_cos(x: f32) -> f32 {
-    let (_, cos) = f32x4_sin_cos(f32x4::splat(x));
-    return cos[0];
+    return FRAC_PI_2 - fx4_asin(v);
 }
 
 #[inline]
 pub fn f32_asin(x: f32) -> f32 {
-    return f32x4_asin(f32x4::splat(x))[0];
+    return fx4_asin(f32x4::splat(x))[0];
 }
 
 #[inline]
 pub fn f32_acos(x: f32) -> f32 {
-    return f32x4_acos(f32x4::splat(x))[0];
+    return fx4_acos(f32x4::splat(x))[0];
+}
+
+#[inline]
+pub(crate) fn fx4_lerp(from: f32x4, to: f32x4, alpha: f32x4) -> f32x4 {
+    return alpha * (to - from) + from;
 }
 
 #[inline]
@@ -1087,18 +1148,18 @@ pub(crate) fn vec3_cross(a: f32x4, b: f32x4) -> f32x4 {
 }
 
 pub(crate) fn quat_from_axis_angle(axis: f32x4, angle: f32x4) -> f32x4 {
-    let half_angle = f32x4_splat_x(angle) * FRAC_1_2;
-    let (half_sin, half_cos) = f32x4_sin_cos(half_angle);
-    return f32x4_set_w(axis * half_sin, half_cos);
+    let half_angle = fx4_splat_x(angle) * FRAC_1_2;
+    let (half_sin, half_cos) = fx4_sin_cos(half_angle);
+    return fx4_set_w(axis * half_sin, half_cos);
 }
 
 pub(crate) fn quat_from_cos_angle(axis: f32x4, cos: f32x4) -> f32x4 {
     let half_cos2 = (ONE + cos) * FRAC_1_2;
     let half_sin2 = ONE - half_cos2;
-    let half_cossin2 = f32x4_set_y(half_cos2, half_sin2);
+    let half_cossin2 = fx4_set_y(half_cos2, half_sin2);
     let half_cossin = half_cossin2.sqrt();
-    let half_sin = f32x4_splat_y(half_cossin);
-    return f32x4_set_w(axis * half_sin, half_cossin);
+    let half_sin = fx4_splat_y(half_cossin);
+    return fx4_set_w(axis * half_sin, half_cossin);
 }
 
 pub(crate) fn quat_from_vectors(from: f32x4, to: f32x4) -> f32x4 {
@@ -1119,7 +1180,7 @@ pub(crate) fn quat_from_vectors(from: f32x4, to: f32x4) -> f32x4 {
             quat = f32x4::from_array([0.0, -from[2], from[1], 0.0])
         }
     } else {
-        quat = f32x4_set_w(vec3_cross(from, to), real_part)
+        quat = fx4_set_w(vec3_cross(from, to), real_part)
     };
 
     return quat_normalize(quat);
@@ -1141,7 +1202,7 @@ pub(crate) fn quat_normalize(q: f32x4) -> f32x4 {
 
 #[inline]
 pub(crate) fn quat_transform_vector(q: f32x4, v: f32x4) -> f32x4 {
-    let cross1 = f32x4_splat_w(q) * v + vec3_cross(q, v);
+    let cross1 = fx4_splat_w(q) * v + vec3_cross(q, v);
     let cross2 = vec3_cross(q, cross1);
     return v + cross2 + cross2;
 }
@@ -1152,7 +1213,13 @@ pub(crate) fn quat_mul(a: f32x4, b: f32x4) -> f32x4 {
     let p2 = simd_swizzle!(a, [0, 1, 2, 0]) * simd_swizzle!(b, [3, 3, 3, 0]);
     let p13 = simd_swizzle!(a, [1, 2, 0, 1]) * simd_swizzle!(b, [2, 0, 1, 1]) + p1;
     let p24 = p2 - simd_swizzle!(a, [2, 0, 1, 3]) * simd_swizzle!(b, [1, 2, 0, 3]);
-    return as_f32x4(as_i32x4(p13 + p24) ^ SIGN_W);
+    return fx4_xor(p13 + p24, SIGN_W);
+}
+
+#[inline]
+pub(crate) fn quat_positive_w(q: f32x4) -> f32x4 {
+    let s = fx4_splat_w(q).simd_lt(ZERO).to_int() & SIGN;
+    return fx4_xor(q, s);
 }
 
 #[cfg(test)]
@@ -1245,13 +1312,12 @@ mod tests {
     fn test_sin_cos() {
         const EPSILON: f32x4 = f32x4::from_array([2.0e-7; 4]);
 
-        let (sin, cos) = f32x4_sin_cos(f32x4::from_array([
+        let (sin, cos) = fx4_sin_cos(f32x4::from_array([
             0.0,
             core::f32::consts::FRAC_PI_2,
             core::f32::consts::PI,
             -core::f32::consts::FRAC_PI_2,
         ]));
-        println!("{:?} {:?}", sin, cos);
         assert!((sin - f32x4::from_array([0.0, 1.0, 0.0, -1.0]))
             .abs()
             .simd_lt(EPSILON)
@@ -1267,7 +1333,7 @@ mod tests {
         let mut i = -100.0 * core::f32::consts::PI;
         while i < 100.0 * core::f32::consts::PI {
             let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]);
-            let (sin, cos) = f32x4_sin_cos(iv);
+            let (sin, cos) = fx4_sin_cos(iv);
 
             for i in 0..4 {
                 let sin_std = (iv[i] as f64).sin();
@@ -1282,8 +1348,6 @@ mod tests {
             i += 1.0e-3;
         }
 
-        println!("max sin error: {}", ms);
-        println!("max cos error: {}", mc);
         assert!(ms < 2.5e-5);
         assert!(mc < 2.5e-5);
     }
@@ -1293,18 +1357,18 @@ mod tests {
     }
     #[test]
     fn test_asin() {
-        assert_eq!(f32x4_asin(f32x4::splat(0.0))[0], 0.0);
-        assert_eq!(f32x4_asin(f32x4::splat(1.0))[0], core::f32::consts::FRAC_PI_2);
-        assert_eq!(f32x4_asin(f32x4::splat(-1.0))[0], -core::f32::consts::FRAC_PI_2);
-        assert_eq!(f32x4_asin(f32x4::splat(1.1))[0], core::f32::consts::FRAC_PI_2);
-        assert_eq!(f32x4_asin(f32x4::splat(-1.1))[0], -core::f32::consts::FRAC_PI_2);
+        assert_eq!(fx4_asin(f32x4::splat(0.0))[0], 0.0);
+        assert_eq!(fx4_asin(f32x4::splat(1.0))[0], core::f32::consts::FRAC_PI_2);
+        assert_eq!(fx4_asin(f32x4::splat(-1.0))[0], -core::f32::consts::FRAC_PI_2);
+        assert_eq!(fx4_asin(f32x4::splat(1.1))[0], core::f32::consts::FRAC_PI_2);
+        assert_eq!(fx4_asin(f32x4::splat(-1.1))[0], -core::f32::consts::FRAC_PI_2);
 
         let mut ma: f64 = 0.0;
 
         let mut i = -1.0;
         while i < 1.0 {
             let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
-            let asin = f32x4_asin(iv);
+            let asin = fx4_asin(iv);
 
             for i in 0..4 {
                 let asin_std = (iv[i] as f64).asin();
@@ -1320,18 +1384,18 @@ mod tests {
 
     #[test]
     fn test_acos() {
-        assert_eq!(f32x4_acos(f32x4::splat(0.0))[0], core::f32::consts::FRAC_PI_2);
-        assert_eq!(f32x4_acos(f32x4::splat(1.0))[0], 0.0);
-        assert_eq!(f32x4_acos(f32x4::splat(-1.0))[0], core::f32::consts::PI);
-        assert_eq!(f32x4_acos(f32x4::splat(1.1))[0], 0.0);
-        assert_eq!(f32x4_acos(f32x4::splat(-1.1))[0], core::f32::consts::PI);
+        assert_eq!(fx4_acos(f32x4::splat(0.0))[0], core::f32::consts::FRAC_PI_2);
+        assert_eq!(fx4_acos(f32x4::splat(1.0))[0], 0.0);
+        assert_eq!(fx4_acos(f32x4::splat(-1.0))[0], core::f32::consts::PI);
+        assert_eq!(fx4_acos(f32x4::splat(1.1))[0], 0.0);
+        assert_eq!(fx4_acos(f32x4::splat(-1.1))[0], core::f32::consts::PI);
 
         let mut ma: f64 = 0.0;
 
         let mut i = -1.0;
         while i < 1.0 {
             let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
-            let acos = f32x4_acos(iv);
+            let acos = fx4_acos(iv);
 
             for i in 0..4 {
                 let acos_std = (iv[i] as f64).acos();

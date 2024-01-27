@@ -81,27 +81,27 @@ impl Default for IKTwoBoneJob {
 
 impl IKTwoBoneJob {
     pub fn target(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.target);
+        return fx4_to_vec3a(self.target);
     }
 
     pub fn set_target(&mut self, target: Vec3A) {
-        self.target = f32x4_from_vec3a(target);
+        self.target = fx4_from_vec3a(target);
     }
 
     pub fn mid_axis(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.mid_axis);
+        return fx4_to_vec3a(self.mid_axis);
     }
 
     pub fn set_mid_axis(&mut self, mid_axis: Vec3A) {
-        self.mid_axis = f32x4_from_vec3a(mid_axis);
+        self.mid_axis = fx4_from_vec3a(mid_axis);
     }
 
     pub fn pole_vector(&self) -> Vec3A {
-        return f32x4_to_vec3a(self.pole_vector);
+        return fx4_to_vec3a(self.pole_vector);
     }
 
     pub fn set_pole_vector(&mut self, pole_vector: Vec3A) {
-        self.pole_vector = f32x4_from_vec3a(pole_vector);
+        self.pole_vector = fx4_from_vec3a(pole_vector);
     }
 
     pub fn twist_angle(&self) -> f32 {
@@ -153,7 +153,7 @@ impl IKTwoBoneJob {
     }
 
     pub fn start_joint_correction(&self) -> Quat {
-        return f32x4_to_quat(self.start_joint_correction);
+        return fx4_to_quat(self.start_joint_correction);
     }
 
     pub fn clear_start_joint_correction(&mut self) {
@@ -161,7 +161,7 @@ impl IKTwoBoneJob {
     }
 
     pub fn mid_joint_correction(&self) -> Quat {
-        return f32x4_to_quat(self.mid_joint_correction);
+        return fx4_to_quat(self.mid_joint_correction);
     }
 
     pub fn clear_mid_joint_correction(&mut self) {
@@ -212,8 +212,8 @@ impl IKTwoBoneJob {
     fn soften_target(&self, setup: &IKConstantSetup) -> (bool, f32x4, f32x4) {
         let start_target_original_ss = setup.inv_start_joint.transform_point(self.target);
         let start_target_original_ss_len2 = vec3_length2_s(start_target_original_ss); // first
-        let lengths = f32x4_set_z(
-            f32x4_set_y(setup.start_mid_ss_len2, setup.mid_end_ss_len2),
+        let lengths = fx4_set_z(
+            fx4_set_y(setup.start_mid_ss_len2, setup.mid_end_ss_len2),
             start_target_original_ss_len2,
         )
         .sqrt();
@@ -222,11 +222,11 @@ impl IKTwoBoneJob {
         let start_target_original_ss_len = simd_swizzle!(lengths, [2; 4]); // first
         let bone_len_diff_abs = (start_mid_ss_len - mid_end_ss_len).abs(); // first
         let bones_chain_len = start_mid_ss_len + mid_end_ss_len; // first
-        let da = bones_chain_len * f32x4::from_array([self.soften, 0.0, 0.0, 0.0]).simd_clamp(ZERO, ONE); // da.yzw needs to be 0
+        let da = bones_chain_len * fx4_clamp_or_min(f32x4::from_array([self.soften, 0.0, 0.0, 0.0]), ZERO, ONE); // da.yzw needs to be 0positive_w
         let ds = bones_chain_len - da;
 
-        let left = f32x4_set_w(start_target_original_ss_len, ds);
-        let right = f32x4_set_z(da, bone_len_diff_abs);
+        let left = fx4_set_w(start_target_original_ss_len, ds);
+        let right = fx4_set_z(da, bone_len_diff_abs);
         let comp_mask = left.simd_gt(right).to_bitmask();
 
         let start_target_ss;
@@ -236,7 +236,7 @@ impl IKTwoBoneJob {
         if (comp_mask & 0xb) == 0xb {
             let alpha = (start_target_original_ss_len - da) * ds.recip();
 
-            let op = f32x4_set_y(THREE, alpha + THREE);
+            let op = fx4_set_y(THREE, alpha + THREE);
             let op2 = op * op;
             let op4 = op2 * op2;
             let ratio = op4 * simd_swizzle!(op4, [1; 4]).recip(); // first
@@ -244,7 +244,7 @@ impl IKTwoBoneJob {
             let start_target_ss_len = da + ds - ds * ratio; // first
             start_target_ss_len2 = start_target_ss_len * start_target_ss_len; // first
             start_target_ss =
-                start_target_original_ss * f32x4_splat_x(start_target_ss_len * start_target_original_ss_len.recip());
+                start_target_original_ss * fx4_splat_x(start_target_ss_len * start_target_original_ss_len.recip());
         // first
         } else {
             start_target_ss = start_target_original_ss; // first
@@ -257,28 +257,21 @@ impl IKTwoBoneJob {
     fn compute_mid_joint(&self, setup: &IKConstantSetup, start_target_ss_len2: f32x4) -> f32x4 {
         let start_mid_end_sum_ss_len2 = setup.start_mid_ss_len2 + setup.mid_end_ss_len2;
         let start_mid_end_ss_half_rlen =
-            f32x4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).recip().sqrt()); // first
+            fx4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).recip().sqrt()); // first
 
-        let mid_cos_angles_unclamped = (f32x4_splat_x(start_mid_end_sum_ss_len2)
-            - f32x4_set_y(start_target_ss_len2, setup.start_end_ss_len2))
+        let mid_cos_angles_unclamped = (fx4_splat_x(start_mid_end_sum_ss_len2)
+            - fx4_set_y(start_target_ss_len2, setup.start_end_ss_len2))
             * start_mid_end_ss_half_rlen;
-        println!("mid_cos_angles_unclamped {:?}", mid_cos_angles_unclamped);
-        let mid_cos_angles = f32x4_clamp_or_min(mid_cos_angles_unclamped, NEG_ONE, ONE);
-        println!("mid_cos_angles {:?}", mid_cos_angles);
+        let mid_cos_angles = fx4_clamp_or_min(mid_cos_angles_unclamped, NEG_ONE, ONE);
 
-        let mid_corrected_angle = f32x4_acos(mid_cos_angles);
-        println!("mid_corrected_angle {:?}", mid_corrected_angle);
+        let mid_corrected_angle = fx4_acos(mid_cos_angles);
 
         let bent_side_ref = vec3_cross(setup.start_mid_ms, self.mid_axis); // first
-        let bent_side_flip = simd_swizzle!(
-            vec3_dot_s(bent_side_ref, setup.mid_end_ms).simd_lt(ZERO).to_int(),
-            [0; 4]
-        ); // first
-        let mid_initial_angle = as_f32x4(as_i32x4(f32x4_splat_y(mid_corrected_angle)) ^ (bent_side_flip & SIGN)); // first
+        let bent_side_flip = fx4_sign(vec3_dot_s(bent_side_ref, setup.mid_end_ms)); // first
+        let mid_initial_angle = fx4_xor(fx4_splat_y(mid_corrected_angle), bent_side_flip); // first
 
         let mid_angles_diff = mid_corrected_angle - mid_initial_angle; // first
 
-        println!("quat_from_axis_angle {:?} {:?}", self.mid_axis, mid_angles_diff);
         return quat_from_axis_angle(self.mid_axis, mid_angles_diff);
     }
 
@@ -311,21 +304,21 @@ impl IKTwoBoneJob {
             let joint_plane_normal_ss = quat_transform_vector(end_to_target_rot_ss, mid_axis_ss);
             let joint_plane_normal_ss_len2 = vec3_length2_s(joint_plane_normal_ss); // first
 
-            let rsqrts = f32x4_set_z(
-                f32x4_set_y(start_target_ss_len2, ref_plane_normal_ss_len2),
+            let rsqrts = fx4_set_z(
+                fx4_set_y(start_target_ss_len2, ref_plane_normal_ss_len2),
                 joint_plane_normal_ss_len2,
             )
             .recip()
             .sqrt();
 
             let rotate_plane_cos_angle = vec3_dot_s(
-                ref_plane_normal_ss * f32x4_splat_y(rsqrts),
-                joint_plane_normal_ss * f32x4_splat_z(rsqrts),
+                ref_plane_normal_ss * fx4_splat_y(rsqrts),
+                joint_plane_normal_ss * fx4_splat_z(rsqrts),
             ); // first
 
-            let rotate_plane_axis_ss = start_target_ss * f32x4_splat_x(rsqrts);
-            let start_axis_flip = f32x4_extract_sign(f32x4_splat_x(vec3_dot_s(joint_plane_normal_ss, pole_ss)));
-            let rotate_plane_axis_flipped_ss = as_f32x4(as_i32x4(rotate_plane_axis_ss) ^ start_axis_flip);
+            let rotate_plane_axis_ss = start_target_ss * fx4_splat_x(rsqrts);
+            let start_axis_flip = fx4_sign(fx4_splat_x(vec3_dot_s(joint_plane_normal_ss, pole_ss)));
+            let rotate_plane_axis_flipped_ss = fx4_xor(rotate_plane_axis_ss, start_axis_flip);
 
             let rotate_plane_ss = quat_from_cos_angle(
                 rotate_plane_axis_flipped_ss,
@@ -344,14 +337,14 @@ impl IKTwoBoneJob {
     }
 
     fn weight_output(&mut self, start_rot: f32x4, mid_rot: f32x4) {
-        let start_rot_fu = as_f32x4(as_i32x4(start_rot) ^ (SIGN & f32x4_splat_w(start_rot).simd_lt(ZERO).to_int()));
-        let mid_rot_fu = as_f32x4(as_i32x4(mid_rot) ^ (SIGN & f32x4_splat_w(mid_rot).simd_lt(ZERO).to_int()));
+        let start_rot_fu = quat_positive_w(start_rot);
+        let mid_rot_fu = quat_positive_w(mid_rot);
 
         if self.weight < 1.0 {
             let simd_weight = f32x4::splat(self.weight).simd_max(ZERO);
 
-            let start_lerp = f32x4_lerp(QUAT_UNIT, start_rot_fu, simd_weight);
-            let mid_lerp = f32x4_lerp(QUAT_UNIT, mid_rot_fu, simd_weight);
+            let start_lerp = fx4_lerp(QUAT_UNIT, start_rot_fu, simd_weight);
+            let mid_lerp = fx4_lerp(QUAT_UNIT, mid_rot_fu, simd_weight);
 
             let rsqrts = f32x4::from_array([
                 (start_lerp * start_lerp).reduce_sum(),
@@ -362,8 +355,8 @@ impl IKTwoBoneJob {
             .recip()
             .sqrt();
 
-            self.start_joint_correction = start_lerp * f32x4_splat_x(rsqrts);
-            self.mid_joint_correction = mid_lerp * f32x4_splat_y(rsqrts);
+            self.start_joint_correction = start_lerp * fx4_splat_x(rsqrts);
+            self.mid_joint_correction = mid_lerp * fx4_splat_y(rsqrts);
         } else {
             self.start_joint_correction = start_rot_fu;
             self.mid_joint_correction = mid_rot_fu;

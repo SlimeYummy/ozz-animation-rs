@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::simd::prelude::*;
 
 use crate::base::{OzzBuf, OzzError, OzzRef};
-use crate::math::{f32x4_extract_sign, SoaQuat, SoaTransform, SoaVec3};
+use crate::math::{fx4_sign, SoaQuat, SoaTransform, SoaVec3};
 use crate::skeleton::Skeleton;
 
 const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
@@ -369,8 +369,8 @@ where
 
     fn blend_n_pass(input: &SoaTransform, weight: f32x4, output: &mut SoaTransform) {
         output.translation = output.translation.add(&input.translation.mul_num(weight));
-        let dot = output.rotation.dot(&input.rotation).signum();
-        let rotation = input.rotation.xor_num(f32x4_extract_sign(dot));
+        let dot = output.rotation.dot(&input.rotation);
+        let rotation = input.rotation.xor_num(fx4_sign(dot));
         output.rotation = output.rotation.add(&rotation.mul_num(weight));
         output.scale = output.scale.add(&input.scale.mul_num(weight));
     }
@@ -378,8 +378,7 @@ where
     fn blend_add_pass(input: &SoaTransform, weight: f32x4, soa_one_minus_weight: &SoaVec3, output: &mut SoaTransform) {
         output.translation = output.translation.add(&input.translation.mul_num(weight));
 
-        let sign = f32x4_extract_sign(input.rotation.w);
-        let rotation = input.rotation.xor_num(sign);
+        let rotation = input.rotation.positive_w();
         let interp_quat = SoaQuat {
             x: rotation.x * weight,
             y: rotation.y * weight,
@@ -395,8 +394,7 @@ where
     fn blend_sub_pass(input: &SoaTransform, weight: f32x4, one_minus_weight: f32x4, output: &mut SoaTransform) {
         output.translation = output.translation.sub(&input.translation.mul_num(weight));
 
-        let sign = f32x4_extract_sign(input.rotation.w);
-        let rotation = input.rotation.xor_num(sign);
+        let rotation = input.rotation.positive_w();
         let interp_quat = SoaQuat {
             x: rotation.x * weight,
             y: rotation.y * weight,
