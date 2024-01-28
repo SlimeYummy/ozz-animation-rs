@@ -129,6 +129,34 @@ impl Skeleton {
     pub fn index_joint(&self, idx: i16) -> Option<&SoaTransform> {
         return self.joint_rest_poses.get(idx as usize);
     }
+
+    pub fn is_leaf(&self, joint: i16) -> bool {
+        let next = (joint + 1) as usize;
+        return next == self.num_joints() || self.joint_parents()[next] != joint;
+    }
+
+    pub fn iter_depth_first<F>(&self, from: i16, mut f: F)
+    where
+        F: FnMut(i16, i16),
+    {
+        let mut i = if from < 0 { 0 } else { from } as usize;
+        let mut process = i < self.num_joints();
+        while process {
+            f(i as i16, self.joint_parent(i));
+            i += 1;
+            process = i < self.num_joints() && self.joint_parent(i) >= from;
+        }
+    }
+
+    pub fn iter_depth_first_reverse<F>(&self, mut f: F)
+    where
+        F: FnMut(i16, i16),
+    {
+        for i in (0..self.num_joints()).rev() {
+            let parent = self.joint_parent(i);
+            f(i as i16, parent);
+        }
+    }
 }
 
 #[cfg(test)]
