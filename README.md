@@ -9,7 +9,7 @@ Ozz-animation-rs is a rust version skeletal animation library with cross-platfor
 
 Ozz-animation-rs is based on [ozz-animation](https://github.com/guillaumeblanc/ozz-animation) library, an open source c++ 3d skeletal animation library and toolset. Ozz-animation-rs only implement ozz-animation's runtime part. You should use this library with ozz-animation's toolset.
 
-In order to introduce cross-platform deterministic, ozz-animation-rs does not simply wrap ozz-animation's runtime, but rewrite the full runtime library in rust. So it can be used om in network game scenarios, such as lock-step networking synchronize.
+In order to introduce cross-platform deterministic, ozz-animation-rs does not simply wrap ozz-animation's runtime, but rewrite the full runtime library in rust. So it can be used in network game scenarios, such as lock-step networking synchronize.
 
 ### Features
 
@@ -28,7 +28,7 @@ In order to introduce cross-platform deterministic, ozz-animation-rs does not si
 | Two bone IK | done |
 | Look-at | done |
 | Foot ik | done |
-| Multi-threading | unsupported |
+| Multi-threading | done |
 | SIMD | done |
 
 I have no plan to implement "unsupported" features, currently. Or you can try to implement them yourself.

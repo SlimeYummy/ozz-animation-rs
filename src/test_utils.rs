@@ -1,13 +1,9 @@
-#![allow(dead_code)]
-
 use std::env::consts::{ARCH, OS};
 use std::error::Error;
 use std::fs::{self, File};
 use std::io::Write;
 use std::sync::OnceLock;
 use std::{env, mem};
-
-const MAX_CHUNK_SIZE: usize = 1024;
 
 // f16 -> f32
 // ignore overflow, infinite, NaN

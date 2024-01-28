@@ -19,7 +19,7 @@ rkyv = ["dep:rkyv", "dep:bytecheck", "glam/rkyv", "glam/bytecheck"]
 
 [dependencies]
 bytecheck = { version = "0.6", optional = true, default-features = false }
-glam = "0.24"
+glam = { version = "0.25", features = [ "core-simd", "libm" ] }
 rkyv = { version = "0.7", optional = true, features = [ "copy", "validation" ] }
 static_assertions = "1.1"
 thiserror = "1.0"

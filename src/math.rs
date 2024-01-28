@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use glam::{Mat4, Quat, Vec3, Vec3A};
+use glam::{Mat4, Quat, Vec3, Vec3A, Vec4};
 use static_assertions::const_assert_eq;
 use std::fmt::Debug;
 use std::mem;
@@ -853,6 +853,18 @@ pub(crate) fn fx4_to_vec3a(v: f32x4) -> Vec3A {
     return unsafe { mem::transmute(v) };
 }
 
+const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Vec4>());
+
+#[inline(always)]
+pub(crate) fn fx4_from_vec4(v: Vec4) -> f32x4 {
+    return unsafe { mem::transmute(v) };
+}
+
+#[inline(always)]
+pub(crate) fn fx4_to_vec4(v: f32x4) -> Vec4 {
+    return unsafe { mem::transmute(v) };
+}
+
 const_assert_eq!(mem::size_of::<f32x4>(), mem::size_of::<Quat>());
 
 #[inline(always)]
@@ -922,9 +934,9 @@ pub(crate) fn ix4_splat_w(v: i32x4) -> i32x4 {
 
 #[inline(always)]
 pub(crate) fn fx4_sign(v: f32x4) -> i32x4 {
-    // In some case, x86 and aarch64 may produce different sign NaN (+NaN/NaN) in same command.
-    // So the result of `NaN | SIGN` may be different.
-    // We want to make sure the sign of NaN is always 0, to keep cross-platform deterministic.
+    // In some case, x86_64 and aarch64 may produce different sign NaN (+/-NaN) in same command.
+    // So the result of `NaN & SIGN` may be different.
+    // For cross-platform deterministic, we want to make sure the sign of NaN is always 0(+).
     return v.simd_lt(ZERO).to_int() & SIGN;
 }
 
