@@ -1,10 +1,11 @@
+use glam::Vec4;
 use std::cell::RefCell;
 use std::iter;
 use std::rc::Rc;
 use std::simd::prelude::*;
 
 use crate::base::{OzzBuf, OzzError, OzzRef};
-use crate::math::{fx4_sign, SoaQuat, SoaTransform, SoaVec3};
+use crate::math::{fx4_from_vec4, fx4_sign, SoaQuat, SoaTransform, SoaVec3};
 use crate::skeleton::Skeleton;
 
 const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
@@ -14,7 +15,7 @@ const ONE: f32x4 = f32x4::from_array([1.0; 4]);
 pub struct BlendingLayer<I: OzzBuf<SoaTransform>> {
     pub transform: I,
     pub weight: f32,
-    pub joint_weights: Vec<f32x4>,
+    pub joint_weights: Vec<Vec4>,
 }
 
 impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
@@ -34,12 +35,16 @@ impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
         };
     }
 
-    pub fn with_joint_weights(transform: I, joint_weights: Vec<f32x4>) -> BlendingLayer<I> {
+    pub fn with_joint_weights(transform: I, joint_weights: Vec<Vec4>) -> BlendingLayer<I> {
         return BlendingLayer {
             transform,
             weight: 0.0,
             joint_weights,
         };
+    }
+
+    fn joint_weight(&self, idx: usize) -> f32x4 {
+        return fx4_from_vec4(self.joint_weights[idx]);
     }
 }
 
@@ -232,13 +237,13 @@ where
 
                 if self.num_passes == 0 {
                     for idx in 0..num_soa_joints {
-                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
                         self.accumulated_weights[idx] = weight;
                         Self::blend_1st_pass(&transform[idx], weight, &mut output[idx]);
                     }
                 } else {
                     for idx in 0..num_soa_joints {
-                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
                         self.accumulated_weights[idx] += weight;
                         Self::blend_n_pass(&transform[idx], weight, &mut output[idx]);
                     }
@@ -328,7 +333,7 @@ where
 
                 if !layer.joint_weights.is_empty() {
                     for idx in 0..joint_rest_poses.len() {
-                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
                         let one_minus_weight = ONE - weight;
                         let soa_one_minus_weight = SoaVec3::splat_row(one_minus_weight);
                         Self::blend_add_pass(&transform[idx], weight, &soa_one_minus_weight, &mut output[idx]);
@@ -345,7 +350,7 @@ where
 
                 if !layer.joint_weights.is_empty() {
                     for idx in 0..joint_rest_poses.len() {
-                        let weight = layer_weight * layer.joint_weights[idx].simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
                         let one_minus_weight = ONE - weight;
                         Self::blend_sub_pass(&transform[idx], weight, one_minus_weight, &mut output[idx]);
                     }
@@ -487,7 +492,7 @@ mod blending_tests {
         job.layers_mut().push(BlendingLayer {
             transform: ozz_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
-            joint_weights: vec![f32x4::splat(0.5); 1],
+            joint_weights: vec![Vec4::splat(0.5); 1],
         });
         job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
@@ -545,7 +550,7 @@ mod blending_tests {
         job.additive_layers_mut().push(BlendingLayer {
             transform: ozz_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
-            joint_weights: vec![f32x4::splat(0.5); num_bind_pose],
+            joint_weights: vec![Vec4::splat(0.5); num_bind_pose],
         });
         job.set_output(ozz_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
@@ -553,9 +558,9 @@ mod blending_tests {
 
     fn new_layers(
         input1: Vec<SoaTransform>,
-        weights1: Vec<f32x4>,
+        weights1: Vec<Vec4>,
         input2: Vec<SoaTransform>,
-        weights2: Vec<f32x4>,
+        weights2: Vec<Vec4>,
     ) -> Vec<BlendingLayer<Rc<RefCell<Vec<SoaTransform>>>>> {
         return vec![
             BlendingLayer {
@@ -793,14 +798,8 @@ mod blending_tests {
         let mut input2 = vec![IDENTITY; 2];
         input2[0].translation = input1[0].translation.neg();
         input2[1].translation = input1[1].translation.neg();
-        let weights1 = vec![
-            f32x4::from_array([1.0, 1.0, 0.0, 0.0]),
-            f32x4::from_array([1.0, 0.0, 1.0, 1.0]),
-        ];
-        let weights2 = vec![
-            f32x4::from_array([1.0, 1.0, 1.0, 0.0]),
-            f32x4::from_array([0.0, 1.0, 1.0, 1.0]),
-        ];
+        let weights1 = vec![Vec4::new(1.0, 1.0, 0.0, 0.0), Vec4::new(1.0, 0.0, 1.0, 1.0)];
+        let weights2 = vec![Vec4::new(1.0, 1.0, 1.0, 0.0), Vec4::new(0.0, 1.0, 1.0, 1.0)];
         let mut layers = new_layers(input1, weights1, input2, weights2);
 
         let rest_poses = vec![
@@ -983,7 +982,7 @@ mod blending_tests {
         }
 
         {
-            layers[1].joint_weights = vec![f32x4::from_array([1.0, -1.0, 2.0, 0.1])];
+            layers[1].joint_weights = vec![Vec4::new(1.0, -1.0, 2.0, 0.1)];
 
             execute_test(
                 &skeleton,
@@ -1291,7 +1290,7 @@ mod blending_tests {
         let mut layers = vec![BlendingLayer {
             transform: ozz_buf(input1.clone()),
             weight: 0.0,
-            joint_weights: vec![f32x4::from_array([1.0, 0.5, 0.0, -1.0])],
+            joint_weights: vec![Vec4::new(1.0, 0.5, 0.0, -1.0)],
         }];
 
         {

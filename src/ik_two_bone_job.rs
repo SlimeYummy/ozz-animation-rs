@@ -36,9 +36,9 @@ impl IKConstantSetup {
             start_mid_ms: -start_ms,
             mid_end_ms: end_ms,
             start_mid_ss,
-            start_mid_ss_len2: vec3_length2_s(start_mid_ss), // first
-            mid_end_ss_len2: vec3_length2_s(mid_end_ss),     // first
-            start_end_ss_len2: vec3_length2_s(start_end_ss), // first
+            start_mid_ss_len2: vec3_length2_s(start_mid_ss), // [x]
+            mid_end_ss_len2: vec3_length2_s(mid_end_ss),     // [x]
+            start_end_ss_len2: vec3_length2_s(start_end_ss), // [x]
         };
     }
 }
@@ -211,22 +211,22 @@ impl IKTwoBoneJob {
 
     fn soften_target(&self, setup: &IKConstantSetup) -> (bool, f32x4, f32x4) {
         let start_target_original_ss = setup.inv_start_joint.transform_point(self.target);
-        let start_target_original_ss_len2 = vec3_length2_s(start_target_original_ss); // first
+        let start_target_original_ss_len2 = vec3_length2_s(start_target_original_ss); // [x]
         let lengths = fx4_set_z(
             fx4_set_y(setup.start_mid_ss_len2, setup.mid_end_ss_len2),
             start_target_original_ss_len2,
         )
-        .sqrt();
-        let start_mid_ss_len = lengths; // first
-        let mid_end_ss_len = simd_swizzle!(lengths, [1; 4]); // first
-        let start_target_original_ss_len = simd_swizzle!(lengths, [2; 4]); // first
-        let bone_len_diff_abs = (start_mid_ss_len - mid_end_ss_len).abs(); // first
-        let bones_chain_len = start_mid_ss_len + mid_end_ss_len; // first
-        let da = bones_chain_len * fx4_clamp_or_min(f32x4::from_array([self.soften, 0.0, 0.0, 0.0]), ZERO, ONE); // da.yzw needs to be 0positive_w
-        let ds = bones_chain_len - da;
+        .sqrt(); // [x y z]
+        let start_mid_ss_len = lengths; // [x]
+        let mid_end_ss_len = fx4_splat_y(lengths); // [x]
+        let start_target_original_ss_len = fx4_splat_z(lengths); // [x y z w]
+        let bone_len_diff_abs = (start_mid_ss_len - mid_end_ss_len).abs(); // [x]
+        let bones_chain_len = start_mid_ss_len + mid_end_ss_len; // [x]
+        let da = bones_chain_len * fx4_clamp_or_min(f32x4::from_array([self.soften, 0.0, 0.0, 0.0]), ZERO, ONE); // [x 0 0 0] da.yzw needs to be 0
+        let ds = bones_chain_len - da; // [x]
 
-        let left = fx4_set_w(start_target_original_ss_len, ds);
-        let right = fx4_set_z(da, bone_len_diff_abs);
+        let left = fx4_set_w(start_target_original_ss_len, ds); // [x y z w]
+        let right = fx4_set_z(da, bone_len_diff_abs); // [x y z w]
         let comp_mask = left.simd_gt(right).to_bitmask();
 
         let start_target_ss;
@@ -239,38 +239,38 @@ impl IKTwoBoneJob {
             let op = fx4_set_y(THREE, alpha + THREE);
             let op2 = op * op;
             let op4 = op2 * op2;
-            let ratio = op4 * simd_swizzle!(op4, [1; 4]).recip(); // first
+            let ratio = op4 * fx4_splat_y(op4).recip(); // [x]
 
-            let start_target_ss_len = da + ds - ds * ratio; // first
-            start_target_ss_len2 = start_target_ss_len * start_target_ss_len; // first
+            let start_target_ss_len = da + ds - ds * ratio; // [x]
+            start_target_ss_len2 = start_target_ss_len * start_target_ss_len; // [x]
             start_target_ss =
                 start_target_original_ss * fx4_splat_x(start_target_ss_len * start_target_original_ss_len.recip());
-        // first
+        // [x y z]
         } else {
-            start_target_ss = start_target_original_ss; // first
-            start_target_ss_len2 = start_target_original_ss_len2; // first
+            start_target_ss = start_target_original_ss; // [x y z]
+            start_target_ss_len2 = start_target_original_ss_len2; // [x]
         }
 
         return ((comp_mask & 0x5) == 0x4, start_target_ss, start_target_ss_len2);
     }
 
     fn compute_mid_joint(&self, setup: &IKConstantSetup, start_target_ss_len2: f32x4) -> f32x4 {
-        let start_mid_end_sum_ss_len2 = setup.start_mid_ss_len2 + setup.mid_end_ss_len2;
+        let start_mid_end_sum_ss_len2 = setup.start_mid_ss_len2 + setup.mid_end_ss_len2; // [x]
         let start_mid_end_ss_half_rlen =
-            fx4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).recip().sqrt()); // first
+            fx4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).recip().sqrt()); // [x]
 
         let mid_cos_angles_unclamped = (fx4_splat_x(start_mid_end_sum_ss_len2)
             - fx4_set_y(start_target_ss_len2, setup.start_end_ss_len2))
-            * start_mid_end_ss_half_rlen;
-        let mid_cos_angles = fx4_clamp_or_min(mid_cos_angles_unclamped, NEG_ONE, ONE);
+            * start_mid_end_ss_half_rlen; // [x y]
+        let mid_cos_angles = fx4_clamp_or_min(mid_cos_angles_unclamped, NEG_ONE, ONE); // [x y]
 
-        let mid_corrected_angle = fx4_acos(mid_cos_angles);
+        let mid_corrected_angle = fx4_acos(mid_cos_angles); // [x y]
 
-        let bent_side_ref = vec3_cross(setup.start_mid_ms, self.mid_axis); // first
-        let bent_side_flip = fx4_sign(vec3_dot_s(bent_side_ref, setup.mid_end_ms)); // first
-        let mid_initial_angle = fx4_xor(fx4_splat_y(mid_corrected_angle), bent_side_flip); // first
+        let bent_side_ref = vec3_cross(setup.start_mid_ms, self.mid_axis); // [x y z]
+        let bent_side_flip = fx4_sign(vec3_dot_s(bent_side_ref, setup.mid_end_ms)); // [x]
+        let mid_initial_angle = fx4_xor(fx4_splat_y(mid_corrected_angle), bent_side_flip); // [x]
 
-        let mid_angles_diff = mid_corrected_angle - mid_initial_angle; // first
+        let mid_angles_diff = mid_corrected_angle - mid_initial_angle; // [x]
 
         return quat_from_axis_angle(self.mid_axis, mid_angles_diff);
     }
@@ -295,26 +295,27 @@ impl IKTwoBoneJob {
         let mut start_rot_ss = end_to_target_rot_ss;
 
         if start_target_ss_len2.simd_gt(ZERO).to_bitmask() & 0x1 == 0x1 {
-            let ref_plane_normal_ss = vec3_cross(start_target_ss, pole_ss);
-            let ref_plane_normal_ss_len2 = vec3_length2_s(ref_plane_normal_ss); // first
+            // [x]
+            let ref_plane_normal_ss = vec3_cross(start_target_ss, pole_ss); // [x y z]
+            let ref_plane_normal_ss_len2 = vec3_length2_s(ref_plane_normal_ss); // [x]
 
             let mid_axis_ss = setup
                 .inv_start_joint
                 .transform_vector(self.mid_joint.transform_vector(self.mid_axis));
             let joint_plane_normal_ss = quat_transform_vector(end_to_target_rot_ss, mid_axis_ss);
-            let joint_plane_normal_ss_len2 = vec3_length2_s(joint_plane_normal_ss); // first
+            let joint_plane_normal_ss_len2 = vec3_length2_s(joint_plane_normal_ss); // [x]
 
             let rsqrts = fx4_set_z(
                 fx4_set_y(start_target_ss_len2, ref_plane_normal_ss_len2),
                 joint_plane_normal_ss_len2,
             )
             .recip()
-            .sqrt();
+            .sqrt(); // [x y z]
 
             let rotate_plane_cos_angle = vec3_dot_s(
                 ref_plane_normal_ss * fx4_splat_y(rsqrts),
                 joint_plane_normal_ss * fx4_splat_z(rsqrts),
-            ); // first
+            ); // [x]
 
             let rotate_plane_axis_ss = start_target_ss * fx4_splat_x(rsqrts);
             let start_axis_flip = fx4_sign(fx4_splat_x(vec3_dot_s(joint_plane_normal_ss, pole_ss)));
