@@ -1,9 +1,10 @@
+use glam::Mat4;
 use std::env::consts::{ARCH, OS};
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::prelude::*;
 use std::sync::OnceLock;
-use std::{env, mem};
+use std::{env, mem, slice};
 
 // f16 -> f32
 // ignore overflow, infinite, NaN
@@ -19,6 +20,35 @@ pub fn f16(f: f32) -> u16 {
 }
 
 static FOLDER: OnceLock<()> = OnceLock::new();
+
+pub fn compare_with_cpp(folder: &str, name: &str, data: &[Mat4], diff: f32) -> Result<(), Box<dyn Error>> {
+    FOLDER.get_or_init(|| {
+        fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
+        fs::create_dir_all(format!("./output/{}", folder)).unwrap();
+    });
+
+    let path = format!("./output/{0}/{1}_rust_{2}_{3}.bin", folder, name, OS, ARCH);
+    let mut file = File::create(path)?;
+    let data_size = data.len() * mem::size_of::<Mat4>();
+    file.write_all(unsafe { slice::from_raw_parts(data.as_ptr() as *mut _, data_size) })?;
+
+    let path = format!("./expected/{0}/{1}_cpp.bin", folder, name);
+    let mut file = File::open(&path)?;
+    if file.metadata()?.len() != data_size as u64 {
+        return Err(format!("compare_with_cpp() size:{}", data_size).into());
+    }
+
+    let mut expected: Vec<Mat4> = vec![Mat4::default(); data.len()];
+    file.read(unsafe { slice::from_raw_parts_mut(expected.as_mut_ptr() as *mut _, data_size) })?;
+    for i in 0..expected.len() {
+        if !Mat4::abs_diff_eq(&data[i], expected[i], diff) {
+            println!("actual: {:?}", data[i]);
+            println!("expected: {:?}", expected[i]);
+            return Err(format!("compare_with_cpp() idx:{}", i).into());
+        }
+    }
+    return Ok(());
+}
 
 #[cfg(feature = "rkyv")]
 pub fn compare_with_rkyv<T>(folder: &str, name: &str, data: &T) -> Result<(), Box<dyn Error>>
