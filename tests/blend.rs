@@ -1,11 +1,8 @@
-#![cfg(feature = "rkyv")]
-
 use glam::Mat4;
 use ozz_animation_rs::*;
-use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct TestData {
     ratio: f32,
     sample_out1: Vec<SoaTransform>,
@@ -19,7 +16,25 @@ struct TestData {
 }
 
 #[test]
-fn test_deterministic_blend() {
+fn test_blend() {
+    run_blend(2..=2, |_, data| {
+        test_utils::compare_with_cpp("blend", "blend", &data.l2m_out, 1e-6).unwrap();
+    });
+}
+
+#[cfg(feature = "rkyv")]
+#[test]
+fn test_blend_deterministic() {
+    run_blend(-1..=11, |ratio, data| {
+        test_utils::compare_with_rkyv("blend", &format!("blend{:+.2}", ratio), data).unwrap();
+    });
+}
+
+fn run_blend<I, T>(range: I, tester: T)
+where
+    I: Iterator<Item = i32>,
+    T: Fn(f32, &TestData),
+{
     let skeleton = Rc::new(Skeleton::from_file("./resource/blend/skeleton.ozz").unwrap());
     let animation1 = Rc::new(Animation::from_file("./resource/blend/animation1.ozz").unwrap());
     let animation2 = Rc::new(Animation::from_file("./resource/blend/animation2.ozz").unwrap());
@@ -57,40 +72,41 @@ fn test_deterministic_blend() {
     let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
     l2m_job.set_output(l2m_out.clone());
 
-    for i in -1..=11 {
-        let r = i as f32 / 10.0;
+    for i in range {
+        let ratio = i as f32 / 10.0;
 
-        sample_job1.set_ratio(r);
+        sample_job1.set_ratio(ratio);
         sample_job1.run().unwrap();
-        sample_job2.set_ratio(r);
+        sample_job2.set_ratio(ratio);
         sample_job2.run().unwrap();
-        sample_job3.set_ratio(r);
+        sample_job3.set_ratio(ratio);
         sample_job3.run().unwrap();
 
-        blending_job.layers_mut()[0].weight = (1.0 - 2.0 * r).clamp(0.0, 1.0); // 0%=1.0, 50%=0.0, 100%=0.0
-        blending_job.layers_mut()[2].weight = (2.0 * r - 1.0).clamp(0.0, 1.0); // 0%=0.0, 50%=0.0, 100%=1.0
-                                                                               // 0%=0.0, 50%=1.0, 100%=0.0
-        if r < 0.5 {
-            blending_job.layers_mut()[1].weight = (2.0 * r).clamp(0.0, 1.0);
+        blending_job.layers_mut()[0].weight = (1.0 - 2.0 * ratio).clamp(0.0, 1.0); // 0%=1.0, 50%=0.0, 100%=0.0
+        blending_job.layers_mut()[2].weight = (2.0 * ratio - 1.0).clamp(0.0, 1.0); // 0%=0.0, 50%=0.0, 100%=1.0
+                                                                                   // 0%=0.0, 50%=1.0, 100%=0.0
+        if ratio < 0.5 {
+            blending_job.layers_mut()[1].weight = (2.0 * ratio).clamp(0.0, 1.0);
         } else {
-            blending_job.layers_mut()[1].weight = (2.0 * (1.0 - r)).clamp(0.0, 1.0);
+            blending_job.layers_mut()[1].weight = (2.0 * (1.0 - ratio)).clamp(0.0, 1.0);
         }
         blending_job.run().unwrap();
 
         l2m_job.run().unwrap();
 
-        let data = TestData {
-            ratio: r,
-            sample_out1: sample_out1.vec().unwrap().clone(),
-            sample_ctx1: sample_job1.context().unwrap().clone_without_animation_id(),
-            sample_out2: sample_out2.vec().unwrap().clone(),
-            sample_ctx2: sample_job2.context().unwrap().clone_without_animation_id(),
-            sample_out3: sample_out3.vec().unwrap().clone(),
-            sample_ctx3: sample_job3.context().unwrap().clone_without_animation_id(),
-            blending_out: blending_out.vec().unwrap().clone(),
-            l2m_out: l2m_out.vec().unwrap().clone(),
-        };
-
-        test_utils::compare_with_rkyv("blend", &format!("blend{:+.2}", r), &data).unwrap();
+        tester(
+            ratio,
+            &TestData {
+                ratio,
+                sample_out1: sample_out1.vec().unwrap().clone(),
+                sample_ctx1: sample_job1.context().unwrap().clone_without_animation_id(),
+                sample_out2: sample_out2.vec().unwrap().clone(),
+                sample_ctx2: sample_job2.context().unwrap().clone_without_animation_id(),
+                sample_out3: sample_out3.vec().unwrap().clone(),
+                sample_ctx3: sample_job3.context().unwrap().clone_without_animation_id(),
+                blending_out: blending_out.vec().unwrap().clone(),
+                l2m_out: l2m_out.vec().unwrap().clone(),
+            },
+        );
     }
 }

@@ -1,11 +1,8 @@
-#![cfg(feature = "rkyv")]
-
 use glam::{Mat4, Quat, Vec3A};
 use ozz_animation_rs::*;
-use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct TestData {
     locals: Vec<SoaTransform>,
     models1: Vec<Mat4>,
@@ -19,7 +16,25 @@ const TARGET_EXTENT: f32 = 0.5;
 const TARGET_OFFSET: Vec3A = Vec3A::new(0.0, 0.2, 0.1);
 
 #[test]
-fn test_deterministic_two_bone_ik() {
+fn test_two_bone_ik() {
+    run_two_bone_ik(1..=1, |_, data| {
+        test_utils::compare_with_cpp("two_bone_ik", "two_bone_ik", &data.models2, 1e-6).unwrap();
+    });
+}
+
+#[cfg(feature = "rkyv")]
+#[test]
+fn test_two_bone_ik_deterministic() {
+    run_two_bone_ik(0..=10, |idx, data| {
+        test_utils::compare_with_rkyv("two_bone_ik", &format!("two_bone_ik_{:02}", idx), data).unwrap();
+    });
+}
+
+fn run_two_bone_ik<I, T>(range: I, tester: T)
+where
+    I: Iterator<Item = i32>,
+    T: Fn(i32, &TestData),
+{
     let skeleton = Rc::new(Skeleton::from_file("./resource/two_bone_ik/skeleton.ozz").unwrap());
 
     let start_joint = skeleton.joint_by_name("shoulder").unwrap();
@@ -42,8 +57,8 @@ fn test_deterministic_two_bone_ik() {
     l2m_job2.set_input(locals.clone());
     l2m_job2.set_output(models2.clone());
 
-    for i in 0..=10 {
-        let time = i as f32;
+    for idx in range {
+        let time = idx as f32;
         let anim_extent: f32 = (1.0 - f32_cos(time)) * 0.5 * TARGET_EXTENT;
         let floor: usize = (time.abs() / (2.0 * core::f32::consts::PI)) as usize;
 
@@ -91,14 +106,16 @@ fn test_deterministic_two_bone_ik() {
 
         // compare and save results
 
-        let data = TestData {
-            locals: locals.vec().unwrap().clone(),
-            models1: models1.vec().unwrap().clone(),
-            models2: models2.vec().unwrap().clone(),
-            start_correction: ik_job.start_joint_correction(),
-            mid_correction: ik_job.mid_joint_correction(),
-            reached: ik_job.reached(),
-        };
-        test_utils::compare_with_rkyv("two_bone_ik", &format!("two_bone_ik_{:02}", i), &data).unwrap();
+        tester(
+            idx,
+            &TestData {
+                locals: locals.vec().unwrap().clone(),
+                models1: models1.vec().unwrap().clone(),
+                models2: models2.vec().unwrap().clone(),
+                start_correction: ik_job.start_joint_correction(),
+                mid_correction: ik_job.mid_joint_correction(),
+                reached: ik_job.reached(),
+            },
+        );
     }
 }

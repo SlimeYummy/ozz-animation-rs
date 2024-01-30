@@ -1,11 +1,8 @@
-#![cfg(feature = "rkyv")]
-
 use glam::Mat4;
 use ozz_animation_rs::*;
-use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct TestData {
     ratio: f32,
     sample_out: Vec<SoaTransform>,
@@ -14,7 +11,25 @@ struct TestData {
 }
 
 #[test]
-fn test_deterministic_playback() {
+fn test_playback() {
+    run_playback(5..=5, |_, data| {
+        test_utils::compare_with_cpp("playback", "playback", &data.l2m_out, 1e-5).unwrap()
+    });
+}
+
+#[cfg(feature = "rkyv")]
+#[test]
+fn test_playback_deterministic() {
+    run_playback(-1..=11, |ratio, data| {
+        test_utils::compare_with_rkyv("playback", &format!("playback{:+.2}", ratio), data).unwrap()
+    });
+}
+
+fn run_playback<I, T>(range: I, tester: T)
+where
+    I: Iterator<Item = i32>,
+    T: Fn(f32, &TestData),
+{
     let skeleton = Rc::new(Skeleton::from_file("./resource/playback/skeleton.ozz").unwrap());
     let animation = Rc::new(Animation::from_file("./resource/playback/animation.ozz").unwrap());
 
@@ -34,19 +49,20 @@ fn test_deterministic_playback() {
     let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
     l2m_job.set_output(l2m_out.clone());
 
-    for i in -1..=11 {
-        let r = i as f32 / 10.0;
-        sample_job.set_ratio(r);
+    for i in range {
+        let ratio = i as f32 / 10.0;
+        sample_job.set_ratio(ratio);
         sample_job.run().unwrap();
         l2m_job.run().unwrap();
 
-        let data = TestData {
-            ratio: r,
-            sample_out: sample_out.vec().unwrap().clone(),
-            sample_ctx: sample_job.context().unwrap().clone_without_animation_id(),
-            l2m_out: l2m_out.vec().unwrap().clone(),
-        };
-
-        test_utils::compare_with_rkyv("playback", &format!("playback{:+.2}", r), &data).unwrap();
+        tester(
+            ratio,
+            &TestData {
+                ratio,
+                sample_out: sample_out.vec().unwrap().clone(),
+                sample_ctx: sample_job.context().unwrap().clone_without_animation_id(),
+                l2m_out: l2m_out.vec().unwrap().clone(),
+            },
+        );
     }
 }
