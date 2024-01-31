@@ -257,7 +257,7 @@ impl IKTwoBoneJob {
     fn compute_mid_joint(&self, setup: &IKConstantSetup, start_target_ss_len2: f32x4) -> f32x4 {
         let start_mid_end_sum_ss_len2 = setup.start_mid_ss_len2 + setup.mid_end_ss_len2; // [x]
         let start_mid_end_ss_half_rlen =
-            fx4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).recip().sqrt()); // [x]
+            fx4_splat_x(FRAC_1_2 * (setup.start_mid_ss_len2 * setup.mid_end_ss_len2).sqrt().recip()); // [x]
 
         let mid_cos_angles_unclamped = (fx4_splat_x(start_mid_end_sum_ss_len2)
             - fx4_set_y(start_target_ss_len2, setup.start_end_ss_len2))
@@ -309,8 +309,8 @@ impl IKTwoBoneJob {
                 fx4_set_y(start_target_ss_len2, ref_plane_normal_ss_len2),
                 joint_plane_normal_ss_len2,
             )
-            .recip()
-            .sqrt(); // [x y z]
+            .sqrt()
+            .recip(); // [x y z]
 
             let rotate_plane_cos_angle = vec3_dot_s(
                 ref_plane_normal_ss * fx4_splat_y(rsqrts),
@@ -353,8 +353,8 @@ impl IKTwoBoneJob {
                 0.0,
                 0.0,
             ])
-            .recip()
-            .sqrt();
+            .sqrt()
+            .recip();
 
             self.start_joint_correction = start_lerp * fx4_splat_x(rsqrts);
             self.mid_joint_correction = mid_lerp * fx4_splat_y(rsqrts);

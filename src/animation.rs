@@ -120,10 +120,10 @@ impl QuaternionKey {
         k3: &QuaternionKey,
         soa: &mut SoaQuat,
     ) {
-        const INT_2_FLOAT: f32x4 = f32x4::from_array([1.0f32 / (32767.0f32 * core::f32::consts::SQRT_2); 4]);
+        const INT_2_FLOAT: f32x4 = f32x4::from_array([1.0 / (32767.0 * core::f32::consts::SQRT_2); 4]);
 
-        const ONE: f32x4 = f32x4::from_array([1.0f32; 4]);
-        const SMALL: f32x4 = f32x4::from_array([1e-16f32; 4]);
+        const ONE: f32x4 = f32x4::from_array([1.0; 4]);
+        const SMALL: f32x4 = f32x4::from_array([1e-16; 4]);
 
         const MASK_F000:i32x4 = i32x4::from_array([-1i32, 0, 0, 0]);
         const MASK_0F00:i32x4 = i32x4::from_array([0, -1i32, 0, 0]);
@@ -137,11 +137,11 @@ impl QuaternionKey {
         let m2 = &MAPPING[k2.largest() as usize];
         let m3 = &MAPPING[k3.largest() as usize];
 
-        let mut cmp_keys: [[f32; 4]; 4] = [
-            [ k0.value[m0[0]] as f32, k1.value[m1[0]] as f32, k2.value[m2[0]] as f32, k3.value[m3[0]] as f32 ],
-            [ k0.value[m0[1]] as f32, k1.value[m1[1]] as f32, k2.value[m2[1]] as f32, k3.value[m3[1]] as f32 ],
-            [ k0.value[m0[2]] as f32, k1.value[m1[2]] as f32, k2.value[m2[2]] as f32, k3.value[m3[2]] as f32 ],
-            [ k0.value[m0[3]] as f32, k1.value[m1[3]] as f32, k2.value[m2[3]] as f32, k3.value[m3[3]] as f32 ],
+        let mut cmp_keys: [f32x4; 4] = [
+            f32x4::from_array([ k0.value[m0[0]] as f32, k1.value[m1[0]] as f32, k2.value[m2[0]] as f32, k3.value[m3[0]] as f32 ]),
+            f32x4::from_array([ k0.value[m0[1]] as f32, k1.value[m1[1]] as f32, k2.value[m2[1]] as f32, k3.value[m3[1]] as f32 ]),
+            f32x4::from_array([ k0.value[m0[2]] as f32, k1.value[m1[2]] as f32, k2.value[m2[2]] as f32, k3.value[m3[2]] as f32 ]),
+            f32x4::from_array([ k0.value[m0[3]] as f32, k1.value[m1[3]] as f32, k2.value[m2[3]] as f32, k3.value[m3[3]] as f32 ]),
         ]; // TODO: simd int to float
         cmp_keys[k0.largest() as usize][0] = 0.0f32;
         cmp_keys[k1.largest() as usize][1] = 0.0f32;
@@ -149,14 +149,14 @@ impl QuaternionKey {
         cmp_keys[k3.largest() as usize][3] = 0.0f32;
 
         let mut cpnt = [
-            INT_2_FLOAT * f32x4::from_array(cmp_keys[0]),
-            INT_2_FLOAT * f32x4::from_array(cmp_keys[1]),
-            INT_2_FLOAT * f32x4::from_array(cmp_keys[2]),
-            INT_2_FLOAT * f32x4::from_array(cmp_keys[3]),
+            INT_2_FLOAT * cmp_keys[0],
+            INT_2_FLOAT * cmp_keys[1],
+            INT_2_FLOAT * cmp_keys[2],
+            INT_2_FLOAT * cmp_keys[3],
         ];
         let dot = cpnt[0] * cpnt[0] + cpnt[1] * cpnt[1] + cpnt[2] * cpnt[2] + cpnt[3] * cpnt[3];
         let ww0 = f32x4::simd_max(SMALL, ONE - dot);
-        let w0 = ww0 * ww0.recip().sqrt();
+        let w0 = ww0.sqrt();
         let sign = i32x4::from_array([k0.sign() as i32, k1.sign() as i32, k2.sign() as i32, k3.sign() as i32]) << 31;
         let restored = ix4(w0) | sign;
 
@@ -229,7 +229,10 @@ impl ArchiveReader<Animation> for Animation {
         let rotation_count: i32 = archive.read()?;
         let scale_count: i32 = archive.read()?;
 
-        let name: String = archive.read_string(name_len as usize)?;
+        let mut name = String::new();
+        if name_len != 0 {
+            name = archive.read_string(name_len as usize)?;
+        }
         let translations: Vec<Float3Key> = archive.read_vec(translation_count as usize)?;
         let rotations: Vec<QuaternionKey> = archive.read_vec(rotation_count as usize)?;
         let scales: Vec<Float3Key> = archive.read_vec(scale_count as usize)?;
@@ -436,10 +439,10 @@ mod tests {
         assert_eq!(
             soa,
             SoaQuat {
-                x: f32x4::from_array([0.008545618438802194, 0.767303715540273, 0.00000000, -0.501839280]),
-                y: f32x4::from_array([0.008826156417853781, 0.11342366291501094, 0.00000000, -0.507083178]),
-                z: f32x4::from_array([0.006085516160965199, -0.3139651582478109, -0.00420806976, -0.525850952]),
-                w: f32x4::from_array([0.9999060145140845, 0.5475453955750709, 0.999991119, 0.463146627]),
+                x: f32x4::from_array([0.0085456185, 0.7673037, 0.0, -0.5018393]),
+                y: f32x4::from_array([0.008826156, 0.11342366, 0.0, -0.5070832]),
+                z: f32x4::from_array([0.006085516, -0.31396517, -0.0042080698, -0.52585095]),
+                w: f32x4::from_array([0.999906, 0.5475454, 0.9999911, 0.46314663]),
             }
         );
     }

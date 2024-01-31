@@ -1,11 +1,8 @@
-#![cfg(feature = "rkyv")]
-
 use glam::{Mat4, Quat, Vec3A};
 use ozz_animation_rs::*;
-use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 struct TestData {
     locals1: Vec<SoaTransform>,
     locals2: Vec<SoaTransform>,
@@ -22,7 +19,25 @@ const TARGET_OFFSET: Vec3A = Vec3A::new(0.2, 1.5, -0.3);
 const EYES_OFFSET: Vec3A = Vec3A::new(0.07, 0.1, 0.0);
 
 #[test]
-fn test_deterministic_look_at() {
+fn test_look_at() {
+    run_look_at(1..=1, |_, data| {
+        test_utils::compare_with_cpp("look_at", "look_at", &data.models2, 1.5e-4).unwrap();
+    });
+}
+
+#[cfg(feature = "rkyv")]
+#[test]
+fn test_look_at_deterministic() {
+    run_look_at(0..=10, |idx, data| {
+        test_utils::compare_with_rkyv("look_at", &format!("look_at_{:02}", idx), data).unwrap();
+    });
+}
+
+fn run_look_at<I, T>(range: I, tester: T)
+where
+    I: Iterator<Item = i32>,
+    T: Fn(i32, &TestData),
+{
     let skeleton = Rc::new(Skeleton::from_file("./resource/look_at/skeleton.ozz").unwrap());
     let animation = Rc::new(Animation::from_file("./resource/look_at/animation.ozz").unwrap());
 
@@ -58,8 +73,8 @@ fn test_deterministic_look_at() {
     l2m_job2.set_input(locals2.clone());
     l2m_job2.set_output(models2.clone());
 
-    for i in 0..=10 {
-        let time = i as f32;
+    for idx in range {
+        let time = idx as f32;
         let delta = (time / 5.0).fract();
 
         let animated_target = Vec3A::new(f32_sin(time * 0.5), f32_cos(time * 0.25), f32_cos(time) * 0.5 + 0.5);
@@ -70,6 +85,7 @@ fn test_deterministic_look_at() {
 
         l2m_job1.run().unwrap();
         locals2.borrow_mut().clone_from_slice(locals1.borrow().as_slice());
+        models2.borrow_mut().clone_from_slice(models1.borrow().as_slice());
 
         ik_job.set_pole_vector(Vec3A::Y);
         ik_job.set_target(target);
@@ -121,16 +137,17 @@ fn test_deterministic_look_at() {
         l2m_job2.set_from(previous_joint);
         l2m_job2.run().unwrap();
 
-        let data = TestData {
-            locals1: locals1.vec().unwrap().clone(),
-            locals2: locals2.vec().unwrap().clone(),
-            models1: models1.vec().unwrap().clone(),
-            models2: models2.vec().unwrap().clone(),
-            joint_corrections,
-            reacheds,
-        };
-
-        test_utils::compare_with_rkyv("look_at", &format!("look_at_ik_{:02}", i), &data).unwrap();
+        tester(
+            idx,
+            &TestData {
+                locals1: locals1.vec().unwrap().clone(),
+                locals2: locals2.vec().unwrap().clone(),
+                models1: models1.vec().unwrap().clone(),
+                models2: models2.vec().unwrap().clone(),
+                joint_corrections,
+                reacheds,
+            },
+        );
     }
 }
 

@@ -1049,8 +1049,8 @@ pub(crate) fn fx4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     let cos_sign = bit1 ^ bit2;
 
     // Correct the signs
-    let out_sin = sin_sign.simd_eq(SIGN).select(-s, s);
-    let out_cos = cos_sign.simd_eq(SIGN).select(-c, c);
+    let out_sin = fx4_xor(s, sin_sign);
+    let out_cos = fx4_xor(c, cos_sign);
     return (out_sin, out_cos);
 }
 
@@ -1083,7 +1083,7 @@ pub(crate) fn fx4_asin(v: f32x4) -> f32x4 {
     const N5: f32x4 = f32x4::from_array([1.6666752422e-1; 4]);
 
     // Make argument positive
-    let non_neg = v.simd_ge(ZERO);
+    let asin_sign = fx4_sign(v);
     let mut a = v.abs();
 
     // ASin is not defined outside the range [-1, 1] but it often happens that a value is slightly above 1 so we just clamp here
@@ -1109,7 +1109,7 @@ pub(crate) fn fx4_asin(v: f32x4) -> f32x4 {
     z = greater.select(FRAC_PI_2 - (z + z), z);
 
     // Put the sign back
-    return non_neg.select(z, -z);
+    return fx4_xor(z, asin_sign);
 }
 
 #[inline]

@@ -159,7 +159,7 @@ impl IKAimJob {
         let rotate_plane_axis_js;
         let rotate_plane_js;
         if denoms.simd_ne(ZERO).to_bitmask() & 0x7 == 0x7 {
-            let rsqrts = denoms.recip().sqrt();
+            let rsqrts = denoms.sqrt().recip();
             rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(rsqrts);
 
             let rotate_plane_cos_angle = vec3_dot_s(
@@ -173,7 +173,7 @@ impl IKAimJob {
                 rotate_plane_cos_angle.simd_clamp(NEG_ONE, ONE),
             );
         } else {
-            rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(denoms.sqrt());
+            rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(denoms.sqrt().recip());
             rotate_plane_js = QUAT_UNIT;
         }
 
