@@ -2,7 +2,8 @@ use glam::Mat4;
 use ozz_animation_rs::*;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 struct TestData {
     ratio: f32,
     sample_out1: Vec<SoaTransform>,

@@ -3,7 +3,6 @@ use std::env::consts::{ARCH, OS};
 use std::error::Error;
 use std::fs::{self, File};
 use std::io::prelude::*;
-use std::sync::OnceLock;
 use std::{env, mem, slice};
 
 // f16 -> f32
@@ -19,13 +18,9 @@ pub fn f16(f: f32) -> u16 {
     return (sign | expo | base) as u16;
 }
 
-static FOLDER: OnceLock<()> = OnceLock::new();
-
 pub fn compare_with_cpp(folder: &str, name: &str, data: &[Mat4], diff: f32) -> Result<(), Box<dyn Error>> {
-    FOLDER.get_or_init(|| {
-        fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
-        fs::create_dir_all(format!("./output/{}", folder)).unwrap();
-    });
+    fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
+    fs::create_dir_all(format!("./output/{}", folder)).unwrap();
 
     let path = format!("./output/{0}/{1}_rust_{2}_{3}.bin", folder, name, OS, ARCH);
     let mut file = File::create(path)?;
@@ -56,35 +51,39 @@ where
     T: PartialEq + rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<30720>>,
     T::Archived: rkyv::Deserialize<T, rkyv::Infallible>,
 {
+    use miniz_oxide::deflate::compress_to_vec;
+    use miniz_oxide::inflate::decompress_to_vec;
     use rkyv::ser::Serializer;
     use rkyv::{AlignedVec, Deserialize};
 
-    FOLDER.get_or_init(|| {
-        fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
-        fs::create_dir_all(format!("./output/{}", folder)).unwrap();
-    });
+    fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
+    fs::create_dir_all(format!("./output/{}", folder)).unwrap();
 
     let to_expected = env::var("SAVE_TO_EXPECTED").is_ok();
 
     let mut serializer = rkyv::ser::serializers::AllocSerializer::<30720>::default();
     serializer.serialize_value(data)?;
-    let buf = serializer.into_serializer().into_inner();
+    let current_buf = serializer.into_serializer().into_inner();
+    let wbuf = compress_to_vec(&current_buf, 6);
     let path = if to_expected {
         format!("./expected/{0}/{1}.rkyv", folder, name)
     } else {
         format!("./output/{0}/{1}_{2}_{3}.rkyv", folder, name, OS, ARCH)
     };
     let mut file = File::create(path)?;
-    file.write_all(&buf)?;
+    file.write_all(&wbuf)?;
 
     if !to_expected {
         let path = format!("./expected/{0}/{1}.rkyv", folder, name);
         let mut file = File::open(&path)?;
         let size = file.metadata().map(|m| m.len()).unwrap_or(0);
-        let mut buf = AlignedVec::with_capacity(size as usize);
-        buf.extend_from_reader(&mut file)?;
+        let mut rbuf = Vec::with_capacity(size as usize);
+        file.read_to_end(&mut rbuf)?;
+        let unaligned_buf = decompress_to_vec(&rbuf).map_err(|e| e.to_string())?;
+        let mut expected_buf = AlignedVec::new();
+        expected_buf.extend_from_slice(&unaligned_buf);
 
-        let archived = unsafe { rkyv::archived_root::<T>(&buf) };
+        let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
         let mut deserializer = rkyv::Infallible::default();
         let expected = archived.deserialize(&mut deserializer)?;
         if data != &expected {
