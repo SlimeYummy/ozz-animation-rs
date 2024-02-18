@@ -1,9 +1,9 @@
 use glam::{Mat4, Vec4};
 use ozz_animation_rs::*;
-use rkyv::{Archive, Deserialize, Serialize};
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 struct TestData {
     ratio: f32,
     sample_out_base: Vec<SoaTransform>,
@@ -12,7 +12,8 @@ struct TestData {
     l2m_out: Vec<Mat4>,
 }
 
-#[derive(Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 struct TestDataInit {
     sample_out_splay: Vec<SoaTransform>,
     sample_ctx_splay: SamplingContext,
