@@ -5,26 +5,40 @@ use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
 use crate::math::SoaTransform;
 use crate::{DeterministicState, OzzError};
 
+///
+/// This runtime skeleton data structure provides a const-only access to joint
+/// hierarchy, joint names and rest-pose.
+///
+/// Joint names, rest-poses and hierarchy information are all stored in separate
+/// arrays of data (as opposed to joint structures for the RawSkeleton), in order
+/// to closely match with the way runtime algorithms use them. Joint hierarchy is
+/// packed as an array of parent jont indices (16 bits), stored in depth-first
+/// order. This is enough to traverse the whole joint hierarchy. Use
+/// iter_depth_first() to implement a depth-first traversal utility.
+///
 #[derive(Debug)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Skeleton {
-    pub(crate) joint_rest_poses: Vec<SoaTransform>,
-    pub(crate) joint_parents: Vec<i16>,
-    pub(crate) joint_names: HashMap<String, i16, DeterministicState>,
+    joint_rest_poses: Vec<SoaTransform>,
+    joint_parents: Vec<i16>,
+    joint_names: HashMap<String, i16, DeterministicState>,
 }
 
+/// Defines the version of the `Skeleton` archive.
 impl ArchiveVersion for Skeleton {
     fn version() -> u32 {
         return 2;
     }
 }
 
+/// Defines the tag of the `Skeleton` archive.
 impl ArchiveTag for Skeleton {
     fn tag() -> &'static str {
         return "ozz-skeleton";
     }
 }
 
+/// Reads `Skeleton` from `IArchive`.
 impl ArchiveReader<Skeleton> for Skeleton {
     fn read(archive: &mut IArchive) -> Result<Skeleton, OzzError> {
         if !archive.test_tag::<Self>()? {
@@ -68,73 +82,95 @@ impl ArchiveReader<Skeleton> for Skeleton {
 }
 
 impl Skeleton {
+    /// Reads a `Skeleton` from a file.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Skeleton, OzzError> {
         let mut archive = IArchive::new(path)?;
         return Skeleton::read(&mut archive);
     }
 
+    /// Reads a `Skeleton` from a reader.
     pub fn from_reader(reader: &mut IArchive) -> Result<Skeleton, OzzError> {
         return Skeleton::read(reader);
+    }
+
+    /// Creates a `Skeleton` from raw data.
+    pub fn from_raw(
+        joint_rest_poses: Vec<SoaTransform>,
+        joint_parents: Vec<i16>,
+        joint_names: HashMap<String, i16, DeterministicState>,
+    ) -> Skeleton {
+        return Skeleton {
+            joint_rest_poses,
+            joint_parents,
+            joint_names,
+        };
     }
 }
 
 impl Skeleton {
-    #[inline(always)]
-    pub fn max_joints() -> usize {
-        return 1024;
-    }
-
-    #[inline(always)]
-    pub fn max_soa_joints() -> usize {
-        return (Self::max_joints() + 3) / 4;
-    }
-
-    #[inline(always)]
-    pub fn no_parent() -> i16 {
-        return -1;
-    }
-
+    /// Gets the number of joints of `Skeleton`.
+    #[inline]
     pub fn num_joints(&self) -> usize {
         return self.joint_parents.len();
     }
 
+    /// Gets the number of joints of `Skeleton` (aligned to 4 * SoA).
+    #[inline]
     pub fn num_aligned_joints(&self) -> usize {
         return (self.num_joints() + 3) & !0x3;
     }
 
+    /// Gets the number of soa elements matching the number of joints of `Skeleton`.
+    /// This value is useful to allocate SoA runtime data structures.
+    #[inline]
     pub fn num_soa_joints(&self) -> usize {
         return (self.joint_parents.len() + 3) / 4;
     }
 
+    /// Gets joint's rest poses. Rest poses are stored in soa format.
+    #[inline]
     pub fn joint_rest_poses(&self) -> &[SoaTransform] {
         return &self.joint_rest_poses;
     }
 
+    /// Gets joint's parent indices range.
+    #[inline]
     pub fn joint_parents(&self) -> &[i16] {
         return &self.joint_parents;
     }
 
+    /// Gets joint's parent by index.
+    #[inline]
     pub fn joint_parent(&self, idx: usize) -> i16 {
         return self.joint_parents[idx];
     }
 
+    /// Gets joint's name map.
+    #[inline]
     pub fn joint_names(&self) -> &HashMap<String, i16, DeterministicState> {
         return &self.joint_names;
     }
 
+    /// Gets joint's index by name.
+    #[inline]
     pub fn joint_by_name(&self, name: &str) -> Option<i16> {
         return self.joint_names.get(name).map(|idx| *idx);
     }
 
-    pub fn index_joint(&self, idx: i16) -> Option<&SoaTransform> {
-        return self.joint_rest_poses.get(idx as usize);
-    }
-
+    /// Test if a joint is a leaf.
+    ///
+    /// * `joint` - `joint` must be in range [0, num joints].
+    ///   Joint is a leaf if it's the last joint, or next joint's parent isn't `joint`.
+    #[inline]
     pub fn is_leaf(&self, joint: i16) -> bool {
         let next = (joint + 1) as usize;
         return next == self.num_joints() || self.joint_parents()[next] != joint;
     }
 
+    /// Iterates through the joint hierarchy in depth-first order.
+    ///
+    /// * `from` - The joint index to start from. If negative, the iteration starts from the root.
+    /// * `f` - The function to call for each joint. The function takes arguments `(joint: i16, parent: i16)`.
     pub fn iter_depth_first<F>(&self, from: i16, mut f: F)
     where
         F: FnMut(i16, i16),
@@ -148,6 +184,9 @@ impl Skeleton {
         }
     }
 
+    /// Iterates through the joint hierarchy in reverse depth-first order.
+    ///
+    /// * `f` - The function to call for each joint. The function takes arguments `(joint: i16, parent: i16)`.
     pub fn iter_depth_first_reverse<F>(&self, mut f: F)
     where
         F: FnMut(i16, i16),

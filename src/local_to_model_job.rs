@@ -184,7 +184,7 @@ where
             let soa_end = (idx + 4) & !3;
             while idx < soa_end && process {
                 let parent = skeleton.joint_parent(idx);
-                if parent == Skeleton::no_parent() {
+                if parent as i32 == SKELETON_NO_PARENT {
                     output[idx] = AosMat4::mul(&self.root, &aos_matrices[idx & 3]).into();
                 } else {
                     output[idx] = AosMat4::mul(&output[parent as usize].into(), &aos_matrices[idx & 3]).into();
@@ -270,8 +270,8 @@ mod local_to_model_tests {
         // j1  j3
         //  |  / \
         // j2 j4 j5
-        return Rc::new(Skeleton {
-            joint_rest_poses: vec![
+        return Rc::new(Skeleton::from_raw(
+            vec![
                 SoaTransform {
                     translation: SoaVec3::splat_col([0.0; 3]),
                     rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
@@ -279,8 +279,8 @@ mod local_to_model_tests {
                 };
                 2
             ],
-            joint_parents: vec![-1, 0, 1, 0, 3, 3],
-            joint_names: (|| {
+            vec![-1, 0, 1, 0, 3, 3],
+            (|| {
                 let mut map = HashMap::with_hasher(DeterministicState::new());
                 map.insert("j0".into(), 0);
                 map.insert("j1".into(), 1);
@@ -290,7 +290,7 @@ mod local_to_model_tests {
                 map.insert("j5".into(), 5);
                 return map;
             })(),
-        });
+        ));
     }
 
     fn new_input1() -> Rc<RefCell<Vec<SoaTransform>>> {
@@ -329,8 +329,8 @@ mod local_to_model_tests {
         // j2 j4 j6
         //     |
         //    j5
-        return Rc::new(Skeleton {
-            joint_rest_poses: vec![
+        return Rc::new(Skeleton::from_raw(
+            vec![
                 SoaTransform {
                     translation: SoaVec3::splat_col([0.0; 3]),
                     rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
@@ -338,8 +338,8 @@ mod local_to_model_tests {
                 };
                 2
             ],
-            joint_parents: vec![-1, 0, 1, 0, 3, 4, 3, -1],
-            joint_names: (|| {
+            vec![-1, 0, 1, 0, 3, 4, 3, -1],
+            (|| {
                 let mut map = HashMap::with_hasher(DeterministicState::new());
                 map.insert("j0".into(), 0);
                 map.insert("j1".into(), 1);
@@ -351,7 +351,7 @@ mod local_to_model_tests {
                 map.insert("j7".into(), 7);
                 return map;
             })(),
-        });
+        ));
     }
 
     fn new_input2() -> Rc<RefCell<Vec<SoaTransform>>> {

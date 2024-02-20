@@ -9,6 +9,7 @@ use crate::animation::{Animation, Float3Key, QuaternionKey};
 use crate::base::{OzzBuf, OzzError, OzzRef};
 use crate::math::{f32_clamp_or_max, SoaQuat, SoaTransform, SoaVec3};
 
+/// Soa hot `SoaVec3` data to interpolate.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct InterpSoaFloat3 {
@@ -43,6 +44,7 @@ impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<InterpSoaFloat3, D> for Inter
     }
 }
 
+/// Soa hot `SoaQuat` data to interpolate.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct InterpSoaQuaternion {
@@ -135,6 +137,8 @@ impl Default for SamplingContextInner {
     }
 }
 
+/// Declares the context object used by the workload to take advantage of the
+/// frame coherency of animation sampling.
 pub struct SamplingContext(*mut SamplingContextInner);
 
 impl Debug for SamplingContext {
@@ -203,6 +207,9 @@ impl SamplingContext {
         return unsafe { &mut *self.0 };
     }
 
+    /// Create a new `SamplingContext`
+    /// 
+    /// * `max_tracks` - The maximum number of tracks that the context can handle.
     pub fn new(max_tracks: usize) -> SamplingContext {
         let max_soa_tracks = (max_tracks + 3) / 4;
         let max_tracks = max_soa_tracks * 4;
@@ -250,12 +257,16 @@ impl SamplingContext {
         };
     }
 
+    /// Create a new `SamplingContext` from an `Animation`.
+    /// 
+    /// * `animation` - The animation to sample. Use `animation.num_tracks()` as max_tracks.
     pub fn from_animation(animation: &Animation) -> SamplingContext {
         let mut ctx = SamplingContext::new(animation.num_tracks());
         ctx.inner_mut().animation_id = animation as *const _ as u64;
         return ctx;
     }
 
+    /// Clear the `SamplingContext`.
     pub fn clear(&mut self) {
         self.inner_mut().animation_id = 0;
         self.inner_mut().translation_cursor = 0;
@@ -263,36 +274,44 @@ impl SamplingContext {
         self.inner_mut().scale_cursor = 0;
     }
 
+    /// Clone the `SamplingContext` without the animation id. Usually used for serialization.
     pub fn clone_without_animation_id(&self) -> SamplingContext {
         let mut ctx = self.clone();
         ctx.set_animation_id(0);
         return ctx;
     }
 
+    /// The memory size of the context in bytes.
     pub fn size(&self) -> usize {
         return self.inner().size;
     }
 
+    /// The maximum number of SoA tracks that the context can handle.
     pub fn max_soa_tracks(&self) -> usize {
         return self.inner().max_soa_tracks;
     }
 
+    /// The maximum number of tracks that the context can handle.
     pub fn max_tracks(&self) -> usize {
         return self.inner().max_tracks;
     }
 
+    /// The number of tracks that are outdated.
     pub fn num_outdated(&self) -> usize {
         return self.inner().num_outdated;
     }
 
+    /// The unique identifier of the animation that the context is sampling.
     pub fn animation_id(&self) -> u64 {
         return self.inner().animation_id;
     }
 
+    /// Set the unique identifier of the animation that the context is sampling.
     pub fn set_animation_id(&mut self, id: u64) {
         self.inner_mut().animation_id = id;
     }
 
+    /// The current time ratio in the animation.
     pub fn ratio(&self) -> f32 {
         return self.inner().ratio;
     }
@@ -301,6 +320,7 @@ impl SamplingContext {
         self.inner_mut().ratio = ratio;
     }
 
+    /// Soa hot data to interpolate.
     pub fn translations(&self) -> &[InterpSoaFloat3] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.translations_ptr, inner.max_soa_tracks) };
@@ -311,6 +331,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.translations_ptr, inner.max_soa_tracks) };
     }
 
+    /// Soa hot data to interpolate.
     pub fn rotations(&self) -> &[InterpSoaQuaternion] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.rotations_ptr, inner.max_soa_tracks) };
@@ -321,6 +342,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.rotations_ptr, inner.max_soa_tracks) };
     }
 
+    /// Soa hot data to interpolate.
     pub fn scales(&self) -> &[InterpSoaFloat3] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.scales_ptr, inner.max_soa_tracks) };
@@ -331,6 +353,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.scales_ptr, inner.max_soa_tracks) };
     }
 
+    /// The keys in the animation that are valid for the current time ratio.
     pub fn translation_keys(&self) -> &[i32] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.translation_keys_ptr, inner.max_tracks * 2) };
@@ -341,6 +364,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.translation_keys_ptr, inner.max_tracks * 2) };
     }
 
+    /// The keys in the animation that are valid for the current time ratio.
     pub fn rotation_keys(&self) -> &[i32] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.rotation_keys_ptr, inner.max_tracks * 2) };
@@ -351,6 +375,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.rotation_keys_ptr, inner.max_tracks * 2) };
     }
 
+    /// The keys in the animation that are valid for the current time ratio.
     pub fn scale_keys(&self) -> &[i32] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.scale_keys_ptr, inner.max_tracks * 2) };
@@ -361,6 +386,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.scale_keys_ptr, inner.max_tracks * 2) };
     }
 
+    /// Current cursors in the animation. 0 means that the context is invalid.
     pub fn translation_cursor(&self) -> usize {
         return self.inner().translation_cursor;
     }
@@ -369,6 +395,7 @@ impl SamplingContext {
         self.inner_mut().translation_cursor = cursor;
     }
 
+    /// Current cursors in the animation. 0 means that the context is invalid.
     pub fn rotation_cursor(&self) -> usize {
         return self.inner().rotation_cursor;
     }
@@ -377,6 +404,7 @@ impl SamplingContext {
         self.inner_mut().rotation_cursor = cursor;
     }
 
+    /// Current cursors in the animation. 0 means that the context is invalid.
     pub fn scale_cursor(&self) -> usize {
         return self.inner().scale_cursor;
     }
@@ -385,6 +413,7 @@ impl SamplingContext {
         self.inner_mut().scale_cursor = cursor;
     }
 
+    /// Outdated soa entries. One bit per soa entry (32 joints per byte).
     pub fn outdated_translations(&self) -> &[u8] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.outdated_translations_ptr, inner.num_outdated) };
@@ -395,6 +424,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_translations_ptr, inner.num_outdated) };
     }
 
+    /// Outdated soa entries. One bit per soa entry (32 joints per byte).
     pub fn outdated_rotations(&self) -> &[u8] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.outdated_rotations_ptr, inner.num_outdated) };
@@ -405,6 +435,7 @@ impl SamplingContext {
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_rotations_ptr, inner.num_outdated) };
     }
 
+    /// Outdated soa entries. One bit per soa entry (32 joints per byte).
     pub fn outdated_scales(&self) -> &[u8] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.outdated_scales_ptr, inner.num_outdated) };
@@ -655,6 +686,17 @@ impl<C: ?Sized> bytecheck::CheckBytes<C> for ArchivedSamplingContext {
     }
 }
 
+///
+/// Samples an animation at a given time ratio in the unit interval 0.0-1.0 (where 0.0 is the beginning of
+/// the animation, 1.0 is the end), to output the corresponding posture in local-space.
+/// 
+/// `SamplingJob` uses `SamplingContext` to store intermediate values (decompressed animation keyframes...)
+/// while sampling.
+/// This context also stores pre-computed values that allows drastic optimization while playing/sampling the
+/// animation forward.
+/// Backward sampling works, but isn't optimized through the context. The job does not owned the buffers
+/// (in/output) and will thus not delete them during job's destruction.
+///
 #[derive(Debug)]
 pub struct SamplingJob<A = Rc<Animation>, O = Rc<RefCell<Vec<SoaTransform>>>>
 where
@@ -689,56 +731,81 @@ where
     A: OzzRef<Animation>,
     O: OzzBuf<SoaTransform>,
 {
+    /// Gets animation to sample of `SamplingJob`.
     pub fn animation(&self) -> Option<&A> {
         return self.animation.as_ref();
     }
 
+    /// Sets animation to sample of `SamplingJob`.
     pub fn set_animation(&mut self, animation: A) {
         self.verified = false;
         self.animation = Some(animation);
     }
 
+    /// Clears animation to sample of `SamplingJob`.
     pub fn clear_animation(&mut self) {
         self.verified = false;
         self.animation = None;
     }
 
+    /// Gets context of `SamplingJob`. See [SamplingContext].
     pub fn context(&self) -> Option<&SamplingContext> {
         return self.context.as_ref();
     }
 
+    /// Sets context of `SamplingJob`. See [SamplingContext].
     pub fn set_context(&mut self, ctx: SamplingContext) {
         self.verified = false;
         self.context = Some(ctx);
     }
 
+    /// Clears context of `SamplingJob`. See [SamplingContext].
     pub fn clear_context(&mut self) {
         self.verified = false;
         self.context = None;
     }
 
+    /// Gets output of `SamplingJob`.
     pub fn output(&self) -> Option<&O> {
         return self.output.as_ref();
     }
 
+    /// Sets output of `SamplingJob`.
+    /// 
+    /// The output range to be filled with sampled joints during job execution.
+    /// 
+    /// If there are less joints in the animation compared to the output range, then remaining
+    /// `SoaTransform` are left unchanged.
+    /// If there are more joints in the animation, then the last joints are not sampled.
     pub fn set_output(&mut self, output: O) {
         self.verified = false;
         self.output = Some(output);
     }
 
+    /// Clears output of `SamplingJob`.
     pub fn clear_output(&mut self) {
         self.verified = false;
         self.output = None;
     }
 
+    /// Gets the time ratio of `SamplingJob`.
     pub fn ratio(&self) -> f32 {
         return self.ratio;
     }
 
+    /// Sets the time ratio of `SamplingJob`.
+    /// 
+    /// Time ratio in the unit interval 0.0-1.0 used to sample animation (where 0 is the beginning of
+    /// the animation, 1 is the end). It should be computed as the current time in the animation,
+    /// divided by animation duration.
+    /// 
+    /// This ratio is clamped before job execution in order to resolves any approximation issue on range
+    /// bounds.
     pub fn set_ratio(&mut self, ratio: f32) {
         self.ratio = f32_clamp_or_max(ratio, 0.0f32, 1.0f32);
     }
 
+    /// Validates `SamplingJob` parameters.
     pub fn validate(&self) -> bool {
         let animation = match &self.animation {
             Some(animation) => animation,
@@ -767,6 +834,8 @@ where
         return true;
     }
 
+    /// Runs job's sampling task.
+    /// The job call `validate()` to validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if !self.verified {
             if !self.validate() {
@@ -1160,14 +1229,14 @@ mod sampling_tests {
         scales: Vec<Float3Key>,
         frames: Vec<Frame<T>>,
     ) {
-        let animation = Rc::new(Animation {
+        let animation = Rc::new(Animation::from_raw(
             duration,
-            num_tracks: T,
-            name: String::new(),
+            T,
+            String::new(),
             translations,
             rotations,
             scales,
-        });
+        ));
         let mut job = SamplingJob::default();
         job.set_animation(animation);
         job.set_context(SamplingContext::new(T));
@@ -1410,23 +1479,23 @@ mod sampling_tests {
         translations[0] = Float3Key::new(0.0, 0, [f16(1.0), f16(-1.0), f16(5.0)]);
         translations[4] = Float3Key::new(1.0, 0, [f16(1.0), f16(-1.0), f16(5.0)]);
 
-        let animation1 = Rc::new(Animation {
-            duration: 46.0,
-            num_tracks: 1,
-            name: String::new(),
-            translations: translations.clone(),
-            rotations: new_rotations(),
-            scales: new_scales(),
-        });
+        let animation1 = Rc::new(Animation::from_raw(
+            46.0,
+            1,
+            String::new(),
+            translations.clone(),
+            new_rotations(),
+            new_scales(),
+        ));
 
-        let animation2 = Rc::new(Animation {
-            duration: 46.0,
-            num_tracks: 1,
-            name: String::new(),
-            translations: translations.clone(),
-            rotations: new_rotations(),
-            scales: new_scales(),
-        });
+        let animation2 = Rc::new(Animation::from_raw(
+            46.0,
+            1,
+            String::new(),
+            translations.clone(),
+            new_rotations(),
+            new_scales(),
+        ));
 
         let mut job = SamplingJob::default();
         job.set_animation(animation1.clone());

@@ -24,7 +24,18 @@ pub enum OzzError {
     InvalidVersion,
 }
 
+/// Defines the maximum number of joints.
+/// This is limited in order to control the number of bits required to store
+/// a joint index. Limiting the number of joints also helps handling worst
+/// size cases, like when it is required to allocate an array of joints on
+/// the stack.
 pub const SKELETON_MAX_JOINTS: i32 = 1024;
+
+/// Defines the maximum number of SoA elements required to store the maximum
+/// number of joints.
+pub const SKELETON_MAX_SOA_JOINTS: i32 = (SKELETON_MAX_JOINTS + 3) / 4;
+
+/// Defines the index of the parent of the root joint (which has no parent in fact)
 pub const SKELETON_NO_PARENT: i32 = -1;
 
 pub trait OzzRef<T>

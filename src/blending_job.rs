@@ -11,10 +11,24 @@ use crate::skeleton::Skeleton;
 const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
 const ONE: f32x4 = f32x4::from_array([1.0; 4]);
 
+/// Defines a layer of blending input data (local space transforms) and parameters (weights).
 #[derive(Debug, Clone)]
 pub struct BlendingLayer<I: OzzBuf<SoaTransform>> {
+    /// Buffer to store local space transforms, that are usually outputted from a `SamplingJob`.
     pub transform: I,
+    
+    /// Blending weight of this layer. Negative values are considered as 0.
+    /// Normalization is performed during the blending stage so weight can be in
+    /// any range, even though range 0.0-1.0 is optimal.
     pub weight: f32,
+
+    /// Optional buffer to store blending weight for each joint in this layer.
+    /// If both `joint_weights` are empty in `BlendingJob` then per joint weight blending is disabled.
+    /// When a layer doesn't specifies per joint weights, then it is implicitly considered as being 1.0.
+    /// This default value is a reference value for the normalization process, which implies that the
+    /// range of values for joint weights should be 0.0-1.0.
+    /// Negative weight values are considered as 0, but positive ones aren't clamped because they could
+    /// exceed 1.0 if all layers contains valid joint weights.
     pub joint_weights: Vec<Vec4>,
 }
 
@@ -48,6 +62,20 @@ impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
     }
 }
 
+///
+/// `BlendingJob` is in charge of blending (mixing) multiple poses
+/// (the result of a sampled animation) according to their respective weight,
+/// into one output pose.
+/// 
+/// The number of transforms/joints blended by the job is defined by the number
+/// of transforms of the rest pose (note that this is a SoA format). This means
+/// that all buffers must be at least as big as the rest pose buffer.
+/// 
+/// Partial animation blending is supported through optional joint weights that
+/// can be specified with layers joint_weights buffer. Unspecified joint weights
+/// are considered as a unit weight of 1.0, allowing to mix full and partial
+/// blend operations in a single pass.
+///
 #[derive(Debug)]
 pub struct BlendingJob<S = Rc<Skeleton>, I = Rc<RefCell<Vec<SoaTransform>>>, O = Rc<RefCell<Vec<SoaTransform>>>>
 where
@@ -97,18 +125,33 @@ where
     I: OzzBuf<SoaTransform>,
     O: OzzBuf<SoaTransform>,
 {
+    /// Gets threshold of `BlendingJob`.
     pub fn threshold(&self) -> f32 {
         return self.threshold;
     }
 
+    /// Set threshold of `BlendingJob`.
+    ///
+    /// The job blends the rest pose to the output when the accumulated weight of
+    /// all layers is less than this threshold value.
+    /// Must be greater than 0.0.
     pub fn set_threshold(&mut self, threshold: f32) {
         self.threshold = threshold;
     }
 
+    /// Gets skeleton of `BlendingJob`.
     pub fn skeleton(&self) -> Option<&S> {
         return self.skeleton.as_ref();
     }
 
+    /// Set skeleton of `BlendingJob`.
+    /// 
+    /// The skeleton that will be used during job.
+    /// 
+    /// The rest pose size of this skeleton defines the number of transforms to blend.
+    /// 
+    /// It is used when the accumulated weight for a bone on all layers is
+    /// less than the threshold value, in order to fall back on valid transforms.
     pub fn set_skeleton(&mut self, skeleton: S) {
         self.verified = false;
         let joint_rest_poses = skeleton.joint_rest_poses().len();
@@ -118,43 +161,58 @@ where
         self.skeleton = Some(skeleton);
     }
 
+    /// Clears skeleton of `BlendingJob`.
     pub fn clear_skeleton(&mut self) {
         self.verified = false;
         self.skeleton = None;
     }
 
+    /// Gets output of `BlendingJob`.
     pub fn output(&self) -> Option<&O> {
         return self.output.as_ref();
     }
 
+    /// Sets output of `BlendingJob`.
+    /// 
+    /// The range of output transforms to be filled with blended layer transforms during job execution.
     pub fn set_output(&mut self, output: O) {
         self.verified = false;
         self.output = Some(output);
     }
 
+    /// Clears output of `BlendingJob`.
     pub fn clear_output(&mut self) {
         self.verified = false;
         self.output = None;
     }
 
+    /// Gets layers of `BlendingJob`.
     pub fn layers(&self) -> &[BlendingLayer<I>] {
         return &self.layers;
     }
 
+    /// Gets mutable layers of `BlendingJob`.
+    /// 
+    /// Job input layers, can be empty or nullptr. The range of layers that must be blended.
     pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
         self.verified = false; // TODO: more efficient way to avoid verification
         return &mut self.layers;
     }
 
+    /// Gets additive layers of `BlendingJob`.
     pub fn additive_layers(&self) -> &[BlendingLayer<I>] {
         return &self.additive_layers;
     }
 
+    /// Gets mutable additive layers of `BlendingJob`.
+    /// 
+    /// Job input additive layers, can be empty or nullptr. The range of layers that must be added to the output.
     pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
         self.verified = false; // TODO: more efficient way to avoid verification
         return &mut self.additive_layers;
     }
 
+    /// Validates `BlendingJob` parameters.
     pub fn validate(&self) -> bool {
         let skeleton = match &self.skeleton {
             Some(skeleton) => skeleton,
@@ -199,6 +257,8 @@ where
         return res;
     }
 
+    /// Runs job's blending task.
+    /// The job call `validate()` to validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if !self.verified {
             if !self.validate() {
@@ -658,11 +718,11 @@ mod blending_tests {
         joint_rest_poses[1].rotation = SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]);
         joint_rest_poses[1].scale = joint_rest_poses[0].scale.mul_num(f32x4::splat(2.0));
 
-        let skeleton = Rc::new(Skeleton {
+        let skeleton = Rc::new(Skeleton::from_raw(
             joint_rest_poses,
-            joint_parents: vec![0; 8],
-            joint_names: HashMap::with_hasher(DeterministicState::new()),
-        });
+            vec![0; 8],
+            HashMap::with_hasher(DeterministicState::new()),
+        ));
 
         execute_test(
             &skeleton,
@@ -719,11 +779,11 @@ mod blending_tests {
                 ),
             },
         ];
-        let skeleton = Rc::new(Skeleton {
-            joint_rest_poses: rest_poses,
-            joint_parents: vec![0; 8],
-            joint_names: HashMap::with_hasher(DeterministicState::new()),
-        });
+        let skeleton = Rc::new(Skeleton::from_raw(
+            rest_poses,
+            vec![0; 8],
+            HashMap::with_hasher(DeterministicState::new()),
+        ));
 
         {
             layers[0].weight = -0.07;
@@ -818,11 +878,11 @@ mod blending_tests {
                 scale: SoaVec3::new([0.0, 2.0, 4.0, 6.0], [8.0, 10.0, 12.0, 14.0], [16.0, 18.0, 20.0, 22.0]),
             },
         ];
-        let skeleton = Rc::new(Skeleton {
-            joint_rest_poses: rest_poses,
-            joint_parents: vec![0; 8],
-            joint_names: HashMap::with_hasher(DeterministicState::new()),
-        });
+        let skeleton = Rc::new(Skeleton::from_raw(
+            rest_poses,
+            vec![0; 8],
+            HashMap::with_hasher(DeterministicState::new()),
+        ));
 
         {
             layers[0].weight = 0.5;
@@ -881,11 +941,11 @@ mod blending_tests {
         let mut joint_rest_poses = vec![IDENTITY];
         joint_rest_poses[0].scale = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
 
-        return Rc::new(Skeleton {
+        return Rc::new(Skeleton::from_raw(
             joint_rest_poses,
-            joint_parents: vec![0; 4],
-            joint_names: HashMap::with_hasher(DeterministicState::new()),
-        });
+            vec![0; 4],
+            HashMap::with_hasher(DeterministicState::new()),
+        ));
     }
     #[test]
     fn test_normalize() {
@@ -1098,11 +1158,11 @@ mod blending_tests {
 
     #[test]
     fn test_additive_weight() {
-        let skeleton = Rc::new(Skeleton {
-            joint_rest_poses: vec![IDENTITY; 1],
-            joint_parents: vec![0; 4],
-            joint_names: HashMap::with_hasher(DeterministicState::new()),
-        });
+        let skeleton = Rc::new(Skeleton::from_raw(
+            vec![IDENTITY; 1],
+            vec![0; 4],
+            HashMap::with_hasher(DeterministicState::new()),
+        ));
 
         let mut input1 = vec![IDENTITY; 1];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
@@ -1268,11 +1328,11 @@ mod blending_tests {
 
     #[test]
     fn test_additive_joint_weight() {
-        let skeleton = Rc::new(Skeleton {
-            joint_rest_poses: vec![IDENTITY; 1],
-            joint_parents: vec![0; 4],
-            joint_names: HashMap::with_hasher(DeterministicState::new()),
-        });
+        let skeleton = Rc::new(Skeleton::from_raw(
+            vec![IDENTITY; 1],
+            vec![0; 4],
+            HashMap::with_hasher(DeterministicState::new()),
+        ));
 
         let mut input1 = vec![IDENTITY; 1];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
