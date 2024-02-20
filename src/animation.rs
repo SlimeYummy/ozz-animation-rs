@@ -55,7 +55,7 @@ pub struct QuaternionKey {
     // largest: 2 => The largest component of the quaternion.
     // sign: 1 => The sign of the largest component. 1 for negative.
     bit_field: u16,
-    pub value: [i16; 3], // The quantized value of the 3 smallest components.
+    value: [i16; 3], // The quantized value of the 3 smallest components.
 }
 
 impl QuaternionKey {
@@ -65,10 +65,6 @@ impl QuaternionKey {
             bit_field,
             value,
         };
-    }
-
-    pub fn ratio(&self) -> f32 {
-        return self.ratio;
     }
 
     pub fn track(&self) -> u16 {
@@ -188,29 +184,45 @@ impl ArchiveReader<QuaternionKey> for QuaternionKey {
     }
 }
 
+///
+/// Defines a runtime skeletal animation clip.
+///
+/// The runtime animation data structure stores animation keyframes, for all the
+/// joints of a skeleton.
+///
+/// For each transformation type (translation, rotation and scale), Animation
+/// structure stores a single array of keyframes that contains all the tracks
+/// required to animate all the joints of a skeleton, matching breadth-first
+/// joints order of the runtime skeleton structure. In order to optimize cache
+/// coherency when sampling the animation, Keyframes in this array are sorted by
+/// time, then by track number.
+///
 #[derive(Debug)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Animation {
-    pub(crate) duration: f32,
-    pub(crate) num_tracks: usize,
-    pub(crate) name: String,
-    pub(crate) translations: Vec<Float3Key>,
-    pub(crate) rotations: Vec<QuaternionKey>,
-    pub(crate) scales: Vec<Float3Key>,
+    duration: f32,
+    num_tracks: usize,
+    name: String,
+    translations: Vec<Float3Key>,
+    rotations: Vec<QuaternionKey>,
+    scales: Vec<Float3Key>,
 }
 
+/// Defines the version of the `Animation` archive.
 impl ArchiveVersion for Animation {
     fn version() -> u32 {
         return 6;
     }
 }
 
+/// Defines the tag of the `Animation` archive.
 impl ArchiveTag for Animation {
     fn tag() -> &'static str {
         return "ozz-animation";
     }
 }
 
+/// Read `Animation` from `IArchive`.
 impl ArchiveReader<Animation> for Animation {
     fn read(archive: &mut IArchive) -> Result<Animation, OzzError> {
         if !archive.test_tag::<Self>()? {
@@ -249,45 +261,83 @@ impl ArchiveReader<Animation> for Animation {
 }
 
 impl Animation {
+    /// Reads an `Animation` from a file.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Animation, OzzError> {
         let mut archive = IArchive::new(path)?;
         return Animation::read(&mut archive);
     }
 
+    /// Reads an `Animation` from a `IArchive`.
     pub fn from_reader(archive: &mut IArchive) -> Result<Animation, OzzError> {
         return Animation::read(archive);
+    }
+
+    /// Creates a new `Animation` from raw data.
+    pub fn from_raw(
+        duration: f32,
+        num_tracks: usize,
+        name: String,
+        translations: Vec<Float3Key>,
+        rotations: Vec<QuaternionKey>,
+        scales: Vec<Float3Key>,
+    ) -> Animation {
+        return Animation {
+            duration,
+            num_tracks,
+            name,
+            translations,
+            rotations,
+            scales,
+        };
     }
 }
 
 impl Animation {
+    /// Gets the animation clip duration.
+    #[inline]
     pub fn duration(&self) -> f32 {
         return self.duration;
     }
 
+    /// Gets the number of animated tracks.
+    #[inline]
     pub fn num_tracks(&self) -> usize {
         return self.num_tracks;
     }
 
+    /// Gets the number of animated tracks (aligned to 4 * SoA).
+    #[inline]
     pub fn num_aligned_tracks(&self) -> usize {
         return (self.num_tracks + 3) & !0x3;
     }
 
+    /// Gets the number of SoA elements matching the number of tracks of `Animation`.
+    /// This value is useful to allocate SoA runtime data structures.
+    #[inline]
     pub fn num_soa_tracks(&self) -> usize {
         return (self.num_tracks + 3) / 4;
     }
 
+    /// Gets animation name.
+    #[inline]
     pub fn name(&self) -> &str {
         return &self.name;
     }
 
+    /// Gets the buffer of translations keys.
+    #[inline]
     pub fn translations(&self) -> &[Float3Key] {
         return &self.translations;
     }
 
+    /// Gets the buffer of rotation keys.
+    #[inline]
     pub fn rotations(&self) -> &[QuaternionKey] {
         return &self.rotations;
     }
 
+    /// Gets the buffer of scale keys.
+    #[inline]
     pub fn scales(&self) -> &[Float3Key] {
         return &self.scales;
     }

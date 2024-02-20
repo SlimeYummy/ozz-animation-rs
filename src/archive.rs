@@ -14,16 +14,21 @@ pub trait ArchiveTag {
     fn tag() -> &'static str;
 }
 
+/// Implements `ArchiveReader` to read `T` from IArchive.
 pub trait ArchiveReader<T> {
     fn read(archive: &mut IArchive) -> Result<T, OzzError>;
 }
 
+/// Implements input archive concept used to load/de-serialize data.
+/// Endianness conversions are automatically performed according to the Archive
+/// and the native formats.
 pub struct IArchive {
     file: File,
     endian_swap: bool,
 }
 
 impl IArchive {
+    /// Creates an archive from a file.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<IArchive, OzzError> {
         let mut file = File::open(path)?;
 
@@ -49,10 +54,13 @@ impl IArchive {
         return self.read::<u32>();
     }
 
+    /// Reads a value from the archive.
     pub fn read<T: ArchiveReader<T>>(&mut self) -> Result<T, OzzError> {
         return T::read(self);
     }
 
+    /// Reads a vector from the archive.
+    /// * `count` - The number of elements to read.
     pub fn read_vec<T: ArchiveReader<T>>(&mut self, count: usize) -> Result<Vec<T>, OzzError> {
         let mut buffer = Vec::with_capacity(count);
         for _ in 0..count {
@@ -61,6 +69,8 @@ impl IArchive {
         return Ok(buffer);
     }
 
+    /// Reads a string from the archive.
+    /// * `count` - The number of characters to read. If 0, the string is null-terminated.
     pub fn read_string(&mut self, count: usize) -> Result<String, OzzError> {
         if count != 0 {
             let buffer = self.read_vec::<u8>(count)?;

@@ -703,7 +703,6 @@ impl AosMat4 {
 //
 // SoaVec3
 //
-
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct SoaMat4 {
