@@ -126,6 +126,7 @@ where
     O: OzzBuf<SoaTransform>,
 {
     /// Gets threshold of `BlendingJob`.
+    #[inline]
     pub fn threshold(&self) -> f32 {
         return self.threshold;
     }
@@ -135,11 +136,13 @@ where
     /// The job blends the rest pose to the output when the accumulated weight of
     /// all layers is less than this threshold value.
     /// Must be greater than 0.0.
+    #[inline]
     pub fn set_threshold(&mut self, threshold: f32) {
         self.threshold = threshold;
     }
 
     /// Gets skeleton of `BlendingJob`.
+    #[inline]
     pub fn skeleton(&self) -> Option<&S> {
         return self.skeleton.as_ref();
     }
@@ -152,6 +155,7 @@ where
     /// 
     /// It is used when the accumulated weight for a bone on all layers is
     /// less than the threshold value, in order to fall back on valid transforms.
+    #[inline]
     pub fn set_skeleton(&mut self, skeleton: S) {
         self.verified = false;
         let joint_rest_poses = skeleton.joint_rest_poses().len();
@@ -162,12 +166,14 @@ where
     }
 
     /// Clears skeleton of `BlendingJob`.
+    #[inline]
     pub fn clear_skeleton(&mut self) {
         self.verified = false;
         self.skeleton = None;
     }
 
     /// Gets output of `BlendingJob`.
+    #[inline]
     pub fn output(&self) -> Option<&O> {
         return self.output.as_ref();
     }
@@ -175,18 +181,21 @@ where
     /// Sets output of `BlendingJob`.
     /// 
     /// The range of output transforms to be filled with blended layer transforms during job execution.
+    #[inline]
     pub fn set_output(&mut self, output: O) {
         self.verified = false;
         self.output = Some(output);
     }
 
     /// Clears output of `BlendingJob`.
+    #[inline]
     pub fn clear_output(&mut self) {
         self.verified = false;
         self.output = None;
     }
 
     /// Gets layers of `BlendingJob`.
+    #[inline]
     pub fn layers(&self) -> &[BlendingLayer<I>] {
         return &self.layers;
     }
@@ -194,12 +203,14 @@ where
     /// Gets mutable layers of `BlendingJob`.
     /// 
     /// Job input layers, can be empty or nullptr. The range of layers that must be blended.
+    #[inline]
     pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
         self.verified = false; // TODO: more efficient way to avoid verification
         return &mut self.layers;
     }
 
     /// Gets additive layers of `BlendingJob`.
+    #[inline]
     pub fn additive_layers(&self) -> &[BlendingLayer<I>] {
         return &self.additive_layers;
     }
@@ -207,6 +218,7 @@ where
     /// Gets mutable additive layers of `BlendingJob`.
     /// 
     /// Job input additive layers, can be empty or nullptr. The range of layers that must be added to the output.
+    #[inline]
     pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
         self.verified = false; // TODO: more efficient way to avoid verification
         return &mut self.additive_layers;

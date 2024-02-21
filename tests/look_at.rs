@@ -1,5 +1,6 @@
 use glam::{Mat4, Quat, Vec3A};
 use ozz_animation_rs::*;
+use ozz_animation_rs::math::*;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]

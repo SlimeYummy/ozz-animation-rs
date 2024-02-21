@@ -6,6 +6,19 @@ use crate::base::{OzzBuf, OzzError, OzzRef, SKELETON_MAX_JOINTS, SKELETON_NO_PAR
 use crate::math::{AosMat4, SoaMat4, SoaTransform};
 use crate::skeleton::Skeleton;
 
+///
+/// Computes model-space joint matrices from local-space `SoaTransform`.
+///
+/// This job uses the skeleton to define joints parent-child hierarchy. The job
+/// iterates through all joints to compute their transform relatively to the
+/// skeleton root.
+///
+/// Job inputs is an array of SoaTransform objects (in local-space), ordered like
+/// skeleton's joints. Job output is an array of matrices (in model-space),
+/// ordered like skeleton's joints. Output are matrices, because the combination
+/// of affine transformations can contain shearing or complex transformation
+/// that cannot be represented as Transform object.
+///
 #[derive(Debug)]
 pub struct LocalToModelJob<S = Rc<Skeleton>, I = Rc<RefCell<Vec<SoaTransform>>>, O = Rc<RefCell<Vec<Mat4>>>>
 where
@@ -49,84 +62,146 @@ where
     I: OzzBuf<SoaTransform>,
     O: OzzBuf<Mat4>,
 {
-    pub fn new() -> LocalToModelJob {
-        return LocalToModelJob::default();
-    }
-
+    /// Gets skeleton of `LocalToModelJob`.
+    #[inline]
     pub fn skeleton(&self) -> Option<&S> {
         return self.skeleton.as_ref();
     }
 
+    /// Sets skeleton of `LocalToModelJob`.
+    ///
+    /// The Skeleton object describing the joint hierarchy used for local to model space conversion.
+    #[inline]
     pub fn set_skeleton(&mut self, skeleton: S) {
         self.verified = false;
         self.skeleton = Some(skeleton);
     }
 
+    /// Clears skeleton of `LocalToModelJob`.
+    #[inline]
     pub fn clear_skeleton(&mut self) {
         self.verified = false;
         self.skeleton = None;
     }
 
+    /// Gets input of `LocalToModelJob`.
+    #[inline]
     pub fn input(&self) -> Option<&I> {
         return self.input.as_ref();
     }
 
+    /// Sets input of `LocalToModelJob`.
+    ///
+    /// The input range that store local transforms.
+    #[inline]
     pub fn set_input(&mut self, input: I) {
         self.verified = false;
         self.input = Some(input);
     }
 
+    /// Clears input of `LocalToModelJob`.
+    #[inline]
     pub fn clear_input(&mut self) {
         self.verified = false;
         self.input = None;
     }
 
+    /// Gets output of `LocalToModelJob`.
+    #[inline]
     pub fn output(&self) -> Option<&O> {
         return self.output.as_ref();
     }
 
+    /// Sets output of `LocalToModelJob`.
+    ///
+    /// The output range to be filled with model-space matrices.
+    #[inline]
     pub fn set_output(&mut self, output: O) {
         self.verified = false;
         self.output = Some(output);
     }
 
+    /// Clears output of `LocalToModelJob`.
+    #[inline]
     pub fn clear_output(&mut self) {
         self.verified = false;
         self.output = None;
     }
 
+    /// Gets root of `LocalToModelJob`.
+    #[inline]
     pub fn root(&self) -> Mat4 {
         return self.root.into();
     }
 
+    /// Sets root of `LocalToModelJob`.
+    ///
+    /// The root matrix will multiply to every model space matrices, None means an identity matrix.
+    /// This can be used to directly compute world-space transforms for example.
+    #[inline]
     pub fn set_root(&mut self, root: &Mat4) {
         self.root = (*root).into();
     }
 
+    /// Gets from of `LocalToModelJob`.
+    #[inline]
     pub fn from(&self) -> i32 {
         return self.from;
     }
 
+    /// Sets from of `LocalToModelJob`.
+    ///
+    /// Defines "from" which joint the local-to-model conversion should start.
+    ///
+    /// Default value is `SKELETON_NO_PARENT`, meaning the whole hierarchy is updated.
+    ///
+    /// This parameter can be used to optimize update by limiting conversion to part of the joint hierarchy.
+    /// Note that "from" parent should be a valid matrix, as it is going to be used as part of "from" joint
+    /// hierarchy update.
+    #[inline]
     pub fn set_from(&mut self, from: i32) {
         self.from = from;
     }
 
+    /// Gets to of `LocalToModelJob`.
+    #[inline]
     pub fn to(&self) -> i32 {
         return self.to;
     }
 
+    /// Sets to of `LocalToModelJob`.
+    ///
+    /// Defines "to" which joint the local-to-model conversion should go, "to" included.
+    /// Update will end before "to" joint is reached if "to" is not partof the hierarchy starting from "from".
+    ///
+    /// Default value is `SKELETON_MAX_JOINTS`, meaning the hierarchy (starting from "from") is updated to
+    /// the last joint.
+    #[inline]
     pub fn set_to(&mut self, to: i32) {
         self.to = to;
     }
 
+    /// Gets from_excluded of `LocalToModelJob`.
+    #[inline]
     pub fn from_excluded(&self) -> bool {
         return self.from_excluded;
     }
 
+    /// Sets from_excluded of `LocalToModelJob`.
+    ///
+    /// If `true`, "from" joint is not updated during job execution. Update starts with all children of "from".
+    ///
+    /// Default value is `false`.
+    ///
+    /// This can be used to update a model-space transform independently from the local-space one.
+    /// To do so: set "from" joint model-space transform matrix, and run this Job with "from_excluded" to update
+    /// all "from" children.
+    #[inline]
     pub fn set_from_excluded(&mut self, from_excluded: bool) {
         self.from_excluded = from_excluded;
     }
 
+    /// Validates `LocalToModelJob` parameters.
     pub fn validate(&self) -> bool {
         let skeleton = match &self.skeleton {
             Some(skeleton) => skeleton,
@@ -158,6 +233,8 @@ where
         return true;
     }
 
+    /// Runs local to model job's task.
+    /// The job call `validate()` to validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if !self.verified {
             if !self.validate() {
