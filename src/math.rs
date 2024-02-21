@@ -1,3 +1,9 @@
+//!
+//! Math library for SIMD operations.
+//!
+//! Soa is short for Structure of Arrays. Represents SSE packaged data.
+//!
+
 #![allow(dead_code)]
 
 use glam::{Mat4, Quat, Vec3, Vec3A, Vec4};

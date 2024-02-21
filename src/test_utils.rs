@@ -1,3 +1,7 @@
+//!
+//! Test utilities for integration tests in `./tests/` folder.
+//!
+
 use glam::Mat4;
 use std::env::consts::{ARCH, OS};
 use std::error::Error;

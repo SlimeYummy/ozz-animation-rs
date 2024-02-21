@@ -5,6 +5,19 @@ use std::simd::StdFloat;
 use crate::base::OzzError;
 use crate::math::*;
 
+///
+/// Rotates a joint so it aims at a target.
+///
+/// Joint aim direction and up vectors can be different from joint axis. The job computes the
+/// transformation (rotation) that needs to be applied to the joints such that a provided forward
+/// vector (in joint local-space) aims at the target position (in skeleton model-space). Up vector
+/// (in joint local-space) is also used to keep the joint oriented in the same direction as the
+/// pole vector. The job also exposes an offset (in joint local-space) from where the forward
+/// vector should aim the target.
+///
+/// Result is unstable if joint-to-target direction is parallel to pole vector, or if target is too
+/// close to joint position.
+///
 #[derive(Debug)]
 pub struct IKAimJob {
     target: f32x4,
@@ -39,91 +52,172 @@ impl Default for IKAimJob {
 }
 
 impl IKAimJob {
+    /// Gets target of `IKAimJob`.
+    #[inline]
     pub fn target(&self) -> Vec3A {
         return fx4_to_vec3a(self.target);
     }
 
+    /// Sets target of `IKAimJob`.
+    ///
+    /// Target position to aim at, in model-space
+    #[inline]
     pub fn set_target(&mut self, target: Vec3A) {
         self.target = fx4_from_vec3a(target);
     }
 
+    /// Gets forward of `IKAimJob`.
+    #[inline]
     pub fn forward(&self) -> Vec3A {
         return fx4_to_vec3a(self.forward);
     }
 
+    /// Sets forward of `IKAimJob`.
+    ///
+    /// Joint forward axis, in joint local-space, to be aimed at target position. Default is x axis.
+    ///
+    /// This vector shall be normalized, otherwise validation will fail.
+    #[inline]
     pub fn set_forward(&mut self, forward: Vec3A) {
         self.forward = fx4_from_vec3a(forward);
     }
 
+    /// Gets offset of `IKAimJob`.
+    #[inline]
     pub fn offset(&self) -> Vec3A {
         return fx4_to_vec3a(self.offset);
     }
 
+    /// Sets offset of `IKAimJob`.
+    ///
+    /// Offset position from the joint in local-space, that will aim at target.
+    #[inline]
     pub fn set_offset(&mut self, offset: Vec3A) {
         self.offset = fx4_from_vec3a(offset);
     }
 
+    /// Gets up of `IKAimJob`.
+    #[inline]
     pub fn up(&self) -> Vec3A {
         return fx4_to_vec3a(self.up);
     }
 
+    /// Sets up of `IKAimJob`.
+    ///
+    /// Joint up axis, in joint local-space, used to keep the joint oriented in the same direction as
+    /// the pole vector. Default is y axis.
+    #[inline]
     pub fn set_up(&mut self, up: Vec3A) {
         self.up = fx4_from_vec3a(up);
     }
 
+    /// Gets pole vector of `IKAimJob`.
+    #[inline]
     pub fn pole_vector(&self) -> Vec3A {
         return fx4_to_vec3a(self.pole_vector);
     }
 
+    /// Sets pole vector of `IKAimJob`.
+    ///
+    /// Pole vector, in model-space.
+    /// The pole vector defines the direction the up should point to.
+    ///
+    /// Note that IK chain orientation will flip when target vector and the pole vector are aligned/crossing
+    /// each other. It's caller responsibility to ensure that this doesn't happen.
+    #[inline]
     pub fn set_pole_vector(&mut self, pole_vector: Vec3A) {
         self.pole_vector = fx4_from_vec3a(pole_vector);
     }
 
+    /// Gets twist angle of `IKAimJob`.
+    #[inline]
     pub fn twist_angle(&self) -> f32 {
         return self.twist_angle;
     }
 
+    /// Sets twist angle of `IKAimJob`.
+    ///
+    /// Twist_angle rotates joint around the target vector. Default is 0.
+    #[inline]
     pub fn set_twist_angle(&mut self, twist_angle: f32) {
         self.twist_angle = twist_angle;
     }
 
+    /// Gets weight of `IKAimJob`.
+    #[inline]
     pub fn weight(&self) -> f32 {
         return self.weight;
     }
 
+    /// Sets weight of `IKAimJob`.
+    ///
+    /// Weight given to the IK correction clamped in range 0.0-1.0.
+    /// This allows to blend / interpolate from no IK applied (0 weight) to full IK (1).
+    #[inline]
     pub fn set_weight(&mut self, weight: f32) {
         self.weight = weight;
     }
 
+    /// Gets joint of `IKAimJob`.
+    #[inline]
     pub fn joint(&self) -> Mat4 {
         return self.joint.into();
     }
 
+    /// Sets joint of `IKAimJob`.
+    ///
+    /// Joint model-space matrix.
+    #[inline]
     pub fn set_joint(&mut self, joint: Mat4) {
         self.joint = joint.into();
     }
 
+    /// Gets **output** joint correction of `IKAimJob`.
+    ///
+    /// Output local-space joint correction quaternion.
+    /// It needs to be multiplied with joint local-space quaternion.
+    #[inline]
     pub fn joint_correction(&self) -> Quat {
         return fx4_to_quat(self.joint_correction);
     }
 
+    /// Gets reached of `IKAimJob`.
+    #[inline]
     pub fn clear_joint_correction(&mut self) {
         self.joint_correction = QUAT_UNIT;
     }
 
+    /// Gets **output** reached of `IKAimJob`.
+    ///
+    /// True if target can be reached with IK computations.
+    ///
+    /// Target is considered not reachable when target is between joint and offset position.
+    #[inline]
     pub fn reached(&self) -> bool {
         return self.reached;
     }
 
+    /// Gets reached of `IKAimJob`.
+    #[inline]
     pub fn clear_reached(&mut self) {
         self.reached = false;
     }
 
+    /// Clears all outputs of `IKAimJob`.
+    #[inline]
     pub fn clear_outs(&mut self) {
         self.clear_joint_correction();
         self.clear_reached();
     }
 
+    /// Validates `IKAimJob` parameters.
+    #[inline]
+    fn validate(&self) -> bool {
+        return vec3_is_normalized(self.forward);
+    }
+
+    /// Runs aim IK job's task.
+    /// The job call `validate()` to validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if !self.validate() {
             return Err(OzzError::InvalidJob);
@@ -193,10 +287,6 @@ impl IKAimJob {
             self.joint_correction = twisted_fu;
         }
         return Ok(());
-    }
-
-    fn validate(&self) -> bool {
-        return vec3_is_normalized(self.forward);
     }
 
     fn compute_offsetted_forward(forward: f32x4, offset: f32x4, target: f32x4) -> Option<f32x4> {

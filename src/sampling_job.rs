@@ -267,6 +267,7 @@ impl SamplingContext {
     }
 
     /// Clear the `SamplingContext`.
+    #[inline]
     pub fn clear(&mut self) {
         self.inner_mut().animation_id = 0;
         self.inner_mut().translation_cursor = 0;
@@ -275,6 +276,7 @@ impl SamplingContext {
     }
 
     /// Clone the `SamplingContext` without the animation id. Usually used for serialization.
+    #[inline]
     pub fn clone_without_animation_id(&self) -> SamplingContext {
         let mut ctx = self.clone();
         ctx.set_animation_id(0);
@@ -282,165 +284,197 @@ impl SamplingContext {
     }
 
     /// The memory size of the context in bytes.
+    #[inline]
     pub fn size(&self) -> usize {
         return self.inner().size;
     }
 
     /// The maximum number of SoA tracks that the context can handle.
+    #[inline]
     pub fn max_soa_tracks(&self) -> usize {
         return self.inner().max_soa_tracks;
     }
 
     /// The maximum number of tracks that the context can handle.
+    #[inline]
     pub fn max_tracks(&self) -> usize {
         return self.inner().max_tracks;
     }
 
     /// The number of tracks that are outdated.
+    #[inline]
     pub fn num_outdated(&self) -> usize {
         return self.inner().num_outdated;
     }
 
     /// The unique identifier of the animation that the context is sampling.
+    #[inline]
     pub fn animation_id(&self) -> u64 {
         return self.inner().animation_id;
     }
 
     /// Set the unique identifier of the animation that the context is sampling.
+    #[inline]
     pub fn set_animation_id(&mut self, id: u64) {
         self.inner_mut().animation_id = id;
     }
 
     /// The current time ratio in the animation.
+    #[inline]
     pub fn ratio(&self) -> f32 {
         return self.inner().ratio;
     }
 
+    #[inline]
     fn set_ratio(&mut self, ratio: f32) {
         self.inner_mut().ratio = ratio;
     }
 
     /// Soa hot data to interpolate.
+    #[inline]
     pub fn translations(&self) -> &[InterpSoaFloat3] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.translations_ptr, inner.max_soa_tracks) };
     }
 
+    #[inline]
     fn translations_mut(&mut self) -> &mut [InterpSoaFloat3] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.translations_ptr, inner.max_soa_tracks) };
     }
 
     /// Soa hot data to interpolate.
+    #[inline]
     pub fn rotations(&self) -> &[InterpSoaQuaternion] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.rotations_ptr, inner.max_soa_tracks) };
     }
 
+    #[inline]
     fn rotations_mut(&mut self) -> &mut [InterpSoaQuaternion] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.rotations_ptr, inner.max_soa_tracks) };
     }
 
     /// Soa hot data to interpolate.
+    #[inline]
     pub fn scales(&self) -> &[InterpSoaFloat3] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.scales_ptr, inner.max_soa_tracks) };
     }
 
+    #[inline]
     fn scales_mut(&mut self) -> &mut [InterpSoaFloat3] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.scales_ptr, inner.max_soa_tracks) };
     }
 
     /// The keys in the animation that are valid for the current time ratio.
+    #[inline]
     pub fn translation_keys(&self) -> &[i32] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.translation_keys_ptr, inner.max_tracks * 2) };
     }
 
+    #[inline]
     fn translation_keys_mut(&mut self) -> &mut [i32] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.translation_keys_ptr, inner.max_tracks * 2) };
     }
 
     /// The keys in the animation that are valid for the current time ratio.
+    #[inline]
     pub fn rotation_keys(&self) -> &[i32] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.rotation_keys_ptr, inner.max_tracks * 2) };
     }
 
+    #[inline]
     fn rotation_keys_mut(&mut self) -> &mut [i32] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.rotation_keys_ptr, inner.max_tracks * 2) };
     }
 
     /// The keys in the animation that are valid for the current time ratio.
+    #[inline]
     pub fn scale_keys(&self) -> &[i32] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.scale_keys_ptr, inner.max_tracks * 2) };
     }
 
+    #[inline]
     fn scale_keys_mut(&mut self) -> &mut [i32] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.scale_keys_ptr, inner.max_tracks * 2) };
     }
 
     /// Current cursors in the animation. 0 means that the context is invalid.
+    #[inline]
     pub fn translation_cursor(&self) -> usize {
         return self.inner().translation_cursor;
     }
 
+    #[inline]
     fn set_translation_cursor(&mut self, cursor: usize) {
         self.inner_mut().translation_cursor = cursor;
     }
 
     /// Current cursors in the animation. 0 means that the context is invalid.
+    #[inline]
     pub fn rotation_cursor(&self) -> usize {
         return self.inner().rotation_cursor;
     }
 
+    #[inline]
     fn set_rotation_cursor(&mut self, cursor: usize) {
         self.inner_mut().rotation_cursor = cursor;
     }
 
     /// Current cursors in the animation. 0 means that the context is invalid.
+    #[inline]
     pub fn scale_cursor(&self) -> usize {
         return self.inner().scale_cursor;
     }
 
+    #[inline]
     fn set_scale_cursor(&mut self, cursor: usize) {
         self.inner_mut().scale_cursor = cursor;
     }
 
     /// Outdated soa entries. One bit per soa entry (32 joints per byte).
+    #[inline]
     pub fn outdated_translations(&self) -> &[u8] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.outdated_translations_ptr, inner.num_outdated) };
     }
 
+    #[inline]
     fn outdated_translations_mut(&mut self) -> &mut [u8] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_translations_ptr, inner.num_outdated) };
     }
 
     /// Outdated soa entries. One bit per soa entry (32 joints per byte).
+    #[inline]
     pub fn outdated_rotations(&self) -> &[u8] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.outdated_rotations_ptr, inner.num_outdated) };
     }
 
+    #[inline]
     fn outdated_rotations_mut(&mut self) -> &mut [u8] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_rotations_ptr, inner.num_outdated) };
     }
 
     /// Outdated soa entries. One bit per soa entry (32 joints per byte).
+    #[inline]
     pub fn outdated_scales(&self) -> &[u8] {
         let inner = self.inner();
         return unsafe { std::slice::from_raw_parts(inner.outdated_scales_ptr, inner.num_outdated) };
     }
 
+    #[inline]
     fn outdated_scales_mut(&mut self) -> &mut [u8] {
         let inner = self.inner_mut();
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_scales_ptr, inner.num_outdated) };
@@ -732,40 +766,47 @@ where
     O: OzzBuf<SoaTransform>,
 {
     /// Gets animation to sample of `SamplingJob`.
+    #[inline]
     pub fn animation(&self) -> Option<&A> {
         return self.animation.as_ref();
     }
 
     /// Sets animation to sample of `SamplingJob`.
+    #[inline]
     pub fn set_animation(&mut self, animation: A) {
         self.verified = false;
         self.animation = Some(animation);
     }
 
     /// Clears animation to sample of `SamplingJob`.
+    #[inline]
     pub fn clear_animation(&mut self) {
         self.verified = false;
         self.animation = None;
     }
 
     /// Gets context of `SamplingJob`. See [SamplingContext].
+    #[inline]
     pub fn context(&self) -> Option<&SamplingContext> {
         return self.context.as_ref();
     }
 
     /// Sets context of `SamplingJob`. See [SamplingContext].
+    #[inline]
     pub fn set_context(&mut self, ctx: SamplingContext) {
         self.verified = false;
         self.context = Some(ctx);
     }
 
     /// Clears context of `SamplingJob`. See [SamplingContext].
+    #[inline]
     pub fn clear_context(&mut self) {
         self.verified = false;
         self.context = None;
     }
 
     /// Gets output of `SamplingJob`.
+    #[inline]
     pub fn output(&self) -> Option<&O> {
         return self.output.as_ref();
     }
@@ -777,18 +818,21 @@ where
     /// If there are less joints in the animation compared to the output range, then remaining
     /// `SoaTransform` are left unchanged.
     /// If there are more joints in the animation, then the last joints are not sampled.
+    #[inline]
     pub fn set_output(&mut self, output: O) {
         self.verified = false;
         self.output = Some(output);
     }
 
     /// Clears output of `SamplingJob`.
+    #[inline]
     pub fn clear_output(&mut self) {
         self.verified = false;
         self.output = None;
     }
 
     /// Gets the time ratio of `SamplingJob`.
+    #[inline]
     pub fn ratio(&self) -> f32 {
         return self.ratio;
     }
@@ -801,6 +845,7 @@ where
     /// 
     /// This ratio is clamped before job execution in order to resolves any approximation issue on range
     /// bounds.
+    #[inline]
     pub fn set_ratio(&mut self, ratio: f32) {
         self.ratio = f32_clamp_or_max(ratio, 0.0f32, 1.0f32);
     }
