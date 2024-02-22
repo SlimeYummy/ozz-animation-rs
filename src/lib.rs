@@ -9,7 +9,12 @@
 //! runtime, but rewrite the full runtime library in rust. So it can be used in network game scenarios, such as
 //! lock-step networking synchronize.
 //!
-//! ```
+//! ```no_run
+//! use glam::Mat4;
+//! use ozz_animation_rs::*;
+//! use ozz_animation_rs::math::*;
+//! use std::rc::Rc;
+//!
 //! // Load resources
 //! let skeleton = Rc::new(Skeleton::from_file("./resource/skeleton.ozz").unwrap());
 //! let animation1 = Rc::new(Animation::from_file("./resource/animation1.ozz").unwrap());

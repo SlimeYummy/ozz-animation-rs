@@ -38,6 +38,11 @@ Ozz-animation-rs keeps the same API styles with original ozz-animation library. 
 Here is a very sample example:
 
 ```rust
+use glam::Mat4;
+use ozz_animation_rs::*;
+use ozz_animation_rs::math::*;
+use std::rc::Rc;
+
 // Load resources
 let skeleton = Rc::new(Skeleton::from_file("./resource/skeleton.ozz").unwrap());
 let animation1 = Rc::new(Animation::from_file("./resource/animation1.ozz").unwrap());
