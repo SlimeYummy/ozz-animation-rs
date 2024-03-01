@@ -135,3 +135,29 @@ impl BuildHasher for DeterministicState {
         return DefaultHasher::default();
     }
 }
+
+/// Allow usize/i32/i16 use as ozz index.
+pub trait OzzIndex {
+    fn usize(&self) -> usize;
+    fn i32(&self) -> i32;
+}
+
+macro_rules! ozz_index {
+    ($type:ty) => {
+        impl OzzIndex for $type {
+            #[inline(always)]
+            fn usize(&self) -> usize {
+                return *self as usize;
+            }
+
+            #[inline(always)]
+            fn i32(&self) -> i32 {
+                return *self as i32;
+            }
+        }
+    };
+}
+
+ozz_index!(usize);
+ozz_index!(i32);
+ozz_index!(i16);
