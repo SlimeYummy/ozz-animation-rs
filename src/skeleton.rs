@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::Path;
 
-use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
+use crate::archive::Archive;
+use crate::base::{DeterministicState, OzzError, OzzIndex};
 use crate::math::SoaTransform;
-use crate::{DeterministicState, OzzError};
 
 ///
 /// This runtime skeleton data structure provides a const-only access to joint
@@ -24,29 +25,38 @@ pub struct Skeleton {
     joint_names: HashMap<String, i16, DeterministicState>,
 }
 
-/// Defines the version of the `Skeleton` archive.
-impl ArchiveVersion for Skeleton {
-    fn version() -> u32 {
-        return 2;
-    }
-}
-
-/// Defines the tag of the `Skeleton` archive.
-impl ArchiveTag for Skeleton {
-    fn tag() -> &'static str {
+impl Skeleton {
+    /// `Skeleton` resource file tag for `Archive`.
+    #[inline]
+    pub fn tag() -> &'static str {
         return "ozz-skeleton";
     }
-}
 
-/// Reads `Skeleton` from `IArchive`.
-impl ArchiveReader<Skeleton> for Skeleton {
-    fn read(archive: &mut IArchive) -> Result<Skeleton, OzzError> {
-        if !archive.test_tag::<Self>()? {
+    #[inline]
+    /// `Skeleton` resource file version for `Archive`.
+    pub fn version() -> u32 {
+        return 2;
+    }
+
+    /// Creates a `Skeleton` from raw data.
+    pub fn from_raw(
+        joint_rest_poses: Vec<SoaTransform>,
+        joint_parents: Vec<i16>,
+        joint_names: HashMap<String, i16, DeterministicState>,
+    ) -> Skeleton {
+        return Skeleton {
+            joint_rest_poses,
+            joint_parents,
+            joint_names,
+        };
+    }
+
+    /// Reads a `Skeleton` from a reader.
+    pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Skeleton, OzzError> {
+        if archive.tag() != Self::tag() {
             return Err(OzzError::InvalidTag);
         }
-
-        let version = archive.read_version()?;
-        if version != Self::version() {
+        if archive.version() != Self::version() {
             return Err(OzzError::InvalidVersion);
         }
 
@@ -62,7 +72,7 @@ impl ArchiveReader<Skeleton> for Skeleton {
         let _char_count: i32 = archive.read()?;
         let mut joint_names = HashMap::with_capacity_and_hasher(num_joints as usize, DeterministicState::new());
         for idx in 0..num_joints {
-            joint_names.insert(archive.read_string(0)?, idx as i16);
+            joint_names.insert(archive.read::<String>()?, idx as i16);
         }
 
         let joint_parents: Vec<i16> = archive.read_vec(num_joints as usize)?;
@@ -79,31 +89,11 @@ impl ArchiveReader<Skeleton> for Skeleton {
             joint_names,
         });
     }
-}
 
-impl Skeleton {
     /// Reads a `Skeleton` from a file.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Skeleton, OzzError> {
-        let mut archive = IArchive::new(path)?;
-        return Skeleton::read(&mut archive);
-    }
-
-    /// Reads a `Skeleton` from a reader.
-    pub fn from_reader(reader: &mut IArchive) -> Result<Skeleton, OzzError> {
-        return Skeleton::read(reader);
-    }
-
-    /// Creates a `Skeleton` from raw data.
-    pub fn from_raw(
-        joint_rest_poses: Vec<SoaTransform>,
-        joint_parents: Vec<i16>,
-        joint_names: HashMap<String, i16, DeterministicState>,
-    ) -> Skeleton {
-        return Skeleton {
-            joint_rest_poses,
-            joint_parents,
-            joint_names,
-        };
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Skeleton, OzzError> {
+        let mut archive = Archive::from_path(path)?;
+        return Skeleton::from_archive(&mut archive);
     }
 }
 
@@ -141,8 +131,8 @@ impl Skeleton {
 
     /// Gets joint's parent by index.
     #[inline]
-    pub fn joint_parent(&self, idx: usize) -> i16 {
-        return self.joint_parents[idx];
+    pub fn joint_parent(&self, idx: impl OzzIndex) -> i16 {
+        return self.joint_parents[idx.usize()];
     }
 
     /// Gets joint's name map.
@@ -162,25 +152,25 @@ impl Skeleton {
     /// * `joint` - `joint` must be in range [0, num joints].
     ///   Joint is a leaf if it's the last joint, or next joint's parent isn't `joint`.
     #[inline]
-    pub fn is_leaf(&self, joint: i16) -> bool {
-        let next = (joint + 1) as usize;
-        return next == self.num_joints() || self.joint_parents()[next] != joint;
+    pub fn is_leaf(&self, joint: impl OzzIndex) -> bool {
+        let next = joint.usize() + 1;
+        return next == self.num_joints() || (self.joint_parents()[next] as i32 != joint.i32());
     }
 
     /// Iterates through the joint hierarchy in depth-first order.
     ///
     /// * `from` - The joint index to start from. If negative, the iteration starts from the root.
     /// * `f` - The function to call for each joint. The function takes arguments `(joint: i16, parent: i16)`.
-    pub fn iter_depth_first<F>(&self, from: i16, mut f: F)
+    pub fn iter_depth_first<F>(&self, from: impl OzzIndex, mut f: F)
     where
         F: FnMut(i16, i16),
     {
-        let mut i = if from < 0 { 0 } else { from } as usize;
+        let mut i = if from.i32() < 0 { 0 } else { from.usize() };
         let mut process = i < self.num_joints();
         while process {
             f(i as i16, self.joint_parent(i));
             i += 1;
-            process = i < self.num_joints() && self.joint_parent(i) >= from;
+            process = i < self.num_joints() && (self.joint_parent(i) as i32 >= from.i32());
         }
     }
 
@@ -207,8 +197,7 @@ mod tests {
 
     #[test]
     fn test_read_skeleton() {
-        let mut archive = IArchive::new("./resource/playback/skeleton.ozz").unwrap();
-        let skeleton = Skeleton::read(&mut archive).unwrap();
+        let skeleton = Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap();
 
         assert_eq!(skeleton.joint_rest_poses().len(), 17);
         assert_eq!(

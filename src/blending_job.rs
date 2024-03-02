@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::iter;
 use std::rc::Rc;
 use std::simd::prelude::*;
+use std::sync::{Arc, RwLock};
 
 use crate::base::{OzzBuf, OzzError, OzzRef};
 use crate::math::{fx4_from_vec4, fx4_sign, SoaQuat, SoaTransform, SoaVec3};
@@ -16,7 +17,7 @@ const ONE: f32x4 = f32x4::from_array([1.0; 4]);
 pub struct BlendingLayer<I: OzzBuf<SoaTransform>> {
     /// Buffer to store local space transforms, that are usually outputted from a `SamplingJob`.
     pub transform: I,
-    
+
     /// Blending weight of this layer. Negative values are considered as 0.
     /// Normalization is performed during the blending stage so weight can be in
     /// any range, even though range 0.0-1.0 is optimal.
@@ -66,11 +67,11 @@ impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
 /// `BlendingJob` is in charge of blending (mixing) multiple poses
 /// (the result of a sampled animation) according to their respective weight,
 /// into one output pose.
-/// 
+///
 /// The number of transforms/joints blended by the job is defined by the number
 /// of transforms of the rest pose (note that this is a SoA format). This means
 /// that all buffers must be at least as big as the rest pose buffer.
-/// 
+///
 /// Partial animation blending is supported through optional joint weights that
 /// can be specified with layers joint_weights buffer. Unspecified joint weights
 /// are considered as a unit weight of 1.0, allowing to mix full and partial
@@ -95,6 +96,8 @@ where
     accumulated_weight: f32,
     accumulated_weights: Vec<f32x4>,
 }
+
+pub type ABlendingJob = BlendingJob<Arc<Skeleton>, Arc<RwLock<Vec<SoaTransform>>>, Arc<RwLock<Vec<SoaTransform>>>>;
 
 impl<S, I, O> Default for BlendingJob<S, I, O>
 where
@@ -148,11 +151,11 @@ where
     }
 
     /// Set skeleton of `BlendingJob`.
-    /// 
+    ///
     /// The skeleton that will be used during job.
-    /// 
+    ///
     /// The rest pose size of this skeleton defines the number of transforms to blend.
-    /// 
+    ///
     /// It is used when the accumulated weight for a bone on all layers is
     /// less than the threshold value, in order to fall back on valid transforms.
     #[inline]
@@ -179,7 +182,7 @@ where
     }
 
     /// Sets output of `BlendingJob`.
-    /// 
+    ///
     /// The range of output transforms to be filled with blended layer transforms during job execution.
     #[inline]
     pub fn set_output(&mut self, output: O) {
@@ -201,7 +204,7 @@ where
     }
 
     /// Gets mutable layers of `BlendingJob`.
-    /// 
+    ///
     /// Job input layers, can be empty or nullptr. The range of layers that must be blended.
     #[inline]
     pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
@@ -216,7 +219,7 @@ where
     }
 
     /// Gets mutable additive layers of `BlendingJob`.
-    /// 
+    ///
     /// Job input additive layers, can be empty or nullptr. The range of layers that must be added to the output.
     #[inline]
     pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
@@ -496,7 +499,6 @@ mod blending_tests {
     use std::mem;
 
     use super::*;
-    use crate::archive::{ArchiveReader, IArchive};
     use crate::base::{ozz_buf, DeterministicState};
     use crate::skeleton::Skeleton;
 
@@ -508,8 +510,7 @@ mod blending_tests {
 
     #[test]
     fn test_validity() {
-        let mut archive = IArchive::new("./resource/skeleton-blending.ozz").unwrap();
-        let skeleton = Rc::new(Skeleton::read(&mut archive).unwrap());
+        let skeleton = Rc::new(Skeleton::from_path("./resource/skeleton-blending.ozz").unwrap());
         let num_bind_pose = skeleton.joint_rest_poses().len();
         let default_layer = BlendingLayer {
             transform: ozz_buf(vec![SoaTransform::default(); num_bind_pose]),
