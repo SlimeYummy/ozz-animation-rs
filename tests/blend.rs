@@ -1,7 +1,9 @@
 use glam::Mat4;
-use ozz_animation_rs::*;
 use ozz_animation_rs::math::*;
+use ozz_animation_rs::*;
 use std::rc::Rc;
+
+mod common;
 
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -20,7 +22,7 @@ struct TestData {
 #[test]
 fn test_blend() {
     run_blend(2..=2, |_, data| {
-        test_utils::compare_with_cpp("blend", "blend", &data.l2m_out, 1e-6).unwrap();
+        common::compare_with_cpp("blend", "blend", &data.l2m_out, 1e-6).unwrap();
     });
 }
 
@@ -28,7 +30,7 @@ fn test_blend() {
 #[test]
 fn test_blend_deterministic() {
     run_blend(-1..=11, |ratio, data| {
-        test_utils::compare_with_rkyv("blend", &format!("blend{:+.2}", ratio), data).unwrap();
+        common::compare_with_rkyv("blend", &format!("blend{:+.2}", ratio), data).unwrap();
     });
 }
 
@@ -37,10 +39,10 @@ where
     I: Iterator<Item = i32>,
     T: Fn(f32, &TestData),
 {
-    let skeleton = Rc::new(Skeleton::from_file("./resource/blend/skeleton.ozz").unwrap());
-    let animation1 = Rc::new(Animation::from_file("./resource/blend/animation1.ozz").unwrap());
-    let animation2 = Rc::new(Animation::from_file("./resource/blend/animation2.ozz").unwrap());
-    let animation3 = Rc::new(Animation::from_file("./resource/blend/animation3.ozz").unwrap());
+    let skeleton = Rc::new(Skeleton::from_path("./resource/blend/skeleton.ozz").unwrap());
+    let animation1 = Rc::new(Animation::from_path("./resource/blend/animation1.ozz").unwrap());
+    let animation2 = Rc::new(Animation::from_path("./resource/blend/animation2.ozz").unwrap());
+    let animation3 = Rc::new(Animation::from_path("./resource/blend/animation3.ozz").unwrap());
 
     let mut sample_job1: SamplingJob = SamplingJob::default();
     sample_job1.set_animation(animation1.clone());
@@ -86,8 +88,8 @@ where
 
         blending_job.layers_mut()[0].weight = (1.0 - 2.0 * ratio).clamp(0.0, 1.0); // 0%=1.0, 50%=0.0, 100%=0.0
         blending_job.layers_mut()[2].weight = (2.0 * ratio - 1.0).clamp(0.0, 1.0); // 0%=0.0, 50%=0.0, 100%=1.0
-                                                                                   // 0%=0.0, 50%=1.0, 100%=0.0
         if ratio < 0.5 {
+            // 0%=0.0, 50%=1.0, 100%=0.0
             blending_job.layers_mut()[1].weight = (2.0 * ratio).clamp(0.0, 1.0);
         } else {
             blending_job.layers_mut()[1].weight = (2.0 * (1.0 - ratio)).clamp(0.0, 1.0);

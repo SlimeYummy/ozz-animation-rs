@@ -1,7 +1,9 @@
 use glam::{Mat4, Quat, Vec3A};
-use ozz_animation_rs::*;
 use ozz_animation_rs::math::*;
+use ozz_animation_rs::*;
 use std::rc::Rc;
+
+mod common;
 
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -20,7 +22,7 @@ const TARGET_OFFSET: Vec3A = Vec3A::new(0.0, 0.2, 0.1);
 #[test]
 fn test_two_bone_ik() {
     run_two_bone_ik(1..=1, |_, data| {
-        test_utils::compare_with_cpp("two_bone_ik", "two_bone_ik", &data.models2, 1e-6).unwrap();
+        common::compare_with_cpp("two_bone_ik", "two_bone_ik", &data.models2, 1e-6).unwrap();
     });
 }
 
@@ -28,7 +30,7 @@ fn test_two_bone_ik() {
 #[test]
 fn test_two_bone_ik_deterministic() {
     run_two_bone_ik(0..=10, |idx, data| {
-        test_utils::compare_with_rkyv("two_bone_ik", &format!("two_bone_ik_{:02}", idx), data).unwrap();
+        common::compare_with_rkyv("two_bone_ik", &format!("two_bone_ik_{:02}", idx), data).unwrap();
     });
 }
 
@@ -37,7 +39,7 @@ where
     I: Iterator<Item = i32>,
     T: Fn(i32, &TestData),
 {
-    let skeleton = Rc::new(Skeleton::from_file("./resource/two_bone_ik/skeleton.ozz").unwrap());
+    let skeleton = Rc::new(Skeleton::from_path("./resource/two_bone_ik/skeleton.ozz").unwrap());
 
     let start_joint = skeleton.joint_by_name("shoulder").unwrap();
     let mid_joint = skeleton.joint_by_name("forearm").unwrap();

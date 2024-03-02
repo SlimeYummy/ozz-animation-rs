@@ -1,7 +1,9 @@
 use glam::{Mat4, Vec4};
-use ozz_animation_rs::*;
 use ozz_animation_rs::math::*;
+use ozz_animation_rs::*;
 use std::rc::Rc;
+
+mod common;
 
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -27,7 +29,7 @@ fn test_additive() {
     run_additive(
         5..=5,
         |_| {},
-        |_, data| test_utils::compare_with_cpp("additive", "additive", &data.l2m_out, 1e-6).unwrap(),
+        |_, data| common::compare_with_cpp("additive", "additive", &data.l2m_out, 1e-6).unwrap(),
     );
 }
 
@@ -36,8 +38,8 @@ fn test_additive() {
 fn test_additive_deterministic() {
     run_additive(
         -1..=11,
-        |data| test_utils::compare_with_rkyv("additive", "additive_init", data).unwrap(),
-        |ratio, data| test_utils::compare_with_rkyv("additive", &format!("additive{:+.2}", ratio), data).unwrap(),
+        |data| common::compare_with_rkyv("additive", "additive_init", data).unwrap(),
+        |ratio, data| common::compare_with_rkyv("additive", &format!("additive{:+.2}", ratio), data).unwrap(),
     );
 }
 
@@ -47,10 +49,10 @@ where
     T1: Fn(&TestDataInit),
     T2: Fn(f32, &TestData),
 {
-    let skeleton = Rc::new(Skeleton::from_file("./resource/additive/skeleton.ozz").unwrap());
-    let animation_base = Rc::new(Animation::from_file("./resource/additive/animation_base.ozz").unwrap());
-    let animation_splay = Rc::new(Animation::from_file("./resource/additive/animation_splay_additive.ozz").unwrap());
-    let animation_curl = Rc::new(Animation::from_file("./resource/additive/animation_curl_additive.ozz").unwrap());
+    let skeleton = Rc::new(Skeleton::from_path("./resource/additive/skeleton.ozz").unwrap());
+    let animation_base = Rc::new(Animation::from_path("./resource/additive/animation_base.ozz").unwrap());
+    let animation_splay = Rc::new(Animation::from_path("./resource/additive/animation_splay_additive.ozz").unwrap());
+    let animation_curl = Rc::new(Animation::from_path("./resource/additive/animation_curl_additive.ozz").unwrap());
 
     let mut sample_job_base: SamplingJob = SamplingJob::default();
     sample_job_base.set_animation(animation_base.clone());
