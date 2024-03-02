@@ -16,9 +16,9 @@
 //! use std::rc::Rc;
 //!
 //! // Load resources
-//! let skeleton = Rc::new(Skeleton::from_file("./resource/skeleton.ozz").unwrap());
-//! let animation1 = Rc::new(Animation::from_file("./resource/animation1.ozz").unwrap());
-//! let animation2 = Rc::new(Animation::from_file("./resource/animation2.ozz").unwrap());
+//! let skeleton = Rc::new(Skeleton::from_path("./resource/skeleton.ozz").unwrap());
+//! let animation1 = Rc::new(Animation::from_path("./resource/animation1.ozz").unwrap());
+//! let animation2 = Rc::new(Animation::from_path("./resource/animation2.ozz").unwrap());
 //!
 //! // Init sample job 1
 //! let mut sample_job1: SamplingJob = SamplingJob::default();
@@ -79,14 +79,13 @@ mod sampling_job;
 mod skeleton;
 
 pub mod math;
-pub mod test_utils;
 
 pub use animation::Animation;
-pub use archive::{ArchiveReader, IArchive};
+pub use archive::{Archive, ArchiveRead};
 pub use base::*;
-pub use blending_job::{BlendingJob, BlendingLayer};
+pub use blending_job::{ABlendingJob, BlendingJob, BlendingLayer};
 pub use ik_aim_job::IKAimJob;
 pub use ik_two_bone_job::IKTwoBoneJob;
-pub use local_to_model_job::LocalToModelJob;
-pub use sampling_job::{InterpSoaFloat3, InterpSoaQuaternion, SamplingContext, SamplingJob};
+pub use local_to_model_job::{ALocalToModelJob, LocalToModelJob};
+pub use sampling_job::{ASamplingJob, InterpSoaFloat3, InterpSoaQuaternion, SamplingContext, SamplingJob};
 pub use skeleton::Skeleton;

@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 use std::simd::prelude::*;
+use std::sync::{Arc, RwLock};
 use std::{mem, slice};
 
 use crate::animation::{Animation, Float3Key, QuaternionKey};
@@ -141,6 +142,9 @@ impl Default for SamplingContextInner {
 /// frame coherency of animation sampling.
 pub struct SamplingContext(*mut SamplingContextInner);
 
+unsafe impl Send for SamplingContext {}
+unsafe impl Sync for SamplingContext {}
+
 impl Debug for SamplingContext {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         return self.inner().fmt(f);
@@ -208,7 +212,7 @@ impl SamplingContext {
     }
 
     /// Create a new `SamplingContext`
-    /// 
+    ///
     /// * `max_tracks` - The maximum number of tracks that the context can handle.
     pub fn new(max_tracks: usize) -> SamplingContext {
         let max_soa_tracks = (max_tracks + 3) / 4;
@@ -258,7 +262,7 @@ impl SamplingContext {
     }
 
     /// Create a new `SamplingContext` from an `Animation`.
-    /// 
+    ///
     /// * `animation` - The animation to sample. Use `animation.num_tracks()` as max_tracks.
     pub fn from_animation(animation: &Animation) -> SamplingContext {
         let mut ctx = SamplingContext::new(animation.num_tracks());
@@ -723,7 +727,7 @@ impl<C: ?Sized> bytecheck::CheckBytes<C> for ArchivedSamplingContext {
 ///
 /// Samples an animation at a given time ratio in the unit interval 0.0-1.0 (where 0.0 is the beginning of
 /// the animation, 1.0 is the end), to output the corresponding posture in local-space.
-/// 
+///
 /// `SamplingJob` uses `SamplingContext` to store intermediate values (decompressed animation keyframes...)
 /// while sampling.
 /// This context also stores pre-computed values that allows drastic optimization while playing/sampling the
@@ -743,6 +747,8 @@ where
     ratio: f32,
     context: Option<SamplingContext>,
 }
+
+pub type ASamplingJob = SamplingJob<Arc<Animation>, Arc<RwLock<Vec<SoaTransform>>>>;
 
 impl<A, O> Default for SamplingJob<A, O>
 where
@@ -805,6 +811,13 @@ where
         self.context = None;
     }
 
+    /// Takes context of `SamplingJob`. See [SamplingContext].
+    #[inline]
+    pub fn take_context(&mut self) -> Option<SamplingContext> {
+        self.verified = false;
+        return self.context.take();
+    }
+
     /// Gets output of `SamplingJob`.
     #[inline]
     pub fn output(&self) -> Option<&O> {
@@ -812,9 +825,9 @@ where
     }
 
     /// Sets output of `SamplingJob`.
-    /// 
+    ///
     /// The output range to be filled with sampled joints during job execution.
-    /// 
+    ///
     /// If there are less joints in the animation compared to the output range, then remaining
     /// `SoaTransform` are left unchanged.
     /// If there are more joints in the animation, then the last joints are not sampled.
@@ -838,11 +851,11 @@ where
     }
 
     /// Sets the time ratio of `SamplingJob`.
-    /// 
+    ///
     /// Time ratio in the unit interval 0.0-1.0 used to sample animation (where 0 is the beginning of
     /// the animation, 1 is the end). It should be computed as the current time in the animation,
     /// divided by animation duration.
-    /// 
+    ///
     /// This ratio is clamped before job execution in order to resolves any approximation issue on range
     /// bounds.
     #[inline]
@@ -1180,14 +1193,24 @@ mod sampling_tests {
 
     use super::*;
     use crate::animation::{Float3Key, QuaternionKey};
-    use crate::archive::{ArchiveReader, IArchive};
     use crate::base::ozz_buf;
-    use crate::test_utils::f16;
+
+    // f16 -> f32
+    // ignore overflow, infinite, NaN
+    pub fn f16(f: f32) -> u16 {
+        let n = unsafe { mem::transmute::<f32, u32>(f) };
+        if (n & 0x7FFFFFFF) == 0 {
+            return (n >> 16) as u16;
+        }
+        let sign = (n >> 16) & 0x8000;
+        let expo = (((n & 0x7f800000) - 0x38000000) >> 13) & 0x7c00;
+        let base = (n >> 13) & 0x03ff;
+        return (sign | expo | base) as u16;
+    }
 
     #[test]
     fn test_validity() {
-        let mut archive = IArchive::new("./resource/animation-blending-1.ozz").unwrap();
-        let animation = Rc::new(Animation::read(&mut archive).unwrap());
+        let animation = Rc::new(Animation::from_path("./resource/animation-blending-1.ozz").unwrap());
         let aligned_tracks = animation.num_aligned_tracks();
 
         // invalid output
@@ -1582,8 +1605,7 @@ mod sampling_tests {
     fn test_rkyv() {
         use rkyv::Deserialize;
 
-        let mut archive = IArchive::new("./resource/animation-blending-1.ozz").unwrap();
-        let animation = Rc::new(Animation::read(&mut archive).unwrap());
+        let animation = Rc::new(Animation::from_path("./resource/animation-blending-1.ozz").unwrap());
         let aligned_tracks = animation.num_aligned_tracks();
 
         let mut job = SamplingJob::default();

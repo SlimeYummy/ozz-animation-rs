@@ -1,8 +1,9 @@
 use glam::Mat4;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
-use crate::base::{OzzBuf, OzzError, OzzRef, SKELETON_MAX_JOINTS, SKELETON_NO_PARENT};
+use crate::base::{OzzBuf, OzzError, OzzIndex, OzzRef, SKELETON_MAX_JOINTS, SKELETON_NO_PARENT};
 use crate::math::{AosMat4, SoaMat4, SoaTransform};
 use crate::skeleton::Skeleton;
 
@@ -35,6 +36,8 @@ where
     to: i32,
     from_excluded: bool,
 }
+
+pub type ALocalToModelJob = LocalToModelJob<Arc<Skeleton>, Arc<RwLock<Vec<SoaTransform>>>, Arc<RwLock<Vec<Mat4>>>>;
 
 impl<S, I, O> Default for LocalToModelJob<S, I, O>
 where
@@ -159,8 +162,8 @@ where
     /// Note that "from" parent should be a valid matrix, as it is going to be used as part of "from" joint
     /// hierarchy update.
     #[inline]
-    pub fn set_from(&mut self, from: i32) {
-        self.from = from;
+    pub fn set_from(&mut self, from: impl OzzIndex) {
+        self.from = from.i32();
     }
 
     /// Gets to of `LocalToModelJob`.
@@ -177,8 +180,8 @@ where
     /// Default value is `SKELETON_MAX_JOINTS`, meaning the hierarchy (starting from "from") is updated to
     /// the last joint.
     #[inline]
-    pub fn set_to(&mut self, to: i32) {
-        self.to = to;
+    pub fn set_to(&mut self, to: impl OzzIndex) {
+        self.to = to.i32();
     }
 
     /// Gets from_excluded of `LocalToModelJob`.
@@ -282,15 +285,13 @@ mod local_to_model_tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::archive::{ArchiveReader, IArchive};
     use crate::base::DeterministicState;
     use crate::math::{SoaQuat, SoaVec3};
     use crate::skeleton::Skeleton;
 
     #[test]
     fn test_validity() {
-        let mut archive = IArchive::new("./resource/playback/skeleton.ozz").unwrap();
-        let skeleton = Rc::new(Skeleton::read(&mut archive).unwrap());
+        let skeleton = Rc::new(Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap());
         let num_joints = skeleton.num_joints();
 
         // empty skeleton

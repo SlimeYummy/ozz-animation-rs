@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::hash_map::DefaultHasher;
+use std::error::Error;
 use std::hash::BuildHasher;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
@@ -17,10 +18,10 @@ pub enum OzzError {
     InvalidJob,
 
     /// Std io errors.
-    #[error("IO error")]
+    #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
     /// Std string errors.
-    #[error("Utf8 error")]
+    #[error("Utf8 error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
 
     /// Read ozz archive tag error.
@@ -29,6 +30,11 @@ pub enum OzzError {
     /// Read ozz archive version error.
     #[error("Invalid version")]
     InvalidVersion,
+
+    /// Custom errors.
+    /// Ozz-animation-rs does not generate this error, but you can use it in your own code.
+    #[error("Custom error: {0}")]
+    Custom(Box<dyn Error>),
 }
 
 /// Defines the maximum number of joints.

@@ -1,10 +1,11 @@
 use glam::{Quat, Vec3, Vec4};
+use std::io::Read;
 use std::mem;
 use std::path::Path;
 use std::simd::prelude::*;
 use std::simd::*;
 
-use crate::archive::{ArchiveReader, ArchiveTag, ArchiveVersion, IArchive};
+use crate::archive::{Archive, ArchiveRead};
 use crate::base::OzzError;
 use crate::math::{f16_to_f32, fx4, ix4, simd_f16_to_f32, SoaQuat, SoaVec3};
 
@@ -37,8 +38,8 @@ impl Float3Key {
     }
 }
 
-impl ArchiveReader<Float3Key> for Float3Key {
-    fn read(archive: &mut IArchive) -> Result<Float3Key, OzzError> {
+impl ArchiveRead<Float3Key> for Float3Key {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<Float3Key, OzzError> {
         let ratio: f32 = archive.read()?;
         let track: u16 = archive.read()?;
         let value: [u16; 3] = [archive.read()?, archive.read()?, archive.read()?];
@@ -168,8 +169,8 @@ impl QuaternionKey {
     }
 }
 
-impl ArchiveReader<QuaternionKey> for QuaternionKey {
-    fn read(archive: &mut IArchive) -> Result<QuaternionKey, OzzError> {
+impl ArchiveRead<QuaternionKey> for QuaternionKey {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<QuaternionKey, OzzError> {
         let ratio: f32 = archive.read()?;
         let track: u16 = archive.read()?;
         let largest: u8 = archive.read()?;
@@ -208,68 +209,17 @@ pub struct Animation {
     scales: Vec<Float3Key>,
 }
 
-/// Defines the version of the `Animation` archive.
-impl ArchiveVersion for Animation {
-    fn version() -> u32 {
-        return 6;
-    }
-}
-
-/// Defines the tag of the `Animation` archive.
-impl ArchiveTag for Animation {
-    fn tag() -> &'static str {
+impl Animation {
+    /// `Animation` resource file tag for `Archive`.
+    #[inline]
+    pub fn tag() -> &'static str {
         return "ozz-animation";
     }
-}
 
-/// Read `Animation` from `IArchive`.
-impl ArchiveReader<Animation> for Animation {
-    fn read(archive: &mut IArchive) -> Result<Animation, OzzError> {
-        if !archive.test_tag::<Self>()? {
-            return Err(OzzError::InvalidTag);
-        }
-
-        let version = archive.read_version()?;
-        if version != Self::version() {
-            return Err(OzzError::InvalidVersion);
-        }
-
-        let duration: f32 = archive.read()?;
-        let num_tracks: i32 = archive.read()?;
-        let name_len: i32 = archive.read()?;
-        let translation_count: i32 = archive.read()?;
-        let rotation_count: i32 = archive.read()?;
-        let scale_count: i32 = archive.read()?;
-
-        let mut name = String::new();
-        if name_len != 0 {
-            name = archive.read_string(name_len as usize)?;
-        }
-        let translations: Vec<Float3Key> = archive.read_vec(translation_count as usize)?;
-        let rotations: Vec<QuaternionKey> = archive.read_vec(rotation_count as usize)?;
-        let scales: Vec<Float3Key> = archive.read_vec(scale_count as usize)?;
-
-        return Ok(Animation {
-            duration,
-            num_tracks: num_tracks as usize,
-            name,
-            translations,
-            rotations,
-            scales,
-        });
-    }
-}
-
-impl Animation {
-    /// Reads an `Animation` from a file.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Animation, OzzError> {
-        let mut archive = IArchive::new(path)?;
-        return Animation::read(&mut archive);
-    }
-
-    /// Reads an `Animation` from a `IArchive`.
-    pub fn from_reader(archive: &mut IArchive) -> Result<Animation, OzzError> {
-        return Animation::read(archive);
+    #[inline]
+    /// `Animation` resource file version for `Archive`.
+    pub fn version() -> u32 {
+        return 6;
     }
 
     /// Creates a new `Animation` from raw data.
@@ -289,6 +239,47 @@ impl Animation {
             rotations,
             scales,
         };
+    }
+
+    /// Reads an `Animation` from an `Archive`.
+    pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Animation, OzzError> {
+        if archive.tag() != Self::tag() {
+            return Err(OzzError::InvalidTag);
+        }
+        if archive.version() != Self::version() {
+            return Err(OzzError::InvalidVersion);
+        }
+
+        let duration: f32 = archive.read()?;
+        let num_tracks: i32 = archive.read()?;
+        let name_len: i32 = archive.read()?;
+        let translation_count: i32 = archive.read()?;
+        let rotation_count: i32 = archive.read()?;
+        let scale_count: i32 = archive.read()?;
+
+        let mut name = String::new();
+        if name_len != 0 {
+            let buf = archive.read_vec(name_len as usize)?;
+            name = String::from_utf8(buf)?;
+        }
+        let translations: Vec<Float3Key> = archive.read_vec(translation_count as usize)?;
+        let rotations: Vec<QuaternionKey> = archive.read_vec(rotation_count as usize)?;
+        let scales: Vec<Float3Key> = archive.read_vec(scale_count as usize)?;
+
+        return Ok(Animation {
+            duration,
+            num_tracks: num_tracks as usize,
+            name,
+            translations,
+            rotations,
+            scales,
+        });
+    }
+
+    /// Reads an `Animation` from a file path.
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Animation, OzzError> {
+        let mut archive = Archive::from_path(path)?;
+        return Animation::from_archive(&mut archive);
     }
 }
 
@@ -499,8 +490,7 @@ mod tests {
 
     #[test]
     fn test_read_animation() {
-        let mut archive = IArchive::new("./resource/playback/animation.ozz").unwrap();
-        let animation = Animation::read(&mut archive).unwrap();
+        let animation = Animation::from_path("./resource/playback/animation.ozz").unwrap();
 
         assert_eq!(animation.duration(), 8.60000038);
         assert_eq!(animation.num_tracks(), 67);

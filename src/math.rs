@@ -9,11 +9,12 @@
 use glam::{Mat4, Quat, Vec3, Vec3A, Vec4};
 use static_assertions::const_assert_eq;
 use std::fmt::Debug;
+use std::io::Read;
 use std::mem;
 use std::simd::prelude::*;
 use std::simd::*;
 
-use crate::archive::{ArchiveReader, IArchive};
+use crate::archive::{Archive, ArchiveRead};
 use crate::base::OzzError;
 
 pub const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
@@ -429,8 +430,8 @@ pub struct SoaTransform {
     pub scale: SoaVec3,
 }
 
-impl ArchiveReader<SoaTransform> for SoaTransform {
-    fn read(archive: &mut IArchive) -> Result<SoaTransform, OzzError> {
+impl ArchiveRead<SoaTransform> for SoaTransform {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<SoaTransform, OzzError> {
         const COUNT: usize = mem::size_of::<SoaTransform>() / mem::size_of::<f32>();
         let mut buffer = [0f32; COUNT];
         for idx in 0..COUNT {
