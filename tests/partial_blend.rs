@@ -1,7 +1,9 @@
 use glam::{Mat4, Vec4};
-use ozz_animation_rs::*;
 use ozz_animation_rs::math::*;
+use ozz_animation_rs::*;
 use std::rc::Rc;
+
+mod common;
 
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -18,7 +20,7 @@ struct TestData {
 #[test]
 fn test_partial_blend() {
     run_partial_blend(5..=5, |_, data| {
-        test_utils::compare_with_cpp("partial_blend", "partial_blend", &data.l2m_out, 1e-5).unwrap();
+        common::compare_with_cpp("partial_blend", "partial_blend", &data.l2m_out, 1e-5).unwrap();
     });
 }
 
@@ -26,7 +28,7 @@ fn test_partial_blend() {
 #[test]
 fn test_partial_blend_deterministic() {
     run_partial_blend(-1..=11, |ratio, data| {
-        test_utils::compare_with_rkyv("partial_blend", &format!("partial_blend{:+.2}", ratio), data).unwrap();
+        common::compare_with_rkyv("partial_blend", &format!("partial_blend{:+.2}", ratio), data).unwrap();
     });
 }
 
@@ -35,9 +37,9 @@ where
     I: Iterator<Item = i32>,
     T: Fn(f32, &TestData),
 {
-    let skeleton = Rc::new(Skeleton::from_file("./resource/partial_blend/skeleton.ozz").unwrap());
-    let animation_lower = Rc::new(Animation::from_file("./resource/partial_blend/animation_base.ozz").unwrap());
-    let animation_upper = Rc::new(Animation::from_file("./resource/partial_blend/animation_partial.ozz").unwrap());
+    let skeleton = Rc::new(Skeleton::from_path("./resource/partial_blend/skeleton.ozz").unwrap());
+    let animation_lower = Rc::new(Animation::from_path("./resource/partial_blend/animation_base.ozz").unwrap());
+    let animation_upper = Rc::new(Animation::from_path("./resource/partial_blend/animation_partial.ozz").unwrap());
 
     let mut sample_job_lower: SamplingJob = SamplingJob::default();
     sample_job_lower.set_animation(animation_lower.clone());

@@ -1,7 +1,9 @@
 use glam::Mat4;
-use ozz_animation_rs::*;
 use ozz_animation_rs::math::*;
+use ozz_animation_rs::*;
 use std::rc::Rc;
+
+mod common;
 
 #[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -15,7 +17,7 @@ struct TestData {
 #[test]
 fn test_playback() {
     run_playback(5..=5, |_, data| {
-        test_utils::compare_with_cpp("playback", "playback", &data.l2m_out, 1e-5).unwrap()
+        common::compare_with_cpp("playback", "playback", &data.l2m_out, 1e-5).unwrap()
     });
 }
 
@@ -23,7 +25,7 @@ fn test_playback() {
 #[test]
 fn test_playback_deterministic() {
     run_playback(-1..=11, |ratio, data| {
-        test_utils::compare_with_rkyv("playback", &format!("playback{:+.2}", ratio), data).unwrap()
+        common::compare_with_rkyv("playback", &format!("playback{:+.2}", ratio), data).unwrap()
     });
 }
 
@@ -32,8 +34,8 @@ where
     I: Iterator<Item = i32>,
     T: Fn(f32, &TestData),
 {
-    let skeleton = Rc::new(Skeleton::from_file("./resource/playback/skeleton.ozz").unwrap());
-    let animation = Rc::new(Animation::from_file("./resource/playback/animation.ozz").unwrap());
+    let skeleton = Rc::new(Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap());
+    let animation = Rc::new(Animation::from_path("./resource/playback/animation.ozz").unwrap());
 
     if skeleton.num_joints() != animation.num_tracks() {
         panic!("skeleton.num_joints() != animation.num_tracks()");
