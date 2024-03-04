@@ -26,4 +26,3 @@ thiserror = "1.0"
 
 [dev-dependencies]
 miniz_oxide = "0.7"
-reqwest = "0.11"
