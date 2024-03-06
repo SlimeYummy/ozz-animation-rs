@@ -1,0 +1,11 @@
+[package]
+name = "demo"
+version = "1.0.0"
+authors = ["SlimeYummy <zzzcccnnn@outlook.com>"]
+edition = "2021"
+resolver = "2"
+
+[dependencies]
+bevy = "0.13"
+ozz-animation-rs = { path = "../" }
+reqwest = "0.11"
