@@ -3,8 +3,8 @@ mod blend;
 mod playback;
 mod two_bone_ik;
 
-use bevy::prelude::*;
 use bevy::pbr::NotShadowCaster;
+use bevy::prelude::*;
 use bevy::render::mesh::PrimitiveTopology;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::tasks::futures_lite::future;
@@ -60,7 +60,7 @@ impl OzzComponent {
         self.task = Some(task);
         self.example = None;
     }
-    
+
     fn load_next(&mut self) {
         self.typ = (self.typ + 1) % OZZ_TYPES.len();
         self.load();
@@ -79,11 +79,7 @@ impl OzzComponent {
 #[derive(Component)]
 struct BoneIndex(usize);
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
     let mut oc = OzzComponent::default();
     oc.load();
     commands.spawn(oc);
@@ -114,19 +110,22 @@ fn setup(
     }
 
     // camera
-    commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(1.5, 1.0, 3.0).looking_at(Vec3::new(0.0, 1.0, -0.0), Vec3::Y),
-        ..default()
-    }, FogSettings {
-        color: Color::rgba(0.35, 0.48, 0.66, 1.0),
-        directional_light_color: Color::rgba(1.0, 0.95, 0.85, 0.5),
-        directional_light_exponent: 30.0,
-        falloff: FogFalloff::from_visibility_colors(
-            15.0, // distance in world units up to which objects retain visibility (>= 5% contrast)
-            Color::rgb(0.35, 0.5, 0.66), // atmospheric extinction color (after light is lost due to absorption by atmospheric particles)
-            Color::rgb(0.8, 0.844, 1.0), // atmospheric inscattering color (light gained due to scattering from the sun)
-        ),
-    }));
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(1.5, 1.0, 3.0).looking_at(Vec3::new(0.0, 1.0, -0.0), Vec3::Y),
+            ..default()
+        },
+        FogSettings {
+            color: Color::rgba(0.35, 0.48, 0.66, 1.0),
+            directional_light_color: Color::rgba(1.0, 0.95, 0.85, 0.5),
+            directional_light_exponent: 30.0,
+            falloff: FogFalloff::from_visibility_colors(
+                15.0,                        // distance in world units up to which objects retain visibility (>= 5% contrast)
+                Color::rgb(0.35, 0.5, 0.66), // atmospheric extinction color (after light is lost due to absorption by atmospheric particles)
+                Color::rgb(0.8, 0.844, 1.0), // atmospheric inscattering color (light gained due to scattering from the sun)
+            ),
+        },
+    ));
 
     // Sun
     commands.spawn(DirectionalLightBundle {
@@ -138,8 +137,7 @@ fn setup(
             shadow_normal_bias: 0.9,
             ..default()
         },
-        transform: Transform::from_xyz(-3.0, 2.0, -4.0)
-            .looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+        transform: Transform::from_xyz(-3.0, 2.0, -4.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         ..default()
     });
 
@@ -171,10 +169,15 @@ fn setup(
     });
 }
 
-fn update_ozz_animation(keycode: Res<ButtonInput<KeyCode>>, mut oc_query: Query<&mut OzzComponent>, mut text_query: Query<&mut Text, With<DemoName>>, time: Res<Time>) {
+fn update_ozz_animation(
+    keycode: Res<ButtonInput<KeyCode>>,
+    mut oc_query: Query<&mut OzzComponent>,
+    mut text_query: Query<&mut Text, With<DemoName>>,
+    time: Res<Time>,
+) {
     let mut oc = oc_query.iter_mut().last().unwrap(); // only one OzzComponent
     oc.poll();
-    
+
     if keycode.just_pressed(KeyCode::Space) {
         oc.load_next();
 
@@ -193,7 +196,7 @@ fn update_camera(mut query: Query<&mut Transform, With<Camera3d>>, oc_query: Que
         // only one OzzComponent
         let root = example.root();
         let target = Vec3::new(root.w_axis.x, 1.0, root.w_axis.z);
-        
+
         let pos = target + Vec3::new(1.5, 1.0, 3.0);
         for mut transform in query.iter_mut() {
             *transform = Transform::from_translation(pos).looking_at(target, Vec3::Y);
@@ -305,31 +308,36 @@ fn draw_gizmos(gizmos: &mut Gizmos, trans: &OzzTransform) {
 struct DemoName;
 
 fn setup_ui(mut commands: Commands) {
-    commands.spawn((TextBundle::from_section(
-        format!("Demo: {}", OZZ_TYPES[0].1).as_str(),
-        TextStyle {
-            font_size: 32.0,
+    commands.spawn((
+        TextBundle::from_section(
+            format!("Demo: {}", OZZ_TYPES[0].1).as_str(),
+            TextStyle {
+                font_size: 32.0,
+                ..default()
+            },
+        )
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            left: Val::Px(5.0),
+            top: Val::Px(5.0),
             ..default()
-        },
-    )
-    .with_style(Style {
-        position_type: PositionType::Absolute,
-        left: Val::Px(5.0),
-        top: Val::Px(5.0),
-        ..default()
-    }), DemoName));
+        }),
+        DemoName,
+    ));
 
-    commands.spawn(TextBundle::from_section(
-        "Press space to switch demo",
-        TextStyle {
-            font_size: 32.0,
+    commands.spawn(
+        TextBundle::from_section(
+            "Press space to switch demo",
+            TextStyle {
+                font_size: 32.0,
+                ..default()
+            },
+        )
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            left: Val::Px(5.0),
+            top: Val::Px(40.0),
             ..default()
-        },
-    )
-    .with_style(Style {
-        position_type: PositionType::Absolute,
-        left: Val::Px(5.0),
-        top: Val::Px(40.0),
-        ..default()
-    }));
+        }),
+    );
 }
