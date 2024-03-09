@@ -86,16 +86,16 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
 
     // ground
     commands.spawn(PbrBundle {
-        mesh: meshes.add(Rectangle::new(4.0, 16.0)),
-        material: materials.add(Color::rgb(0.35, 0.56, 0.45)),
+        mesh: meshes.add(Rectangle::new(20.0, 30.0)),
+        material: materials.add(Color::rgb(1.0, 0.96, 0.95)),
         transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
-            .with_translation(Vec3::new(0.0, 0.0, 5.0)),
+            .with_translation(Vec3::new(-2.0, 0.0, -5.0)),
         ..default()
     });
 
     // bones
     let bone_mesh = meshes.add(build_bone_mesh());
-    let bone_material = materials.add(Color::WHITE);
+    let bone_material = materials.add(Color::rgb(0.68, 0.68, 0.8));
     for i in 0..BONE_COUNT {
         commands.spawn((
             PbrBundle {
@@ -110,34 +110,8 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     }
 
     // camera
-    commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(1.5, 1.0, 3.0).looking_at(Vec3::new(0.0, 1.0, -0.0), Vec3::Y),
-            ..default()
-        },
-        FogSettings {
-            color: Color::rgba(0.35, 0.48, 0.66, 1.0),
-            directional_light_color: Color::rgba(1.0, 0.95, 0.85, 0.5),
-            directional_light_exponent: 30.0,
-            falloff: FogFalloff::from_visibility_colors(
-                15.0,                        // distance in world units up to which objects retain visibility (>= 5% contrast)
-                Color::rgb(0.35, 0.5, 0.66), // atmospheric extinction color (after light is lost due to absorption by atmospheric particles)
-                Color::rgb(0.8, 0.844, 1.0), // atmospheric inscattering color (light gained due to scattering from the sun)
-            ),
-        },
-    ));
-
-    // Sun
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
-            color: Color::rgb(0.98, 0.95, 0.82),
-            illuminance: 3000.0,
-            shadows_enabled: true,
-            shadow_depth_bias: 0.05,
-            shadow_normal_bias: 0.9,
-            ..default()
-        },
-        transform: Transform::from_xyz(-3.0, 2.0, -4.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+    commands.spawn(Camera3dBundle {
+        transform: Transform::from_xyz(1.5, 1.0, 3.0).looking_at(Vec3::new(0.0, 1.0, -0.0), Vec3::Y),
         ..default()
     });
 
@@ -146,16 +120,30 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
         PbrBundle {
             mesh: meshes.add(Cuboid::new(2.0, 1.0, 1.0)),
             material: materials.add(StandardMaterial {
-                base_color: Color::hex("888888").unwrap(),
+                base_color: Color::rgb(0.4, 0.61, 0.98),
                 unlit: true,
                 cull_mode: None,
                 ..default()
             }),
-            transform: Transform::from_scale(Vec3::splat(20.0)),
+            transform: Transform::from_scale(Vec3::splat(30.0)),
             ..default()
         },
         NotShadowCaster,
     ));
+
+    // Sun
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            color: Color::WHITE,
+            illuminance: 10000.0,
+            shadows_enabled: true,
+            shadow_depth_bias: 0.05,
+            shadow_normal_bias: 0.9,
+            ..default()
+        },
+        transform: Transform::from_xyz(-3.0, 1.6, -4.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+        ..default()
+    });
 
     // light
     commands.spawn(PointLightBundle {
@@ -233,6 +221,7 @@ fn draw_spines(mut gizmos: Gizmos, oc: Query<&OzzComponent>) {
             }
         }
     }
+    draw_ground(&mut gizmos);
 }
 
 #[rustfmt::skip]
@@ -280,6 +269,23 @@ fn build_bone_mesh() -> Mesh {
     return mesh;
 }
 
+fn draw_ground(gizmos: &mut Gizmos) {
+    for i in -12..=8 {
+        gizmos.line(
+            Vec3::new(i as f32, 0.0, -20.0),
+            Vec3::new(i as f32, 0.0, 10.0),
+            Color::rgba(0.25, 0.25, 0.25, 0.4),
+        );
+    }
+    for i in -20..=10 {
+        gizmos.line(
+            Vec3::new(-12.0, 0.0, i as f32),
+            Vec3::new(8.0, 0.0, i as f32),
+            Color::rgba(0.25, 0.25, 0.25, 0.4),
+        );
+    }
+}
+
 fn draw_gizmos(gizmos: &mut Gizmos, trans: &OzzTransform) {
     let normal_x = trans.rotation.mul_vec3(Vec3::X).normalize();
     let normal_y = trans.rotation.mul_vec3(Vec3::Y).normalize();
@@ -288,19 +294,19 @@ fn draw_gizmos(gizmos: &mut Gizmos, trans: &OzzTransform) {
         trans.position,
         Direction3d::new_unchecked(normal_x),
         trans.scale * 0.25,
-        Color::rgba(1.0, 0.1, 0.1, 0.4),
+        Color::rgba(1.0, 0.1, 0.1, 0.5),
     );
     gizmos.circle(
         trans.position,
         Direction3d::new_unchecked(normal_y),
         trans.scale * 0.25,
-        Color::rgba(0.1, 1.0, 0.1, 0.4),
+        Color::rgba(0.1, 1.0, 0.1, 0.5),
     );
     gizmos.circle(
         trans.position,
         Direction3d::new_unchecked(normal_z),
         trans.scale * 0.25,
-        Color::rgba(0.1, 0.1, 1.0, 0.4),
+        Color::rgba(0.1, 0.1, 1.0, 0.5),
     );
 }
 

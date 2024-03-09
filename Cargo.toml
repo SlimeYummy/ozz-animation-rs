@@ -1,6 +1,6 @@
 [package]
 name = "ozz-animation-rs"
-version = "0.7.2"
+version = "0.8.0"
 authors = ["SlimeYummy <zzzcccnnn@outlook.com>"]
 edition = "2021"
 rust-version = "1.75"
@@ -10,7 +10,7 @@ homepage = "https://github.com/SlimeYummy/ozz-animation-rs"
 repository = "https://github.com/SlimeYummy/ozz-animation-rs"
 keywords = ["animation", "skeletal-animation", "fixed-point", "deterministic", "ozz-animation"]
 categories = ["game-development", "rendering::data-formats", "api-bindings"]
-exclude = ["/.circleci", "/.github", "/expected", "/output", "/resource"]
+exclude = ["/.circleci", "/.github", "/demo", "/expected", "/output", "/resource"]
 resolver = "2"
 
 [features]
