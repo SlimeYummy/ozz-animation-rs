@@ -33,7 +33,7 @@ Ozz-animation offline features are not supported, and no plans to support. Pleas
 
 A simple demo is in [./demo](https://github.com/FenQiDian/ozz-animation-rs/tree/master/demo) folder. Enter the folder and execute `cargo run`.
 
-![demo](https://github.com/SlimeYummy/ozz-animation-rs/tree/master/demo/demo.jpg)
+![demo](https://raw.githubusercontent.com/SlimeYummy/ozz-animation-rs/master/demo/demo.jpg)
 
 The test cases under [./tests](https://github.com/FenQiDian/ozz-animation-rs/tree/master/tests) can be viewed as examples.
 
