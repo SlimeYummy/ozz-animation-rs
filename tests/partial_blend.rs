@@ -2,6 +2,7 @@ use glam::{Mat4, Vec4};
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
 use std::rc::Rc;
+use wasm_bindgen_test::*;
 
 mod common;
 
@@ -18,6 +19,7 @@ struct TestData {
 }
 
 #[test]
+#[wasm_bindgen_test]
 fn test_partial_blend() {
     run_partial_blend(5..=5, |_, data| {
         common::compare_with_cpp("partial_blend", "partial_blend", &data.l2m_out, 1e-5).unwrap();
@@ -26,6 +28,7 @@ fn test_partial_blend() {
 
 #[cfg(feature = "rkyv")]
 #[test]
+#[wasm_bindgen_test]
 fn test_partial_blend_deterministic() {
     run_partial_blend(-1..=11, |ratio, data| {
         common::compare_with_rkyv("partial_blend", &format!("partial_blend{:+.2}", ratio), data).unwrap();

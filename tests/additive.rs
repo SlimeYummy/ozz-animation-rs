@@ -2,6 +2,7 @@ use glam::{Mat4, Vec4};
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
 use std::rc::Rc;
+use wasm_bindgen_test::*;
 
 mod common;
 
@@ -25,6 +26,7 @@ struct TestDataInit {
 }
 
 #[test]
+#[wasm_bindgen_test]
 fn test_additive() {
     run_additive(
         5..=5,
@@ -35,6 +37,7 @@ fn test_additive() {
 
 #[cfg(feature = "rkyv")]
 #[test]
+#[wasm_bindgen_test]
 fn test_additive_deterministic() {
     run_additive(
         -1..=11,

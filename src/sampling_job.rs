@@ -1193,7 +1193,6 @@ mod sampling_tests {
     use wasm_bindgen_test::*;
 
     use super::*;
-    use crate::animation::{Float3Key, QuaternionKey};
     use crate::base::ozz_buf;
 
     // f16 -> f32

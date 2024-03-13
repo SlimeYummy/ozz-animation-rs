@@ -2,6 +2,7 @@ use glam::Mat4;
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
 use std::rc::Rc;
+use wasm_bindgen_test::*;
 
 mod common;
 
@@ -20,6 +21,7 @@ struct TestData {
 }
 
 #[test]
+#[wasm_bindgen_test]
 fn test_blend() {
     run_blend(2..=2, |_, data| {
         common::compare_with_cpp("blend", "blend", &data.l2m_out, 1e-6).unwrap();
@@ -28,6 +30,7 @@ fn test_blend() {
 
 #[cfg(feature = "rkyv")]
 #[test]
+#[wasm_bindgen_test]
 fn test_blend_deterministic() {
     run_blend(-1..=11, |ratio, data| {
         common::compare_with_rkyv("blend", &format!("blend{:+.2}", ratio), data).unwrap();

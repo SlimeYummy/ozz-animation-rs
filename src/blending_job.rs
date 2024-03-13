@@ -494,14 +494,12 @@ where
 
 #[cfg(test)]
 mod blending_tests {
-    use glam::Vec4;
     use std::collections::HashMap;
     use std::mem;
     use wasm_bindgen_test::*;
 
     use super::*;
     use crate::base::{ozz_buf, DeterministicState};
-    use crate::skeleton::Skeleton;
 
     const IDENTITY: SoaTransform = SoaTransform {
         translation: SoaVec3::splat_col([0.0; 3]),

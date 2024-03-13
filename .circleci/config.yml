@@ -3,23 +3,47 @@ version: 2.1
 jobs:
   deterministic_x86_64:
     docker:
-      - image: cimg/rust:1.75.0
+    - image: cimg/rust:1.76.0-node
     resource_class: medium
     steps:
-      - checkout
-      - run: cargo --version && cargo test --release && tar -czvf output_x86_64.tar.gz output
-      - store_artifacts:
-          path: ./output_x86_64.tar.gz
-  
+    - checkout
+    - run:
+        name: Native test
+        command: cargo --version &&
+          cargo test --release &&
+          tar -czvf output_x86_64.tar.gz output
+    - run:
+        name: Wasm setup
+        command: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    - run:
+        name: Wasm test
+        command: cargo --version &&
+          node --version &&
+          wasm-pack test --node --features "wasm nodejs"
+    - store_artifacts:
+        path: ./output_x86_64.tar.gz
+
   deterministic_aarch64:
     docker:
-      - image: cimg/rust:1.75.0
+    - image: cimg/rust:1.76.0-node
     resource_class: arm.medium
     steps:
-      - checkout
-      - run: cargo --version && cargo test --release && tar -czvf output_aarch64.tar.gz output
-      - store_artifacts:
-          path: ./output_aarch64.tar.gz
+    - checkout
+    - run:
+        name: Native test
+        command: cargo --version &&
+          cargo test --release &&
+          tar -czvf output_aarch64.tar.gz output
+    - run:
+        name: Wasm setup
+        command: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    - run:
+        name: Wasm test
+        command: cargo --version &&
+          node --version &&
+          wasm-pack test --node --features "wasm nodejs"
+    - store_artifacts:
+        path: ./output_aarch64.tar.gz
 
 workflows:
   deterministic:
