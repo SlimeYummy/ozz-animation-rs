@@ -306,10 +306,12 @@ impl IKAimJob {
 mod ik_aim_job_tests {
     use core::f32::consts;
     use glam::Vec3;
+    use wasm_bindgen_test::*;
 
     use super::*;
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_validity() {
         let mut job = IKAimJob::default();
         job.set_forward(Vec3A::new(0.5, 0.0, 0.0));
@@ -321,6 +323,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_correction() {
         let parents = [
             Mat4::IDENTITY,
@@ -393,6 +396,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_forward() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -424,6 +428,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_up() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -480,6 +485,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_pole() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -530,6 +536,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_offset() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -616,6 +623,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_twist() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -650,6 +658,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_aligned_target_up() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -696,6 +705,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_aligned_target_pole() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -720,6 +730,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_target_too_close() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -732,6 +743,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_weight() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::IDENTITY);
@@ -783,6 +795,7 @@ mod ik_aim_job_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_zero_scale() {
         let mut job = IKAimJob::default();
         job.set_joint(Mat4::ZERO);

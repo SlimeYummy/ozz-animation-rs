@@ -1242,9 +1242,12 @@ pub(crate) fn quat_positive_w(q: f32x4) -> f32x4 {
 
 #[cfg(test)]
 mod tests {
+    use wasm_bindgen_test::*;
+
     use super::*;
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_f16_to_f32() {
         assert_eq!(f16_to_f32(0b00111100_00000000), 1.0f32);
         assert_eq!(f16_to_f32(0b10111100_00000000), -1.0f32);
@@ -1258,6 +1261,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_simd_f16_to_f32() {
         let half4 = [
             0b00111100_00000000,
@@ -1281,6 +1285,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     #[rustfmt::skip]
     fn test_matrix_invert() {
         let m = AosMat4::new(
@@ -1327,6 +1332,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_sin_cos() {
         const EPSILON: f32x4 = f32x4::from_array([2.0e-7; 4]);
 
@@ -1374,6 +1380,7 @@ mod tests {
         return (a - f32x4::splat(b)).abs().simd_lt(f32x4::splat(epsilon)).all();
     }
     #[test]
+    #[wasm_bindgen_test]
     fn test_asin() {
         assert_eq!(fx4_asin(f32x4::splat(0.0))[0], 0.0);
         assert_eq!(fx4_asin(f32x4::splat(1.0))[0], core::f32::consts::FRAC_PI_2);
@@ -1401,6 +1408,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_acos() {
         assert_eq!(fx4_acos(f32x4::splat(0.0))[0], core::f32::consts::FRAC_PI_2);
         assert_eq!(fx4_acos(f32x4::splat(1.0))[0], 0.0);
@@ -1429,6 +1437,7 @@ mod tests {
 
     #[cfg(feature = "rkyv")]
     #[test]
+    #[wasm_bindgen_test]
     fn test_rkyv() {
         use rkyv::Deserialize;
 

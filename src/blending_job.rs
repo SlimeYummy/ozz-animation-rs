@@ -497,6 +497,7 @@ mod blending_tests {
     use glam::Vec4;
     use std::collections::HashMap;
     use std::mem;
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::base::{ozz_buf, DeterministicState};
@@ -509,6 +510,7 @@ mod blending_tests {
     };
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_validity() {
         let skeleton = Rc::new(Skeleton::from_path("./resource/skeleton-blending.ozz").unwrap());
         let num_bind_pose = skeleton.joint_rest_poses().len();
@@ -717,6 +719,7 @@ mod blending_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_empty() {
         let mut joint_rest_poses = vec![SoaTransform::default(); 2];
         joint_rest_poses[0].translation =
@@ -763,6 +766,7 @@ mod blending_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_weight() {
         let mut input1 = vec![IDENTITY; 2];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
@@ -860,6 +864,7 @@ mod blending_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_joint_weights() {
         let mut input1 = vec![IDENTITY; 2];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
@@ -961,6 +966,7 @@ mod blending_tests {
         ));
     }
     #[test]
+    #[wasm_bindgen_test]
     fn test_normalize() {
         let skeleton = new_skeleton1();
 
@@ -1074,6 +1080,7 @@ mod blending_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_threshold() {
         let skeleton = new_skeleton1();
 
@@ -1170,6 +1177,7 @@ mod blending_tests {
     // }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_additive_weight() {
         let skeleton = Rc::new(Skeleton::from_raw(
             vec![IDENTITY; 1],
@@ -1340,6 +1348,7 @@ mod blending_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_additive_joint_weight() {
         let skeleton = Rc::new(Skeleton::from_raw(
             vec![IDENTITY; 1],

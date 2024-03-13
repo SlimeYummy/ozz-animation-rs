@@ -1,7 +1,6 @@
 use glam::{Quat, Vec3, Vec4};
 use std::io::Read;
 use std::mem;
-use std::path::Path;
 use std::simd::prelude::*;
 use std::simd::*;
 
@@ -277,7 +276,15 @@ impl Animation {
     }
 
     /// Reads an `Animation` from a file path.
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Animation, OzzError> {
+    #[cfg(not(feature = "wasm"))]
+    pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Animation, OzzError> {
+        let mut archive = Archive::from_path(path)?;
+        return Animation::from_archive(&mut archive);
+    }
+
+    /// Reads an `Animation` from a file path.
+    #[cfg(all(feature = "wasm", feature = "nodejs"))]
+    pub fn from_path(path: &str) -> Result<Animation, OzzError> {
         let mut archive = Archive::from_path(path)?;
         return Animation::from_archive(&mut archive);
     }
@@ -336,9 +343,12 @@ impl Animation {
 
 #[cfg(test)]
 mod tests {
+    use wasm_bindgen_test::*;
+
     use super::*;
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_float3_key_decompress() {
         let res = Float3Key {
             ratio: 0.0,
@@ -358,6 +368,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_simd_decompress_float3() {
         let k0 = Float3Key {
             ratio: 0.0,
@@ -397,6 +408,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_quaternion_key_decompress() {
         let quat = QuaternionKey {
             ratio: 0.0,
@@ -454,6 +466,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_simd_decompress_quaternion() {
         let quat0 = QuaternionKey {
             ratio: 0.0,
@@ -489,6 +502,7 @@ mod tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_read_animation() {
         let animation = Animation::from_path("./resource/playback/animation.ozz").unwrap();
 
