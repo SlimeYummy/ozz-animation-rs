@@ -1190,6 +1190,7 @@ where
 #[cfg(test)]
 mod sampling_tests {
     use glam::{Quat, Vec3};
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::animation::{Float3Key, QuaternionKey};
@@ -1209,6 +1210,7 @@ mod sampling_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_validity() {
         let animation = Rc::new(Animation::from_path("./resource/animation-blending-1.ozz").unwrap());
         let aligned_tracks = animation.num_aligned_tracks();
@@ -1349,6 +1351,7 @@ mod sampling_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_sampling() {
         fn frame(ratio: f32, t1: f32, t2: f32, t3: f32, t4: f32) -> Frame<4> {
             return Frame {
@@ -1404,11 +1407,13 @@ mod sampling_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_sampling_no_track() {
         execute_test::<0>(46.0, vec![], vec![], vec![], vec![]);
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_sampling_1_track_0_key() {
         execute_test::<1>(
             46.0,
@@ -1425,6 +1430,7 @@ mod sampling_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_sampling_1_track_1_key() {
         let mut translations = new_translations();
         translations[0] = Float3Key::new(0.0, 0, [f16(1.0), f16(-1.0), f16(5.0)]);
@@ -1445,6 +1451,7 @@ mod sampling_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_sampling_1_track_2_key() {
         fn frame(ratio: f32, v: Vec3) -> Frame<2> {
             return Frame {
@@ -1480,6 +1487,7 @@ mod sampling_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     #[rustfmt::skip]
     fn test_sampling_4_track_2_key() {
         execute_test::<4>(
@@ -1542,6 +1550,7 @@ mod sampling_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_cache() {
         let mut translations = new_translations();
         translations[0] = Float3Key::new(0.0, 0, [f16(1.0), f16(-1.0), f16(5.0)]);
@@ -1602,6 +1611,7 @@ mod sampling_tests {
 
     #[cfg(feature = "rkyv")]
     #[test]
+    #[wasm_bindgen_test]
     fn test_rkyv() {
         use rkyv::Deserialize;
 

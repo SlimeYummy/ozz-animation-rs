@@ -483,10 +483,12 @@ impl IKTwoBoneJob {
 mod ik_two_bone_tests {
     use core::f32::consts;
     use glam::Vec3;
+    use wasm_bindgen_test::*;
 
     use super::*;
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_validity() {
         let mut job = IKTwoBoneJob::default();
         job.set_mid_axis(Vec3A::new(1.0, 2.0, 3.0));
@@ -498,6 +500,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_start_joint_correction() {
         let base_start = Mat4::IDENTITY;
         let base_mid =
@@ -591,6 +594,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_pole() {
         let mut job = new_ik_two_bone_job();
 
@@ -649,6 +653,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_zero_scale() {
         let mut job = IKTwoBoneJob::default();
         job.set_start_joint(Mat4::ZERO);
@@ -661,6 +666,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_soften() {
         let mut job = new_ik_two_bone_job();
 
@@ -727,6 +733,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_twist() {
         let mut job = new_ik_two_bone_job();
         job.set_pole_vector(Vec3A::Y);
@@ -778,6 +785,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_weight() {
         let mut job = new_ik_two_bone_job();
 
@@ -845,6 +853,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_pole_target_alignment() {
         let mut job = new_ik_two_bone_job();
 
@@ -881,6 +890,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_mid_axis() {
         let mut job = new_ik_two_bone_job();
         let mid_axis = job.mid_axis();
@@ -924,6 +934,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_aligned_joints_and_target() {
         let mut job = IKTwoBoneJob::default();
         job.set_start_joint(Mat4::IDENTITY);
@@ -952,6 +963,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_zero_length_start_target() {
         let start = Mat4::IDENTITY;
         let mid = Mat4::from_rotation_translation(Quat::from_axis_angle(Vec3::Z, consts::FRAC_PI_2), Vec3::Y);
@@ -971,6 +983,7 @@ mod ik_two_bone_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_zero_length_bone_chain() {
         let mut job = IKTwoBoneJob::default();
         job.set_pole_vector(Vec3A::Y);

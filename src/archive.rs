@@ -1,5 +1,7 @@
+#[cfg(not(feature = "wasm"))]
 use std::fs::File;
 use std::io::{Cursor, Read};
+#[cfg(not(feature = "wasm"))]
 use std::path::Path;
 use std::{mem, slice, str};
 
@@ -65,40 +67,9 @@ impl<R: Read> Archive<R> {
     pub fn version(&self) -> u32 {
         return self.version;
     }
-
-    // /// Reads a vector from the archive.
-    // /// * `count` - The number of elements to read.
-    // pub fn read_vec<T: ArchiveRead<T>>(&mut self, count: usize) -> Result<Vec<T>, OzzError> {
-    //     let mut buffer = Vec::with_capacity(count);
-    //     for _ in 0..count {
-    //         buffer.push(self.read()?);
-    //     }
-    //     return Ok(buffer);
-    // }
-
-    // /// Reads a string from the archive.
-    // /// * `count` - The number of characters to read. If 0, the string is null-terminated.
-    // pub fn read_string(&mut self, count: usize) -> Result<String, OzzError> {
-    //     if count != 0 {
-    //         let buffer = self.read_vec::<u8>(count)?;
-    //         let text = String::from_utf8(buffer)?;
-    //         return Ok(text);
-    //     } else {
-    //         let mut buffer = Vec::new();
-    //         loop {
-    //             let char = self.read::<u8>()?;
-    //             if char != 0 {
-    //                 buffer.push(char);
-    //             } else {
-    //                 break;
-    //             }
-    //         }
-    //         let text = String::from_utf8(buffer)?;
-    //         return Ok(text);
-    //     }
-    // }
 }
 
+#[cfg(not(feature = "wasm"))]
 impl Archive<File> {
     /// Creates an `Archive` from a path.
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Archive<File>, OzzError> {
@@ -117,6 +88,15 @@ impl Archive<Cursor<Vec<u8>>> {
     pub fn from_vec(buf: Vec<u8>) -> Result<Archive<Cursor<Vec<u8>>>, OzzError> {
         let cursor = Cursor::new(buf);
         return Archive::new(cursor);
+    }
+
+    /// Creates an `Archive` from a path.
+    #[cfg(all(feature = "wasm", feature = "nodejs"))]
+    pub fn from_path(path: &str) -> Result<Archive<Cursor<Vec<u8>>>, OzzError> {
+        match crate::nodejs::read_file(path) {
+            Ok(buf) => return Archive::from_vec(buf),
+            Err(err) => return Err(OzzError::Custom(err.as_string().unwrap_or("".into()).into())),
+        };
     }
 }
 
@@ -192,9 +172,12 @@ impl ArchiveRead<String> for String {
 
 #[cfg(test)]
 mod tests {
+    use wasm_bindgen_test::*;
+
     use super::*;
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_archive_new() {
         let archive = Archive::from_path("./resource/playback/animation.ozz").unwrap();
         assert_eq!(archive.endian_swap, false);

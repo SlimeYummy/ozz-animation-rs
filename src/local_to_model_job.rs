@@ -283,6 +283,7 @@ where
 mod local_to_model_tests {
     use glam::{Mat4, Vec3};
     use std::collections::HashMap;
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::base::DeterministicState;
@@ -290,6 +291,7 @@ mod local_to_model_tests {
     use crate::skeleton::Skeleton;
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_validity() {
         let skeleton = Rc::new(Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap());
         let num_joints = skeleton.num_joints();
@@ -486,6 +488,7 @@ mod local_to_model_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     #[rustfmt::skip]
     fn test_transformation() {
         let skeleton = new_skeleton1();
@@ -514,6 +517,7 @@ mod local_to_model_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     #[rustfmt::skip]
     fn test_from_to() {
         let skeleton = new_skeleton2();
@@ -593,6 +597,7 @@ mod local_to_model_tests {
     }
 
     #[test]
+    #[wasm_bindgen_test]
     #[rustfmt::skip]
     fn test_from_to_exclude() {
         let skeleton = new_skeleton2();

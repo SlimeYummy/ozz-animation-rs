@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::Path;
 
 use crate::archive::Archive;
 use crate::base::{DeterministicState, OzzError, OzzIndex};
@@ -91,7 +90,15 @@ impl Skeleton {
     }
 
     /// Reads a `Skeleton` from a file.
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Skeleton, OzzError> {
+    #[cfg(not(feature = "wasm"))]
+    pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Skeleton, OzzError> {
+        let mut archive = Archive::from_path(path)?;
+        return Skeleton::from_archive(&mut archive);
+    }
+
+    // Only for wasm test in NodeJS environment.
+    #[cfg(all(feature = "wasm", feature = "nodejs"))]
+    pub fn from_path(path: &str) -> Result<Skeleton, OzzError> {
         let mut archive = Archive::from_path(path)?;
         return Skeleton::from_archive(&mut archive);
     }
@@ -191,11 +198,13 @@ impl Skeleton {
 #[cfg(test)]
 mod tests {
     use std::simd::prelude::*;
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::{SoaQuat, SoaVec3};
 
     #[test]
+    #[wasm_bindgen_test]
     fn test_read_skeleton() {
         let skeleton = Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap();
 

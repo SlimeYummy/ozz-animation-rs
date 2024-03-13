@@ -20,7 +20,8 @@ The library supports almost all runtime features supported by C++ version ozz, i
 - Two bone IK
 - Aim (Look-at) IK
 - Multi-threading
-- SIMD
+- SIMD (SSE2 + NEON)
+- WASM
 
 The following functions are not supported yet:
 - User channels (developing)
@@ -91,4 +92,4 @@ Maybe you can run cross-platform deterministic test cases under [./tests](https:
 
 Initially, I tried to implement similar functionality using fixed point numbers. But fixed-point performance is worse, and it is difficult to be compatible with other libraries.
 
-With further research, I found that x64/arm63 platforms now have good support for the IEEE floating point standard. So I reimplemented this library based on f32.
+With further research, I found that x64/arm64 platforms now have good support for the IEEE floating point standard. So I reimplemented this library based on f32.

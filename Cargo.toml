@@ -1,6 +1,6 @@
 [package]
 name = "ozz-animation-rs"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["SlimeYummy <zzzcccnnn@outlook.com>"]
 edition = "2021"
 rust-version = "1.75"
@@ -16,13 +16,18 @@ resolver = "2"
 [features]
 default = ["rkyv"]
 rkyv = ["dep:rkyv", "dep:bytecheck", "glam/rkyv", "glam/bytecheck"]
+wasm = []
+nodejs = ["wasm", "dep:js-sys", "dep:wasm-bindgen"]
 
 [dependencies]
 bytecheck = { version = "0.6", optional = true, default-features = false }
 glam = { version = "0.25", features = [ "core-simd", "libm" ] }
+js-sys = { version = "0.3", optional = true }
 rkyv = { version = "0.7.43", optional = true, features = [ "validation" ] }
 static_assertions = "1.1"
 thiserror = "1.0"
+wasm-bindgen = { version = "0.2", optional = true }
 
 [dev-dependencies]
 miniz_oxide = "0.7"
+wasm-bindgen-test = "0.3"

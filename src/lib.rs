@@ -58,6 +58,8 @@ mod sampling_job;
 mod skeleton;
 
 pub mod math;
+#[cfg(all(feature = "wasm", feature = "nodejs"))]
+pub mod nodejs;
 
 pub use animation::Animation;
 pub use archive::{Archive, ArchiveRead};
