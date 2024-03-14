@@ -1,58 +1,82 @@
 version: 2.1
 
 jobs:
-  deterministic_x86_64:
+  docker_x86_64:
     docker:
     - image: cimg/rust:1.76.0-node
     resource_class: medium
     steps:
     - checkout
     - run:
-        name: Native test
+        name: Run docker x86_64 tests
         command: cargo --version &&
           cargo test --release &&
-          tar -czvf output_x86_64.tar.gz output
+          tar -czvf docker_x86_64.tar.gz output
     - run:
-        name: Wasm setup
+        name: Install wasm-pack
         command: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
     - run:
-        name: Wasm test
+        name: Run docker wasm tests
         command: cargo --version &&
           node --version &&
           wasm-pack test --node --features "wasm nodejs"
     - store_artifacts:
-        path: ./output_x86_64.tar.gz
+        path: ./docker_x86_64.tar.gz
 
-  deterministic_aarch64:
+  docker_aarch64:
     docker:
     - image: cimg/rust:1.76.0-node
     resource_class: arm.medium
     steps:
     - checkout
     - run:
-        name: Native test
+        name: Run docker aarch64 tests
         command: cargo --version &&
           cargo test --release &&
-          tar -czvf output_aarch64.tar.gz output
+          tar -czvf docker_aarch64.tar.gz output
     - run:
-        name: Wasm setup
+        name: Install wasm-pack
         command: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
     - run:
-        name: Wasm test
+        name: Run docker wasm tests
         command: cargo --version &&
           node --version &&
           wasm-pack test --node --features "wasm nodejs"
     - store_artifacts:
-        path: ./output_aarch64.tar.gz
+        path: ./docker_aarch64.tar.gz
+  
+  macos_aarch64:
+    macos:
+      xcode: 15.3.0
+    resource_class: macos.m1.medium.gen1
+    steps:
+    - checkout
+    - run:
+        name: Install Rust
+        run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup.sh &&
+          chmod +x rustup.sh &&
+          ./rustup.sh -y --default-toolchain nightly --profile minimal &&
+          source "$HOME/.cargo/env"
+    - run:
+        name: Run macos aarch64 tests
+        command: cargo --version &&
+          cargo test --release &&
+          tar -czvf macos_aarch64.tar.gz output
+    - store_artifacts:
+        path: ./macos_aarch64.tar.gz
 
 workflows:
   deterministic:
     jobs:
-      - deterministic_x86_64:
+      - docker_x86_64:
           filters:
             branches:
               only: [ "master", "test" ]
-      - deterministic_aarch64:
+      - docker_aarch64:
           filters:
             branches:
               only: [ "master", "test" ]
+      - macos_aarch64:
+          filters:
+            branches:
+              only: [ "test-full", "test-macos" ]
