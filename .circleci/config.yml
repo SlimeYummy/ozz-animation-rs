@@ -1,34 +1,69 @@
 version: 2.1
 
+orbs:
+  win: circleci/windows@5.0
+
 jobs:
-  deterministic_x86_64:
-    docker:
-      - image: cimg/rust:1.75.0
+  linux_x86_64:
+    machine:
+      image: ubuntu-2004:current
     resource_class: medium
     steps:
-      - checkout
-      - run: cargo --version && cargo test --release && tar -czvf output_x86_64.tar.gz output
-      - store_artifacts:
-          path: ./output_x86_64.tar.gz
-  
-  deterministic_aarch64:
-    docker:
-      - image: cimg/rust:1.75.0
+    - checkout
+    - run:
+        name: Setup environment
+        command: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup.sh &&
+          chmod +x rustup.sh &&
+          ./rustup.sh -y --default-toolchain nightly --profile minimal --target wasm32-unknown-unknown &&
+          source "$HOME/.cargo/env" &&
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    - run:
+        name: Run linux x86_64 tests
+        command: cargo --version &&
+          cargo test --release &&
+          tar -czvf linux_x86_64.tar.gz output
+    - run:
+        name: Run linux wasm tests
+        command: cargo --version &&
+          node --version &&
+          wasm-pack test --node --features "wasm nodejs"
+    - store_artifacts:
+        path: ./linux_x86_64.tar.gz
+
+  linux_aarch64:
+    machine:
+      image: ubuntu-2004:current
     resource_class: arm.medium
     steps:
-      - checkout
-      - run: cargo --version && cargo test --release && tar -czvf output_aarch64.tar.gz output
-      - store_artifacts:
-          path: ./output_aarch64.tar.gz
+    - checkout
+    - run:
+        name: Setup environment
+        command: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup.sh &&
+          chmod +x rustup.sh &&
+          ./rustup.sh -y --default-toolchain nightly --profile minimal --target wasm32-unknown-unknown &&
+          source "$HOME/.cargo/env" &&
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    - run:
+        name: Run linux aarch64 tests
+        command: cargo --version &&
+          cargo test --release &&
+          tar -czvf linux_aarch64.tar.gz output
+    - run:
+        name: Run linux wasm tests
+        command: cargo --version &&
+          node --version &&
+          wasm-pack test --node --features "wasm nodejs"
+    - store_artifacts:
+        path: ./linux_aarch64.tar.gz
 
 workflows:
   deterministic:
     jobs:
-      - deterministic_x86_64:
-          filters:
-            branches:
-              only: [ "master", "test" ]
-      - deterministic_aarch64:
-          filters:
-            branches:
-              only: [ "master", "test" ]
+    - linux_x86_64:
+        filters:
+          branches:
+            only: [ "master", "test", "test-full", "test-linux-x64" ]
+    - linux_aarch64:
+        filters:
+          branches:
+            only: [ "master", "test", "test-full", "test-linux-arm64" ]

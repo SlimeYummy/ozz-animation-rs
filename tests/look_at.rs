@@ -2,6 +2,7 @@ use glam::{Mat4, Quat, Vec3A};
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
 use std::rc::Rc;
+use wasm_bindgen_test::*;
 
 mod common;
 
@@ -23,6 +24,7 @@ const TARGET_OFFSET: Vec3A = Vec3A::new(0.2, 1.5, -0.3);
 const EYES_OFFSET: Vec3A = Vec3A::new(0.07, 0.1, 0.0);
 
 #[test]
+#[wasm_bindgen_test]
 fn test_look_at() {
     run_look_at(1..=1, |_, data| {
         common::compare_with_cpp("look_at", "look_at", &data.models2, 1.5e-4).unwrap();
@@ -31,6 +33,7 @@ fn test_look_at() {
 
 #[cfg(feature = "rkyv")]
 #[test]
+#[wasm_bindgen_test]
 fn test_look_at_deterministic() {
     run_look_at(0..=10, |idx, data| {
         common::compare_with_rkyv("look_at", &format!("look_at_{:02}", idx), data).unwrap();

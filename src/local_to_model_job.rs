@@ -281,14 +281,13 @@ where
 
 #[cfg(test)]
 mod local_to_model_tests {
-    use glam::{Mat4, Vec3};
+    use glam::Vec3;
     use std::collections::HashMap;
     use wasm_bindgen_test::*;
 
     use super::*;
     use crate::base::DeterministicState;
     use crate::math::{SoaQuat, SoaVec3};
-    use crate::skeleton::Skeleton;
 
     #[test]
     #[wasm_bindgen_test]
