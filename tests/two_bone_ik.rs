@@ -2,6 +2,7 @@ use glam::{Mat4, Quat, Vec3A};
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
 use std::rc::Rc;
+use wasm_bindgen_test::*;
 
 mod common;
 
@@ -20,6 +21,7 @@ const TARGET_EXTENT: f32 = 0.5;
 const TARGET_OFFSET: Vec3A = Vec3A::new(0.0, 0.2, 0.1);
 
 #[test]
+#[wasm_bindgen_test]
 fn test_two_bone_ik() {
     run_two_bone_ik(1..=1, |_, data| {
         common::compare_with_cpp("two_bone_ik", "two_bone_ik", &data.models2, 1e-6).unwrap();
@@ -28,6 +30,7 @@ fn test_two_bone_ik() {
 
 #[cfg(feature = "rkyv")]
 #[test]
+#[wasm_bindgen_test]
 fn test_two_bone_ik_deterministic() {
     run_two_bone_ik(0..=10, |idx, data| {
         common::compare_with_rkyv("two_bone_ik", &format!("two_bone_ik_{:02}", idx), data).unwrap();
