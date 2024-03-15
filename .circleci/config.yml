@@ -3,6 +3,11 @@ version: 2.1
 orbs:
   win: circleci/windows@5.0
 
+_native_cmd: &native_cmd |
+  cargo --version &&
+  cargo test --release &&
+  tar -czvf linux_x86_64.tar.gz output
+
 jobs:
   linux_x86_64:
     machine:
@@ -68,16 +73,15 @@ jobs:
         command: Invoke-WebRequest https://win.rustup.rs/x86_64 -OutFile rustup.exe;
           ./rustup.exe default nightly --profile minimal;
           ./rustup.exe target add wasm32-unknown-unknown;
-          npm install -g wasm-pack;
-          rm C:\Users\circleci\project\rust-toolchain
+          npm install -g wasm-pack
     - run:
         name: Run windows x86_64 tests
-        command: cargo --version;
-          cargo test --release;
+        command: ./rustup.exe run nightly cargo --version;
+          ./rustup.exe run nightly cargo test --release;
           tar -czvf windows_x86_64.tar.gz output
     - run:
         name: Run windows wasm tests
-        command: cargo --version;
+        command: ./rustup.exe run nightly cargo --version;
           node --version;
           wasm-pack test --node --features "wasm nodejs"
     - store_artifacts:
