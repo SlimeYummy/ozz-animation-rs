@@ -79,11 +79,6 @@ jobs:
         command: ./rustup.exe run nightly cargo --version;
           ./rustup.exe run nightly cargo test --release;
           tar -czvf windows_x86_64.tar.gz output
-    - run:
-        name: Run windows wasm tests
-        command: ./rustup.exe run nightly cargo --version;
-          node --version;
-          wasm-pack test --node --features "wasm nodejs"
     - store_artifacts:
         path: ./windows_x86_64.tar.gz
   
@@ -109,19 +104,19 @@ jobs:
 workflows:
   deterministic:
     jobs:
-    # - linux_x86_64:
-    #     filters:
-    #       branches:
-    #         only: [ "master", "test", "test-full", "test-linux-x64" ]
-    # - linux_aarch64:
-    #     filters:
-    #       branches:
-    #         only: [ "master", "test", "test-full", "test-linux-arm64" ]
+    - linux_x86_64:
+        filters:
+          branches:
+            only: [ "master", "test", "test-full", "test-linux-x64" ]
+    - linux_aarch64:
+        filters:
+          branches:
+            only: [ "master", "test", "test-full", "test-linux-arm64" ]
     - windows_x86_64:
         filters:
           branches:
-            only: [ "master", "test", "test-full", "test-windows" ]
-    # - macos_aarch64:
-    #     filters:
-    #       branches:
-    #         only: [ "test-full", "test-macos" ]
+            only: [ "test-full", "test-windows" ]
+    - macos_aarch64:
+        filters:
+          branches:
+            only: [ "test-full", "test-macos" ]
