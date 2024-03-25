@@ -1,6 +1,6 @@
 [![Release Doc](https://docs.rs/ozz-animation-rs/badge.svg)](https://docs.rs/ozz-animation-rs)
 [![Crate](https://img.shields.io/crates/v/ozz-animation-rs.svg)](https://crates.io/crates/ozz-animation-rs)
-![github actions](https://github.com/FenQiDian/ozz-animation-rs/actions/workflows/main.yml/badge.svg)
+![github actions](https://github.com/SlimeYummy/ozz-animation-rs/actions/workflows/main.yml/badge.svg)
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/SlimeYummy/ozz-animation-rs/tree/master.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/SlimeYummy/ozz-animation-rs/tree/master)
 
 # Ozz-animation-rs
@@ -32,11 +32,11 @@ Ozz-animation offline features are not supported, and no plans to support. Pleas
 
 ### Examples
 
-A simple demo is in [./demo](https://github.com/FenQiDian/ozz-animation-rs/tree/master/demo) folder. Enter the folder and execute `cargo run`.
+A simple demo is in [./demo](https://github.com/SlimeYummy/ozz-animation-rs/tree/master/demo) folder. Enter the folder and execute `cargo run`.
 
 ![demo](https://raw.githubusercontent.com/SlimeYummy/ozz-animation-rs/master/demo/demo.jpg)
 
-The test cases under [./tests](https://github.com/FenQiDian/ozz-animation-rs/tree/master/tests) can be viewed as examples.
+The test cases under [./tests](https://github.com/SlimeYummy/ozz-animation-rs/tree/master/tests) can be viewed as examples.
 
 Ozz-animation-rs keeps the same API styles with original ozz-animation library. Therefore, you can also refer to the ozz-animation [examples](https://github.com/guillaumeblanc/ozz-animation/tree/master/samples).
 
@@ -86,7 +86,7 @@ In theory, ozz-animation-rs supports all platforms supported by rust. But I only
 - Windows/Ubuntu/Mac x64 (Github actions)
 - X64/Arm64 docker ([CircleCI](https://dl.circleci.com/status-badge/redirect/gh/SlimeYummy/ozz-animation-rs/tree/master))
 
-Maybe you can run cross-platform deterministic test cases under [./tests](https://github.com/FenQiDian/ozz-animation-rs/tree/master/tests) on your target platform.
+Maybe you can run cross-platform deterministic test cases under [./tests](https://github.com/SlimeYummy/ozz-animation-rs/tree/master/tests) on your target platform.
 
 ### Why not fixed-point?
 

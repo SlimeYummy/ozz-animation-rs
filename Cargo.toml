@@ -9,7 +9,7 @@ license = "MPL-2.0"
 homepage = "https://github.com/SlimeYummy/ozz-animation-rs"
 repository = "https://github.com/SlimeYummy/ozz-animation-rs"
 keywords = ["animation", "skeletal-animation", "fixed-point", "deterministic", "ozz-animation"]
-categories = ["game-development", "rendering::data-formats", "api-bindings"]
+categories = ["game-development", "rendering::data-formats", "api-bindings", "wasm"]
 exclude = ["/.circleci", "/.github", "/demo", "/expected", "/output", "/resource"]
 resolver = "2"
 

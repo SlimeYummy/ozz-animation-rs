@@ -200,6 +200,15 @@ impl PartialEq for SamplingContext {
     }
 }
 
+impl Drop for SamplingContext {
+    fn drop(&mut self) {
+        unsafe {
+            let layout = Layout::from_size_align_unchecked(self.size(), mem::size_of::<f32x4>());
+            alloc::dealloc(self.0 as *mut u8, layout);
+        }
+    }
+}
+
 impl SamplingContext {
     #[inline(always)]
     fn inner(&self) -> &SamplingContextInner {
