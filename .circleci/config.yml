@@ -55,6 +55,52 @@ jobs:
           wasm-pack test --node --features "wasm nodejs"
     - store_artifacts:
         path: ./linux_aarch64.tar.gz
+  
+  windows_x86_64:
+    machine:
+      image: windows-server-2022-gui:current
+      shell: powershell.exe -ExecutionPolicy Bypass
+    resource_class: windows.medium
+    steps:
+    - checkout
+    - run:
+        name: Setup environment
+        command: Invoke-WebRequest https://win.rustup.rs/x86_64 -OutFile rustup.exe;
+          ./rustup.exe default nightly --profile minimal;
+          ./rustup.exe target add wasm32-unknown-unknown;
+          npm install -g wasm-pack;
+          rm C:\Users\circleci\project\rust-toolchain
+    - run:
+        name: Run windows x86_64 tests
+        command: cargo --version;
+          cargo test --release;
+          tar -czvf windows_x86_64.tar.gz output
+    - run:
+        name: Run windows wasm tests
+        command: cargo --version;
+          node --version;
+          wasm-pack test --node --features "wasm nodejs"
+    - store_artifacts:
+        path: ./windows_x86_64.tar.gz
+  
+  macos_aarch64:
+    macos:
+      xcode: 14.2.0
+    steps:
+    - checkout
+    - run:
+        name: Setup environment
+        command: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup.sh &&
+          chmod +x rustup.sh &&
+          ./rustup.sh -y --default-toolchain nightly --profile minimal &&
+          source "$HOME/.cargo/env"
+    - run:
+        name: Run macos aarch64 tests
+        command: cargo --version &&
+          cargo test --release &&
+          tar -czvf macos_aarch64.tar.gz output
+    - store_artifacts:
+        path: ./macos_aarch64.tar.gz
 
 workflows:
   deterministic:
@@ -67,3 +113,11 @@ workflows:
         filters:
           branches:
             only: [ "master", "test", "test-full", "test-linux-arm64" ]
+    # - windows_x86_64:
+    #     filters:
+    #       branches:
+    #         only: [ "master", "test", "test-full", "test-windows" ]
+    # # - macos_aarch64:
+    #     filters:
+    #       branches:
+    #         only: [ "test-full", "test-macos" ]
