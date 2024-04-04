@@ -1,6 +1,7 @@
 use glam::{Mat4, Quat, Vec3A};
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen_test::*;
 
@@ -48,9 +49,9 @@ where
     let mid_joint = skeleton.joint_by_name("forearm").unwrap();
     let end_joint = skeleton.joint_by_name("wrist").unwrap();
 
-    let locals = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
-    let models1 = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
-    let models2 = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
+    let locals = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
+    let models1 = Rc::new(RefCell::new(vec![Mat4::default(); skeleton.num_joints()]));
+    let models2 = Rc::new(RefCell::new(vec![Mat4::default(); skeleton.num_joints()]));
 
     let mut l2m_job1: LocalToModelJob = LocalToModelJob::default();
     l2m_job1.set_skeleton(skeleton.clone());
@@ -96,7 +97,7 @@ where
 
         models2.borrow_mut().clone_from_slice(models1.borrow().as_slice());
         {
-            let mut locals_mut = locals.vec_mut().unwrap();
+            let mut locals_mut = locals.borrow_mut();
 
             let idx = start_joint as usize;
             let quat = locals_mut[idx / 4].rotation.col(idx & 3) * ik_job.start_joint_correction();
@@ -116,9 +117,9 @@ where
         tester(
             idx,
             &TestData {
-                locals: locals.vec().unwrap().clone(),
-                models1: models1.vec().unwrap().clone(),
-                models2: models2.vec().unwrap().clone(),
+                locals: locals.buf().unwrap().to_vec(),
+                models1: models1.buf().unwrap().to_vec(),
+                models2: models2.buf().unwrap().to_vec(),
                 start_correction: ik_job.start_joint_correction(),
                 mid_correction: ik_job.mid_joint_correction(),
                 reached: ik_job.reached(),

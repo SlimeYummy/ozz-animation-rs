@@ -1,6 +1,7 @@
 use glam::{Mat4, Vec4};
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen_test::*;
 
@@ -60,12 +61,12 @@ where
     let mut sample_job_base: SamplingJob = SamplingJob::default();
     sample_job_base.set_animation(animation_base.clone());
     sample_job_base.set_context(SamplingContext::new(animation_base.num_tracks()));
-    let sample_out_base = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let sample_out_base = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job_base.set_output(sample_out_base.clone());
 
     let mut blending_job = BlendingJob::default();
     blending_job.set_skeleton(skeleton.clone());
-    let blending_out = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let blending_out = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     blending_job.set_output(blending_out.clone());
 
     let mut layer_base = BlendingLayer::new(sample_out_base.clone());
@@ -90,13 +91,13 @@ where
     let mut l2m_job: LocalToModelJob = LocalToModelJob::default();
     l2m_job.set_skeleton(skeleton.clone());
     l2m_job.set_input(blending_out.clone());
-    let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
+    let l2m_out = Rc::new(RefCell::new(vec![Mat4::default(); skeleton.num_joints()]));
     l2m_job.set_output(l2m_out.clone());
 
     let mut sample_job_splay: SamplingJob = SamplingJob::default();
     sample_job_splay.set_animation(animation_splay.clone());
     sample_job_splay.set_context(SamplingContext::new(animation_splay.num_tracks()));
-    let sample_out_splay = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let sample_out_splay = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job_splay.set_output(sample_out_splay.clone());
 
     sample_job_splay.set_ratio(0.0); // Only needs the first frame pose
@@ -108,7 +109,7 @@ where
     let mut sample_job_curl: SamplingJob = SamplingJob::default();
     sample_job_curl.set_animation(animation_curl.clone());
     sample_job_curl.set_context(SamplingContext::new(animation_curl.num_tracks()));
-    let sample_out_curl = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let sample_out_curl = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job_curl.set_output(sample_out_curl.clone());
 
     sample_job_curl.set_ratio(0.0); // Only needs the first frame pose
@@ -118,9 +119,9 @@ where
         .push(BlendingLayer::new(sample_out_curl.clone()));
 
     tester1(&TestDataInit {
-        sample_out_splay: sample_out_splay.vec().unwrap().clone(),
+        sample_out_splay: sample_out_splay.buf().unwrap().to_vec(),
         sample_ctx_splay: sample_job_splay.context().unwrap().clone_without_animation_id(),
-        sample_out_curl: sample_out_curl.vec().unwrap().clone(),
+        sample_out_curl: sample_out_curl.buf().unwrap().to_vec(),
         sample_ctx_curl: sample_job_curl.context().unwrap().clone_without_animation_id(),
     });
 
@@ -142,10 +143,10 @@ where
             ratio,
             &TestData {
                 ratio,
-                sample_out_base: sample_out_base.vec().unwrap().clone(),
+                sample_out_base: sample_out_base.buf().unwrap().to_vec(),
                 sample_ctx_base: sample_job_base.context().unwrap().clone_without_animation_id(),
-                blending_out: blending_out.vec().unwrap().clone(),
-                l2m_out: l2m_out.vec().unwrap().clone(),
+                blending_out: blending_out.buf().unwrap().to_vec(),
+                l2m_out: l2m_out.buf().unwrap().to_vec(),
             },
         );
     }
