@@ -299,7 +299,7 @@ impl IKTwoBoneJob {
     }
 
     /// Runs two bone IK job's task.
-    /// The job call `validate()` to validate job before any operation is performed.
+    /// The validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if !self.validate() {
             return Err(OzzError::InvalidJob);

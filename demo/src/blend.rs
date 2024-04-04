@@ -8,11 +8,11 @@ use crate::base::*;
 
 pub struct OzzBlend {
     skeleton: Arc<Skeleton>,
-    sample_job1: ASamplingJob,
-    sample_job2: ASamplingJob,
-    sample_job3: ASamplingJob,
-    blending_job: ABlendingJob,
-    l2m_job: ALocalToModelJob,
+    sample_job1: SamplingJobMT,
+    sample_job2: SamplingJobMT,
+    sample_job3: SamplingJobMT,
+    blending_job: BlendingJobMT,
+    l2m_job: LocalToModelJobMT,
     models: Arc<RwLock<Vec<Mat4>>>,
     bone_trans: Vec<OzzTransform>,
     spine_trans: Vec<OzzTransform>,
@@ -53,23 +53,23 @@ impl OzzBlend {
         ob.sample_job1.set_animation(animation1.clone());
         ob.sample_job1
             .set_context(SamplingContext::new(animation1.num_tracks()));
-        let sample_out1 = ozz_abuf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+        let sample_out1 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         ob.sample_job1.set_output(sample_out1.clone());
 
         ob.sample_job2.set_animation(animation2.clone());
         ob.sample_job2
             .set_context(SamplingContext::new(animation2.num_tracks()));
-        let sample_out2 = ozz_abuf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+        let sample_out2 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         ob.sample_job2.set_output(sample_out2.clone());
 
         ob.sample_job3.set_animation(animation3.clone());
         ob.sample_job3
             .set_context(SamplingContext::new(animation3.num_tracks()));
-        let sample_out3 = ozz_abuf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+        let sample_out3 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         ob.sample_job3.set_output(sample_out3.clone());
 
         ob.blending_job.set_skeleton(skeleton.clone());
-        let blending_out = ozz_abuf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+        let blending_out = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         ob.blending_job.set_output(blending_out.clone());
         ob.blending_job
             .layers_mut()
@@ -107,7 +107,7 @@ impl OzzBlend {
 
 impl OzzExample for OzzBlend {
     fn root(&self) -> Mat4 {
-        return self.models.vec().unwrap()[0];
+        return self.models.buf().unwrap()[0];
     }
 
     fn bone_trans(&self) -> &[OzzTransform] {
@@ -159,7 +159,7 @@ impl OzzExample for OzzBlend {
         self.bone_trans.clear();
         self.spine_trans.clear();
 
-        let modals = self.models.vec().unwrap();
+        let modals = self.models.buf().unwrap();
         for (i, current) in modals.iter().enumerate() {
             let parent_id = self.skeleton.joint_parent(i);
             if parent_id as i32 == SKELETON_NO_PARENT {
