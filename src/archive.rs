@@ -1,3 +1,4 @@
+use glam::{Quat, Vec2, Vec3, Vec4};
 #[cfg(not(feature = "wasm"))]
 use std::fs::File;
 use std::io::{Cursor, Read};
@@ -153,6 +154,43 @@ primitive_reader!(u64);
 primitive_reader!(i64);
 primitive_reader!(f32);
 primitive_reader!(f64);
+
+impl ArchiveRead<Vec2> for Vec2 {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<Vec2, OzzError> {
+        let x = f32::read(archive)?;
+        let y = f32::read(archive)?;
+        return Ok(Vec2::new(x, y));
+    }
+}
+
+impl ArchiveRead<Vec3> for Vec3 {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<Vec3, OzzError> {
+        let x = f32::read(archive)?;
+        let y = f32::read(archive)?;
+        let z = f32::read(archive)?;
+        return Ok(Vec3::new(x, y, z));
+    }
+}
+
+impl ArchiveRead<Vec4> for Vec4 {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<Vec4, OzzError> {
+        let x = f32::read(archive)?;
+        let y = f32::read(archive)?;
+        let z = f32::read(archive)?;
+        let w = f32::read(archive)?;
+        return Ok(Vec4::new(x, y, z, w));
+    }
+}
+
+impl ArchiveRead<Quat> for Quat {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<Quat, OzzError> {
+        let x = f32::read(archive)?;
+        let y = f32::read(archive)?;
+        let z = f32::read(archive)?;
+        let w = f32::read(archive)?;
+        return Ok(Quat::from_xyzw(x, y, z, w));
+    }
+}
 
 impl ArchiveRead<String> for String {
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<String, OzzError> {

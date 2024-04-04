@@ -10,9 +10,9 @@ const TARGET_OFFSET: Vec3 = Vec3::new(0.0, 0.2, 0.1);
 
 pub struct OzzTwoBoneIK {
     skeleton: Arc<Skeleton>,
-    l2m_job1: ALocalToModelJob,
+    l2m_job1: LocalToModelJobMT,
     ik_job: IKTwoBoneJob,
-    l2m_job2: ALocalToModelJob,
+    l2m_job2: LocalToModelJobMT,
     locals: Arc<RwLock<Vec<SoaTransform>>>,
     models1: Arc<RwLock<Vec<Mat4>>>,
     models2: Arc<RwLock<Vec<Mat4>>>,
@@ -68,7 +68,7 @@ impl OzzTwoBoneIK {
 
 impl OzzExample for OzzTwoBoneIK {
     fn root(&self) -> Mat4 {
-        return self.models2.vec().unwrap()[0];
+        return self.models2.buf().unwrap()[0];
     }
 
     fn bone_trans(&self) -> &[OzzTransform] {
@@ -95,7 +95,7 @@ impl OzzExample for OzzTwoBoneIK {
         // local to modal
 
         self.locals
-            .vec_mut()
+            .mut_buf()
             .unwrap()
             .clone_from_slice(self.skeleton.joint_rest_poses());
         self.l2m_job1.run().unwrap();
@@ -109,22 +109,22 @@ impl OzzExample for OzzTwoBoneIK {
         self.ik_job.set_twist_angle(0.0);
         self.ik_job.set_pole_vector(Vec3::new(0.0, 1.0, 0.0).into());
         self.ik_job
-            .set_start_joint(self.models1.vec().unwrap()[start_joint as usize].into());
+            .set_start_joint(self.models1.buf().unwrap()[start_joint as usize].into());
         self.ik_job
-            .set_mid_joint(self.models1.vec().unwrap()[mid_joint as usize].into());
+            .set_mid_joint(self.models1.buf().unwrap()[mid_joint as usize].into());
         self.ik_job
-            .set_end_joint(self.models1.vec().unwrap()[end_joint as usize].into());
+            .set_end_joint(self.models1.buf().unwrap()[end_joint as usize].into());
 
         self.ik_job.run().unwrap();
 
         // apply ik result, local to modal again
 
         self.models2
-            .vec_mut()
+            .mut_buf()
             .unwrap()
-            .clone_from_slice(self.models1.vec().unwrap().as_slice());
+            .clone_from_slice(self.models1.buf().unwrap().as_slice());
         {
-            let mut locals_mut = self.locals.vec_mut().unwrap();
+            let mut locals_mut = self.locals.mut_buf().unwrap();
 
             let idx = start_joint as usize;
             let quat = locals_mut[idx / 4].rotation.col(idx & 3) * self.ik_job.start_joint_correction();
@@ -144,7 +144,7 @@ impl OzzExample for OzzTwoBoneIK {
         self.bone_trans.clear();
         self.spine_trans.clear();
 
-        let modals = self.models2.vec().unwrap();
+        let modals = self.models2.buf().unwrap();
         for (i, current) in modals.iter().enumerate() {
             let parent_id = self.skeleton.joint_parent(i);
             if parent_id as i32 == SKELETON_NO_PARENT {
