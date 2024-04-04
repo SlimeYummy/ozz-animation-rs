@@ -221,8 +221,8 @@ impl Animation {
         return 6;
     }
 
-    /// Creates a new `Animation` from raw data.
-    pub fn from_raw(
+    #[cfg(test)]
+    pub(crate) fn from_raw(
         duration: f32,
         num_tracks: usize,
         name: String,

@@ -1,10 +1,15 @@
-use std::cell::RefCell;
+//!
+//! Base types, traits and utils.
+//!
+
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
+use std::fmt::Debug;
 use std::hash::BuildHasher;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use thiserror::Error;
 
 /// Ozz error type.
@@ -16,6 +21,9 @@ pub enum OzzError {
     /// Validates job failed.
     #[error("Invalid job")]
     InvalidJob,
+    /// Invalid buffer index.
+    #[error("Invalid index")]
+    InvalidIndex,
 
     /// Std io errors.
     #[error("IO error: {0}")]
@@ -37,6 +45,57 @@ pub enum OzzError {
     Custom(Box<dyn Error>),
 }
 
+impl OzzError {
+    pub fn is_lock_poison(&self) -> bool {
+        return match self {
+            OzzError::LockPoison => true,
+            _ => false,
+        };
+    }
+
+    pub fn is_invalid_job(&self) -> bool {
+        return match self {
+            OzzError::InvalidJob => true,
+            _ => false,
+        };
+    }
+
+    pub fn is_io(&self) -> bool {
+        return match self {
+            OzzError::IO(_) => true,
+            _ => false,
+        };
+    }
+
+    pub fn is_utf8(&self) -> bool {
+        return match self {
+            OzzError::Utf8(_) => true,
+            _ => false,
+        };
+    }
+
+    pub fn is_invalid_tag(&self) -> bool {
+        return match self {
+            OzzError::InvalidTag => true,
+            _ => false,
+        };
+    }
+
+    pub fn is_invalid_version(&self) -> bool {
+        return match self {
+            OzzError::InvalidVersion => true,
+            _ => false,
+        };
+    }
+
+    pub fn is_custom(&self) -> bool {
+        return match self {
+            OzzError::Custom(_) => true,
+            _ => false,
+        };
+    }
+}
+
 /// Defines the maximum number of joints.
 /// This is limited in order to control the number of bits required to store
 /// a joint index. Limiting the number of joints also helps handling worst
@@ -51,85 +110,13 @@ pub const SKELETON_MAX_SOA_JOINTS: i32 = (SKELETON_MAX_JOINTS + 3) / 4;
 /// Defines the index of the parent of the root joint (which has no parent in fact)
 pub const SKELETON_NO_PARENT: i32 = -1;
 
-/// Represents a reference to the ozz resource object.
-/// `T` usually is `Skeleton` or `Animation`.
-///
-/// We use `OzzRef` to support `Rc<T>` (single thread) and `Arc<T>` (multithread) at same time.
-/// Or you can implement this trait to support your own reference type.
-pub trait OzzRef<T>
-where
-    T: ?Sized,
-    Self: Clone + AsRef<T> + Deref<Target = T>,
-{
-}
-
-impl<T: ?Sized> OzzRef<T> for Rc<T> {}
-impl<T: ?Sized> OzzRef<T> for Arc<T> {}
-
-/// Represents a reference to the ozz shared buffers.
-/// `T` usually is `SoaTransform`, `Mat4`, .etc.
-///
-/// We use `OzzBuf` to support `Rc<RefCell<Vec<T>>>` (single thread) and `Arc<RwLock<Vec<T>>>` at same time.
-/// Or you can implement this trait to support your own shared buffer types.
-pub trait OzzBuf<T>
-where
-    Self: Clone,
-{
-    fn vec(&self) -> Result<impl Deref<Target = Vec<T>>, OzzError>;
-    fn vec_mut(&self) -> Result<impl DerefMut<Target = Vec<T>>, OzzError>;
-}
-
-impl<T> OzzBuf<T> for Rc<RefCell<Vec<T>>> {
-    fn vec(&self) -> Result<impl Deref<Target = Vec<T>>, OzzError> {
-        return Ok(self.borrow());
-    }
-
-    fn vec_mut(&self) -> Result<impl DerefMut<Target = Vec<T>>, OzzError> {
-        return Ok(self.borrow_mut());
-    }
-}
-
-impl<T> OzzBuf<T> for Arc<RwLock<Vec<T>>> {
-    fn vec(&self) -> Result<impl Deref<Target = Vec<T>>, OzzError> {
-        return self.read().map_err(|_| OzzError::LockPoison);
-    }
-
-    fn vec_mut(&self) -> Result<impl DerefMut<Target = Vec<T>>, OzzError> {
-        return self.write().map_err(|_| OzzError::LockPoison);
-    }
-}
-
-/// Creates a new `Rc<T>`.
-#[inline(always)]
-pub fn ozz_rc<T>(r: T) -> Rc<T> {
-    return Rc::new(r);
-}
-
-/// Creates a new `Arc<T>`.
-#[inline(always)]
-pub fn ozz_arc<T>(r: T) -> Arc<T> {
-    return Arc::new(r);
-}
-
-/// Creates a new `Rc<RefCell<Vec<T>>>`.
-#[inline(always)]
-pub fn ozz_buf<T>(v: Vec<T>) -> Rc<RefCell<Vec<T>>> {
-    return Rc::new(RefCell::new(v));
-}
-
-/// Creates a new `Arc<RwLock<Vec<T>>>`.
-#[inline(always)]
-pub fn ozz_abuf<T>(v: Vec<T>) -> Arc<RwLock<Vec<T>>> {
-    return Arc::new(RwLock::new(v));
-}
-
 /// A hasher builder that creates `DefaultHasher` with default keys.
 #[derive(Default)]
 pub struct DeterministicState;
 
 impl DeterministicState {
     /// Creates a new `DeterministicState` that builds `DefaultHasher` with default keys.
-    pub fn new() -> DeterministicState {
+    pub const fn new() -> DeterministicState {
         return DeterministicState;
     }
 }
@@ -167,3 +154,273 @@ macro_rules! ozz_index {
 ozz_index!(usize);
 ozz_index!(i32);
 ozz_index!(i16);
+
+/// Represents a reference to the ozz resource object.
+/// `T` usually is `Skeleton` or `Animation`.
+///
+/// We use `OzzObj` to support `T`, `&T`, `Rc<T>` and `Arc<T>` at same time.
+/// Or you can implement this trait to support your own reference type.
+pub trait OzzObj<T: Debug> {
+    fn obj(&self) -> &T;
+}
+
+impl<T: Debug> OzzObj<T> for T {
+    #[inline(always)]
+    fn obj(&self) -> &T {
+        return self;
+    }
+}
+
+impl<'t, T: Debug> OzzObj<T> for &'t T {
+    #[inline(always)]
+    fn obj(&self) -> &T {
+        return self;
+    }
+}
+
+impl<T: Debug> OzzObj<T> for Rc<T> {
+    #[inline(always)]
+    fn obj(&self) -> &T {
+        return self.as_ref();
+    }
+}
+
+impl<T: Debug> OzzObj<T> for Arc<T> {
+    #[inline(always)]
+    fn obj(&self) -> &T {
+        return self.as_ref();
+    }
+}
+
+/// Represents a reference to the ozz immutable buffers.
+/// `T` usually is `SoaTransform`, `Mat4`, .etc.
+///
+/// We use `OzzBuf` to support `&[T]`, `Vec<T>`, `Rc<RefCell<Vec<T>>>`, `Arc<RwLock<Vec<T>>>` at same time.
+/// Or you can implement this trait to support your own immutable buffer types.
+pub trait OzzBuf<T: Debug + Clone> {
+    type Buf<'t>: Deref<Target = [T]>
+    where
+        Self: 't;
+
+    fn buf(&self) -> Result<Self::Buf<'_>, OzzError>;
+}
+
+// pub trait OzzAsSlice<'t, T: Debug + Clone> {
+//     fn slice(&'t self) -> Result<&'t [T], OzzError>;
+// }
+
+/// Represents a reference to the ozz mutable buffers.
+/// `T` usually is `SoaTransform`, `Mat4`, .etc.
+///
+/// We use `OzzBuf` to support `&mut [T]`, `Vec<T>`, `Rc<RefCell<Vec<T>>>`, `Arc<RwLock<Vec<T>>>` at same time.
+/// Or you can implement this trait to support your own writable buffer types.
+pub trait OzzMutBuf<T: Debug + Clone>
+where
+    Self: OzzBuf<T>,
+{
+    type MutBuf<'t>: DerefMut<Target = [T]>
+    where
+        Self: 't;
+
+    fn mut_buf(&mut self) -> Result<Self::MutBuf<'_>, OzzError>;
+}
+
+//
+// &[T]
+//
+
+impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a [T] {
+    type Buf<'b> = ObSliceRef<'b, T>
+    where
+        'a: 'b;
+
+    #[inline(always)]
+    fn buf(&self) -> Result<ObSliceRef<T>, OzzError> {
+        return Ok(ObSliceRef(self));
+    }
+}
+
+pub struct ObSliceRef<'t, T>(&'t [T]);
+
+impl<'t, T> Deref for ObSliceRef<'t, T> {
+    type Target = [T];
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        return self.0;
+    }
+}
+
+//
+// &mut [T]
+//
+
+impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a mut [T] {
+    type Buf<'b> = ObSliceRef<'b, T>
+    where
+        'a: 'b;
+
+    #[inline(always)]
+    fn buf(&self) -> Result<ObSliceRef<T>, OzzError> {
+        return Ok(ObSliceRef(self));
+    }
+}
+
+impl<'a, T: 'static + Debug + Clone> OzzMutBuf<T> for &'a mut [T] {
+    type MutBuf<'b> = ObSliceRefMut<'b, T>
+    where
+        'a: 'b;
+
+    #[inline(always)]
+    fn mut_buf(&mut self) -> Result<ObSliceRefMut<T>, OzzError> {
+        return Ok(ObSliceRefMut(self));
+    }
+}
+
+pub struct ObSliceRefMut<'t, T>(&'t mut [T]);
+
+impl<'t, T> Deref for ObSliceRefMut<'t, T> {
+    type Target = [T];
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        return self.0;
+    }
+}
+
+impl<'t, T> DerefMut for ObSliceRefMut<'t, T> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        return self.0;
+    }
+}
+
+//
+// Vec<T>
+//
+
+impl<T: 'static + Debug + Clone> OzzBuf<T> for Vec<T> {
+    type Buf<'t> = ObSliceRef<'t, T>;
+
+    #[inline(always)]
+    fn buf(&self) -> Result<ObSliceRef<T>, OzzError> {
+        return Ok(ObSliceRef(self.as_slice()));
+    }
+}
+
+impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Vec<T> {
+    type MutBuf<'t> = ObSliceRefMut<'t, T>;
+
+    #[inline(always)]
+    fn mut_buf(&mut self) -> Result<ObSliceRefMut<T>, OzzError> {
+        return Ok(ObSliceRefMut(self));
+    }
+}
+
+//
+// Rc<RefCell<Vec<T>>>
+//
+
+impl<T: 'static + Debug + Clone> OzzBuf<T> for Rc<RefCell<Vec<T>>> {
+    type Buf<'t> = ObCellRef<'t, T>;
+
+    #[inline(always)]
+    fn buf(&self) -> Result<ObCellRef<T>, OzzError> {
+        return Ok(ObCellRef(self.borrow()));
+    }
+}
+
+pub struct ObCellRef<'t, T>(Ref<'t, Vec<T>>);
+
+impl<'t, T> Deref for ObCellRef<'t, T> {
+    type Target = [T];
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        return self.0.as_slice();
+    }
+}
+
+impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Rc<RefCell<Vec<T>>> {
+    type MutBuf<'t> = ObCellRefMut<'t, T>;
+
+    #[inline(always)]
+    fn mut_buf(&mut self) -> Result<ObCellRefMut<T>, OzzError> {
+        return Ok(ObCellRefMut(self.borrow_mut()));
+    }
+}
+
+pub struct ObCellRefMut<'t, T>(RefMut<'t, Vec<T>>);
+
+impl<'t, T> Deref for ObCellRefMut<'t, T> {
+    type Target = [T];
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        return self.0.as_slice();
+    }
+}
+
+impl<'t, T> DerefMut for ObCellRefMut<'t, T> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        return self.0.as_mut_slice();
+    }
+}
+
+//
+// Arc<RwLock<Vec<T>>>
+//
+
+impl<T: 'static + Debug + Clone> OzzBuf<T> for Arc<RwLock<Vec<T>>> {
+    type Buf<'t> = ObRwLockReadGuard<'t, T>;
+
+    #[inline(always)]
+    fn buf(&self) -> Result<ObRwLockReadGuard<T>, OzzError> {
+        return match self.read() {
+            Ok(guard) => Ok(ObRwLockReadGuard(guard)),
+            Err(_) => Err(OzzError::LockPoison),
+        };
+    }
+}
+
+pub struct ObRwLockReadGuard<'t, T>(RwLockReadGuard<'t, Vec<T>>);
+
+impl<'t, T> Deref for ObRwLockReadGuard<'t, T> {
+    type Target = [T];
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        return self.0.as_slice();
+    }
+}
+
+impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Arc<RwLock<Vec<T>>> {
+    type MutBuf<'t> = ObRwLockWriteGuard<'t, T>;
+
+    #[inline(always)]
+    fn mut_buf(&mut self) -> Result<ObRwLockWriteGuard<T>, OzzError> {
+        return match self.write() {
+            Ok(guard) => Ok(ObRwLockWriteGuard(guard)),
+            Err(_) => Err(OzzError::LockPoison),
+        };
+    }
+}
+
+pub struct ObRwLockWriteGuard<'t, T>(RwLockWriteGuard<'t, Vec<T>>);
+
+impl<'t, T> Deref for ObRwLockWriteGuard<'t, T> {
+    type Target = [T];
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        return self.0.as_slice();
+    }
+}
+
+impl<'t, T> DerefMut for ObRwLockWriteGuard<'t, T> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        return self.0.as_mut_slice();
+    }
+}

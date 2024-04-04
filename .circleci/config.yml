@@ -108,11 +108,11 @@ workflows:
     - linux_x86_64:
         filters:
           branches:
-            only: [ "master", "test", "test-full", "test-linux-x64" ]
+            only: [ "-master", "test", "test-full", "test-linux-x64" ]
     - linux_aarch64:
         filters:
           branches:
-            only: [ "master", "test", "test-full", "test-linux-arm64" ]
+            only: [ "-master", "test", "test-full", "test-linux-arm64" ]
     # - windows_x86_64:
     #     filters:
     #       branches:
