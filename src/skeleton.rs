@@ -37,8 +37,8 @@ impl Skeleton {
         return 2;
     }
 
-    /// Creates a `Skeleton` from raw data.
-    pub fn from_raw(
+    #[cfg(test)]
+    pub(crate) fn from_raw(
         joint_rest_poses: Vec<SoaTransform>,
         joint_parents: Vec<i16>,
         joint_names: HashMap<String, i16, DeterministicState>,
