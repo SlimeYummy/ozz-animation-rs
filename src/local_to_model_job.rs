@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
-use crate::base::{OzzBuf, OzzError, OzzIndex, OzzRef, SKELETON_MAX_JOINTS, SKELETON_NO_PARENT};
+use crate::base::{OzzBuf, OzzError, OzzIndex, OzzMutBuf, OzzObj, SKELETON_MAX_JOINTS, SKELETON_NO_PARENT};
 use crate::math::{AosMat4, SoaMat4, SoaTransform};
 use crate::skeleton::Skeleton;
 
@@ -23,47 +23,47 @@ use crate::skeleton::Skeleton;
 #[derive(Debug)]
 pub struct LocalToModelJob<S = Rc<Skeleton>, I = Rc<RefCell<Vec<SoaTransform>>>, O = Rc<RefCell<Vec<Mat4>>>>
 where
-    S: OzzRef<Skeleton>,
+    S: OzzObj<Skeleton>,
     I: OzzBuf<SoaTransform>,
-    O: OzzBuf<Mat4>,
+    O: OzzMutBuf<Mat4>,
 {
     skeleton: Option<S>,
     input: Option<I>,
-    output: Option<O>,
-    verified: bool,
     root: AosMat4,
     from: i32,
     to: i32,
     from_excluded: bool,
+    output: Option<O>,
 }
 
-pub type ALocalToModelJob = LocalToModelJob<Arc<Skeleton>, Arc<RwLock<Vec<SoaTransform>>>, Arc<RwLock<Vec<Mat4>>>>;
+pub type LocalToModelJobRef<'t> = LocalToModelJob<&'t Skeleton, &'t [SoaTransform], &'t mut [Mat4]>;
+pub type LocalToModelJobRc = LocalToModelJob<Rc<Skeleton>, Rc<RefCell<Vec<SoaTransform>>>, Rc<RefCell<Vec<Mat4>>>>;
+pub type LocalToModelJobArc = LocalToModelJob<Arc<Skeleton>, Arc<RwLock<Vec<SoaTransform>>>, Arc<RwLock<Vec<Mat4>>>>;
 
 impl<S, I, O> Default for LocalToModelJob<S, I, O>
 where
-    S: OzzRef<Skeleton>,
+    S: OzzObj<Skeleton>,
     I: OzzBuf<SoaTransform>,
-    O: OzzBuf<Mat4>,
+    O: OzzMutBuf<Mat4>,
 {
     fn default() -> LocalToModelJob<S, I, O> {
         return LocalToModelJob {
             skeleton: None,
             input: None,
-            output: None,
-            verified: false,
             root: AosMat4::identity(),
             from: SKELETON_NO_PARENT,
             to: SKELETON_MAX_JOINTS,
             from_excluded: false,
+            output: None,
         };
     }
 }
 
 impl<S, I, O> LocalToModelJob<S, I, O>
 where
-    S: OzzRef<Skeleton>,
+    S: OzzObj<Skeleton>,
     I: OzzBuf<SoaTransform>,
-    O: OzzBuf<Mat4>,
+    O: OzzMutBuf<Mat4>,
 {
     /// Gets skeleton of `LocalToModelJob`.
     #[inline]
@@ -76,14 +76,12 @@ where
     /// The Skeleton object describing the joint hierarchy used for local to model space conversion.
     #[inline]
     pub fn set_skeleton(&mut self, skeleton: S) {
-        self.verified = false;
         self.skeleton = Some(skeleton);
     }
 
     /// Clears skeleton of `LocalToModelJob`.
     #[inline]
     pub fn clear_skeleton(&mut self) {
-        self.verified = false;
         self.skeleton = None;
     }
 
@@ -98,37 +96,13 @@ where
     /// The input range that store local transforms.
     #[inline]
     pub fn set_input(&mut self, input: I) {
-        self.verified = false;
         self.input = Some(input);
     }
 
     /// Clears input of `LocalToModelJob`.
     #[inline]
     pub fn clear_input(&mut self) {
-        self.verified = false;
         self.input = None;
-    }
-
-    /// Gets output of `LocalToModelJob`.
-    #[inline]
-    pub fn output(&self) -> Option<&O> {
-        return self.output.as_ref();
-    }
-
-    /// Sets output of `LocalToModelJob`.
-    ///
-    /// The output range to be filled with model-space matrices.
-    #[inline]
-    pub fn set_output(&mut self, output: O) {
-        self.verified = false;
-        self.output = Some(output);
-    }
-
-    /// Clears output of `LocalToModelJob`.
-    #[inline]
-    pub fn clear_output(&mut self) {
-        self.verified = false;
-        self.output = None;
     }
 
     /// Gets root of `LocalToModelJob`.
@@ -204,51 +178,52 @@ where
         self.from_excluded = from_excluded;
     }
 
+    /// Gets output of `LocalToModelJob`.
+    #[inline]
+    pub fn output(&self) -> Option<&O> {
+        return self.output.as_ref();
+    }
+
+    /// Sets output of `LocalToModelJob`.
+    ///
+    /// The output range to be filled with model-space matrices.
+    #[inline]
+    pub fn set_output(&mut self, output: O) {
+        self.output = Some(output);
+    }
+
+    /// Clears output of `LocalToModelJob`.
+    #[inline]
+    pub fn clear_output(&mut self) {
+        self.output = None;
+    }
+
     /// Validates `LocalToModelJob` parameters.
     pub fn validate(&self) -> bool {
-        let skeleton = match &self.skeleton {
-            Some(skeleton) => skeleton,
-            None => return false,
-        };
+        return (|| {
+            let skeleton = self.skeleton.as_ref()?.obj();
+            let input = self.input.as_ref()?.buf().ok()?;
+            let output = self.output.as_ref()?.buf().ok()?;
 
-        let input = match self.input.as_ref() {
-            Some(input) => match input.vec() {
-                Ok(input) => input,
-                Err(_) => return false,
-            },
-            None => return false,
-        };
-        if input.len() < skeleton.num_soa_joints() {
-            return false;
-        }
-
-        let output = match self.output.as_ref() {
-            Some(output) => match output.vec() {
-                Ok(output) => output,
-                Err(_) => return false,
-            },
-            None => return false,
-        };
-        if output.len() < skeleton.num_joints() {
-            return false;
-        }
-
-        return true;
+            let mut ok = input.len() >= skeleton.num_soa_joints();
+            ok &= output.len() >= skeleton.num_joints();
+            return Some(ok);
+        })()
+        .unwrap_or(false);
     }
 
     /// Runs local to model job's task.
-    /// The job call `validate()` to validate job before any operation is performed.
+    /// The validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
-        if !self.verified {
-            if !self.validate() {
-                return Err(OzzError::InvalidJob);
-            }
-            self.verified = true;
-        }
+        let skeleton = self.skeleton.as_ref().ok_or(OzzError::InvalidJob)?.obj();
+        let input = self.input.as_ref().ok_or(OzzError::InvalidJob)?.buf()?;
+        let mut output = self.output.as_mut().ok_or(OzzError::InvalidJob)?.mut_buf()?;
 
-        let skeleton = self.skeleton.as_ref().unwrap();
-        let input = self.input.as_ref().unwrap().vec()?;
-        let mut output = self.output.as_mut().unwrap().vec_mut()?;
+        let mut ok = input.len() >= skeleton.num_soa_joints();
+        ok &= output.len() >= skeleton.num_joints();
+        if !ok {
+            return Err(OzzError::InvalidJob);
+        }
 
         let begin = i32::max(0, self.from + (self.from_excluded as i32)) as usize;
         let end = i32::max(0, i32::min(self.to + 1, skeleton.num_joints() as i32)) as usize;
@@ -296,20 +271,23 @@ mod local_to_model_tests {
         let num_joints = skeleton.num_joints();
 
         // empty skeleton
-        let job: LocalToModelJob = LocalToModelJob::default();
+        let mut job: LocalToModelJob = LocalToModelJob::default();
         assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
 
         // empty input
         let mut job: LocalToModelJob = LocalToModelJob::default();
         job.set_skeleton(skeleton.clone());
         job.set_output(Rc::new(RefCell::new(vec![Mat4::IDENTITY; num_joints])));
         assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
 
         // empty output
         let mut job: LocalToModelJob = LocalToModelJob::default();
         job.set_skeleton(skeleton.clone());
         job.set_input(Rc::new(RefCell::new(vec![SoaTransform::default(); num_joints])));
         assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
 
         // invalid input
         let mut job = LocalToModelJob::default();
@@ -317,6 +295,7 @@ mod local_to_model_tests {
         job.set_input(Rc::new(RefCell::new(vec![SoaTransform::default(); 1])));
         job.set_output(Rc::new(RefCell::new(vec![Mat4::IDENTITY; num_joints + 10])));
         assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
 
         // invalid output
         let mut job = LocalToModelJob::default();

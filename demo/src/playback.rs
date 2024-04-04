@@ -8,8 +8,8 @@ use crate::base::*;
 
 pub struct OzzPlayback {
     skeleton: Arc<Skeleton>,
-    sample_job: ASamplingJob,
-    l2m_job: ALocalToModelJob,
+    sample_job: SamplingJobMT,
+    l2m_job: LocalToModelJobMT,
     models: Arc<RwLock<Vec<Mat4>>>,
     bone_trans: Vec<OzzTransform>,
     spine_trans: Vec<OzzTransform>,
@@ -38,7 +38,7 @@ impl OzzPlayback {
 
         oc.sample_job.set_animation(animation.clone());
         oc.sample_job.set_context(SamplingContext::new(animation.num_tracks()));
-        let sample_out = ozz_abuf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+        let sample_out = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         oc.sample_job.set_output(sample_out.clone());
 
         oc.l2m_job.set_skeleton(skeleton.clone());
@@ -67,7 +67,7 @@ impl OzzPlayback {
 
 impl OzzExample for OzzPlayback {
     fn root(&self) -> Mat4 {
-        return self.models.vec().unwrap()[0];
+        return self.models.buf().unwrap()[0];
     }
 
     fn bone_trans(&self) -> &[OzzTransform] {
@@ -88,7 +88,7 @@ impl OzzExample for OzzPlayback {
         self.bone_trans.clear();
         self.spine_trans.clear();
 
-        let modals = self.models.vec().unwrap();
+        let modals = self.models.buf().unwrap();
         for (i, current) in modals.iter().enumerate() {
             let parent_id = self.skeleton.joint_parent(i);
             if parent_id as i32 == SKELETON_NO_PARENT {
