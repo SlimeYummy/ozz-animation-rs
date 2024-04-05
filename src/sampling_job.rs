@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use std::{mem, slice};
 
 use crate::animation::{Animation, Float3Key, QuaternionKey};
-use crate::base::{OzzBuf, OzzError, OzzRef};
+use crate::base::{OzzError, OzzMutBuf, OzzObj};
 use crate::math::{f32_clamp_or_max, SoaQuat, SoaTransform, SoaVec3};
 
 /// Soa hot `SoaVec3` data to interpolate.
@@ -88,9 +88,6 @@ struct SamplingContextInner {
     max_soa_tracks: usize,
     num_outdated: usize,
 
-    animation_id: u64,
-    ratio: f32,
-
     translations_ptr: *mut InterpSoaFloat3,
     rotations_ptr: *mut InterpSoaQuaternion,
     scales_ptr: *mut InterpSoaFloat3,
@@ -98,10 +95,6 @@ struct SamplingContextInner {
     translation_keys_ptr: *mut i32,
     rotation_keys_ptr: *mut i32,
     scale_keys_ptr: *mut i32,
-
-    translation_cursor: usize,
-    rotation_cursor: usize,
-    scale_cursor: usize,
 
     outdated_translations_ptr: *mut u8,
     outdated_rotations_ptr: *mut u8,
@@ -116,9 +109,6 @@ impl Default for SamplingContextInner {
             max_soa_tracks: 0,
             num_outdated: 0,
 
-            animation_id: 0,
-            ratio: 0.0,
-
             translations_ptr: std::ptr::null_mut(),
             rotations_ptr: std::ptr::null_mut(),
             scales_ptr: std::ptr::null_mut(),
@@ -126,10 +116,6 @@ impl Default for SamplingContextInner {
             translation_keys_ptr: std::ptr::null_mut(),
             rotation_keys_ptr: std::ptr::null_mut(),
             scale_keys_ptr: std::ptr::null_mut(),
-
-            translation_cursor: 0,
-            rotation_cursor: 0,
-            scale_cursor: 0,
 
             outdated_translations_ptr: std::ptr::null_mut(),
             outdated_rotations_ptr: std::ptr::null_mut(),
@@ -140,22 +126,32 @@ impl Default for SamplingContextInner {
 
 /// Declares the context object used by the workload to take advantage of the
 /// frame coherency of animation sampling.
-pub struct SamplingContext(*mut SamplingContextInner);
+pub struct SamplingContext {
+    inner: *const SamplingContextInner,
+    animation_id: u64,
+    ratio: f32,
 
-unsafe impl Send for SamplingContext {}
-unsafe impl Sync for SamplingContext {}
+    translation_cursor: usize,
+    rotation_cursor: usize,
+    scale_cursor: usize,
+}
 
 impl Debug for SamplingContext {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        return self.inner().fmt(f);
+        return f
+            .debug_struct("SamplingContext")
+            .field("mem", &self.inner)
+            .field("animation_id", &self.animation_id)
+            .field("ratio", &self.ratio)
+            .finish();
     }
 }
 
 impl Clone for SamplingContext {
     fn clone(&self) -> Self {
         let mut ctx = SamplingContext::new(self.max_tracks());
-        ctx.set_animation_id(self.animation_id());
-        ctx.set_ratio(self.ratio());
+        ctx.animation_id = self.animation_id;
+        ctx.ratio = self.ratio;
 
         ctx.translations_mut().copy_from_slice(self.translations());
         ctx.rotations_mut().copy_from_slice(self.rotations());
@@ -165,9 +161,9 @@ impl Clone for SamplingContext {
         ctx.rotation_keys_mut().copy_from_slice(self.rotation_keys());
         ctx.scale_keys_mut().copy_from_slice(self.scale_keys());
 
-        ctx.set_translation_cursor(self.translation_cursor());
-        ctx.set_rotation_cursor(self.rotation_cursor());
-        ctx.set_scale_cursor(self.scale_cursor());
+        ctx.translation_cursor = self.translation_cursor;
+        ctx.rotation_cursor = self.rotation_cursor;
+        ctx.scale_cursor = self.scale_cursor;
 
         ctx.outdated_translations_mut()
             .copy_from_slice(self.outdated_translations());
@@ -183,17 +179,17 @@ impl PartialEq for SamplingContext {
         return self.max_tracks() == other.max_tracks()
             && self.max_soa_tracks() == other.max_soa_tracks()
             && self.num_outdated() == other.num_outdated()
-            && self.animation_id() == other.animation_id()
-            && self.ratio() == other.ratio()
+            && self.animation_id == other.animation_id
+            && self.ratio == other.ratio
             && self.translations() == other.translations()
             && self.rotations() == other.rotations()
             && self.scales() == other.scales()
             && self.translation_keys() == other.translation_keys()
             && self.rotation_keys() == other.rotation_keys()
             && self.scale_keys() == other.scale_keys()
-            && self.translation_cursor() == other.translation_cursor()
-            && self.rotation_cursor() == other.rotation_cursor()
-            && self.scale_cursor() == other.scale_cursor()
+            && self.translation_cursor == other.translation_cursor
+            && self.rotation_cursor == other.rotation_cursor
+            && self.scale_cursor == other.scale_cursor
             && self.outdated_translations() == other.outdated_translations()
             && self.outdated_rotations() == other.outdated_rotations()
             && self.outdated_scales() == other.outdated_scales();
@@ -202,9 +198,12 @@ impl PartialEq for SamplingContext {
 
 impl Drop for SamplingContext {
     fn drop(&mut self) {
-        unsafe {
-            let layout = Layout::from_size_align_unchecked(self.size(), mem::size_of::<f32x4>());
-            alloc::dealloc(self.0 as *mut u8, layout);
+        if !self.inner.is_null() {
+            unsafe {
+                let layout = Layout::from_size_align_unchecked(self.size(), mem::size_of::<f32x4>());
+                alloc::dealloc(self.inner as *mut u8, layout);
+            }
+            self.inner = std::ptr::null_mut();
         }
     }
 }
@@ -212,12 +211,7 @@ impl Drop for SamplingContext {
 impl SamplingContext {
     #[inline(always)]
     fn inner(&self) -> &SamplingContextInner {
-        return unsafe { &*self.0 };
-    }
-
-    #[inline(always)]
-    fn inner_mut(&mut self) -> &mut SamplingContextInner {
-        return unsafe { &mut *self.0 };
+        return unsafe { &*self.inner };
     }
 
     /// Create a new `SamplingContext`
@@ -237,34 +231,43 @@ impl SamplingContext {
         unsafe {
             let layout = Layout::from_size_align_unchecked(size, mem::size_of::<f32x4>());
             let mut ptr = alloc::alloc(layout);
-            let mut ctx = SamplingContext(ptr as *mut SamplingContextInner);
-            *ctx.0 = SamplingContextInner::default();
+            let ctx = SamplingContext {
+                inner: ptr as *const SamplingContextInner,
+                animation_id: 0,
+                ratio: 0.0,
+                translation_cursor: 0,
+                rotation_cursor: 0,
+                scale_cursor: 0,
+            };
+
+            let inner = &mut *(ptr as *mut SamplingContextInner);
+            *inner = SamplingContextInner::default();
             ptr = ptr.add(mem::size_of::<SamplingContextInner>());
 
-            ctx.inner_mut().size = size;
-            ctx.inner_mut().max_soa_tracks = max_soa_tracks;
-            ctx.inner_mut().max_tracks = max_tracks;
-            ctx.inner_mut().num_outdated = num_outdated;
+            inner.size = size;
+            inner.max_soa_tracks = max_soa_tracks;
+            inner.max_tracks = max_tracks;
+            inner.num_outdated = num_outdated;
 
-            ctx.inner_mut().translations_ptr = ptr as *mut InterpSoaFloat3;
-            ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * ctx.inner_mut().max_soa_tracks);
-            ctx.inner_mut().rotations_ptr = ptr as *mut InterpSoaQuaternion;
-            ptr = ptr.add(mem::size_of::<InterpSoaQuaternion>() * ctx.inner_mut().max_soa_tracks);
-            ctx.inner_mut().scales_ptr = ptr as *mut InterpSoaFloat3;
-            ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * ctx.inner_mut().max_soa_tracks);
-            ctx.inner_mut().translation_keys_ptr = ptr as *mut i32;
+            inner.translations_ptr = ptr as *mut InterpSoaFloat3;
+            ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * inner.max_soa_tracks);
+            inner.rotations_ptr = ptr as *mut InterpSoaQuaternion;
+            ptr = ptr.add(mem::size_of::<InterpSoaQuaternion>() * inner.max_soa_tracks);
+            inner.scales_ptr = ptr as *mut InterpSoaFloat3;
+            ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * inner.max_soa_tracks);
+            inner.translation_keys_ptr = ptr as *mut i32;
             ptr = ptr.add(mem::size_of::<i32>() * max_tracks * 2);
-            ctx.inner_mut().rotation_keys_ptr = ptr as *mut i32;
+            inner.rotation_keys_ptr = ptr as *mut i32;
             ptr = ptr.add(mem::size_of::<i32>() * max_tracks * 2);
-            ctx.inner_mut().scale_keys_ptr = ptr as *mut i32;
+            inner.scale_keys_ptr = ptr as *mut i32;
             ptr = ptr.add(mem::size_of::<i32>() * max_tracks * 2);
-            ctx.inner_mut().outdated_translations_ptr = ptr as *mut u8;
-            ptr = ptr.add(mem::size_of::<u8>() * ctx.inner_mut().num_outdated);
-            ctx.inner_mut().outdated_rotations_ptr = ptr as *mut u8;
-            ptr = ptr.add(mem::size_of::<u8>() * ctx.inner_mut().num_outdated);
-            ctx.inner_mut().outdated_scales_ptr = ptr as *mut u8;
-            ptr = ptr.add(mem::size_of::<u8>() * ctx.inner_mut().num_outdated);
-            assert_eq!(ptr, (ctx.0 as *mut u8).add(size));
+            inner.outdated_translations_ptr = ptr as *mut u8;
+            ptr = ptr.add(mem::size_of::<u8>() * inner.num_outdated);
+            inner.outdated_rotations_ptr = ptr as *mut u8;
+            ptr = ptr.add(mem::size_of::<u8>() * inner.num_outdated);
+            inner.outdated_scales_ptr = ptr as *mut u8;
+            ptr = ptr.add(mem::size_of::<u8>() * inner.num_outdated);
+            assert_eq!(ptr, (ctx.inner as *mut u8).add(size));
 
             return ctx;
         };
@@ -275,24 +278,24 @@ impl SamplingContext {
     /// * `animation` - The animation to sample. Use `animation.num_tracks()` as max_tracks.
     pub fn from_animation(animation: &Animation) -> SamplingContext {
         let mut ctx = SamplingContext::new(animation.num_tracks());
-        ctx.inner_mut().animation_id = animation as *const _ as u64;
+        ctx.animation_id = animation as *const _ as u64;
         return ctx;
     }
 
     /// Clear the `SamplingContext`.
     #[inline]
     pub fn clear(&mut self) {
-        self.inner_mut().animation_id = 0;
-        self.inner_mut().translation_cursor = 0;
-        self.inner_mut().rotation_cursor = 0;
-        self.inner_mut().scale_cursor = 0;
+        self.animation_id = 0;
+        self.translation_cursor = 0;
+        self.rotation_cursor = 0;
+        self.scale_cursor = 0;
     }
 
     /// Clone the `SamplingContext` without the animation id. Usually used for serialization.
     #[inline]
     pub fn clone_without_animation_id(&self) -> SamplingContext {
         let mut ctx = self.clone();
-        ctx.set_animation_id(0);
+        ctx.animation_id = 0;
         return ctx;
     }
 
@@ -320,29 +323,6 @@ impl SamplingContext {
         return self.inner().num_outdated;
     }
 
-    /// The unique identifier of the animation that the context is sampling.
-    #[inline]
-    pub fn animation_id(&self) -> u64 {
-        return self.inner().animation_id;
-    }
-
-    /// Set the unique identifier of the animation that the context is sampling.
-    #[inline]
-    pub fn set_animation_id(&mut self, id: u64) {
-        self.inner_mut().animation_id = id;
-    }
-
-    /// The current time ratio in the animation.
-    #[inline]
-    pub fn ratio(&self) -> f32 {
-        return self.inner().ratio;
-    }
-
-    #[inline]
-    fn set_ratio(&mut self, ratio: f32) {
-        self.inner_mut().ratio = ratio;
-    }
-
     /// Soa hot data to interpolate.
     #[inline]
     pub fn translations(&self) -> &[InterpSoaFloat3] {
@@ -352,7 +332,7 @@ impl SamplingContext {
 
     #[inline]
     fn translations_mut(&mut self) -> &mut [InterpSoaFloat3] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.translations_ptr, inner.max_soa_tracks) };
     }
 
@@ -365,7 +345,7 @@ impl SamplingContext {
 
     #[inline]
     fn rotations_mut(&mut self) -> &mut [InterpSoaQuaternion] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.rotations_ptr, inner.max_soa_tracks) };
     }
 
@@ -378,7 +358,7 @@ impl SamplingContext {
 
     #[inline]
     fn scales_mut(&mut self) -> &mut [InterpSoaFloat3] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.scales_ptr, inner.max_soa_tracks) };
     }
 
@@ -391,7 +371,7 @@ impl SamplingContext {
 
     #[inline]
     fn translation_keys_mut(&mut self) -> &mut [i32] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.translation_keys_ptr, inner.max_tracks * 2) };
     }
 
@@ -404,7 +384,7 @@ impl SamplingContext {
 
     #[inline]
     fn rotation_keys_mut(&mut self) -> &mut [i32] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.rotation_keys_ptr, inner.max_tracks * 2) };
     }
 
@@ -417,41 +397,8 @@ impl SamplingContext {
 
     #[inline]
     fn scale_keys_mut(&mut self) -> &mut [i32] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.scale_keys_ptr, inner.max_tracks * 2) };
-    }
-
-    /// Current cursors in the animation. 0 means that the context is invalid.
-    #[inline]
-    pub fn translation_cursor(&self) -> usize {
-        return self.inner().translation_cursor;
-    }
-
-    #[inline]
-    fn set_translation_cursor(&mut self, cursor: usize) {
-        self.inner_mut().translation_cursor = cursor;
-    }
-
-    /// Current cursors in the animation. 0 means that the context is invalid.
-    #[inline]
-    pub fn rotation_cursor(&self) -> usize {
-        return self.inner().rotation_cursor;
-    }
-
-    #[inline]
-    fn set_rotation_cursor(&mut self, cursor: usize) {
-        self.inner_mut().rotation_cursor = cursor;
-    }
-
-    /// Current cursors in the animation. 0 means that the context is invalid.
-    #[inline]
-    pub fn scale_cursor(&self) -> usize {
-        return self.inner().scale_cursor;
-    }
-
-    #[inline]
-    fn set_scale_cursor(&mut self, cursor: usize) {
-        self.inner_mut().scale_cursor = cursor;
     }
 
     /// Outdated soa entries. One bit per soa entry (32 joints per byte).
@@ -463,7 +410,7 @@ impl SamplingContext {
 
     #[inline]
     fn outdated_translations_mut(&mut self) -> &mut [u8] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_translations_ptr, inner.num_outdated) };
     }
 
@@ -476,7 +423,7 @@ impl SamplingContext {
 
     #[inline]
     fn outdated_rotations_mut(&mut self) -> &mut [u8] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_rotations_ptr, inner.num_outdated) };
     }
 
@@ -489,8 +436,38 @@ impl SamplingContext {
 
     #[inline]
     fn outdated_scales_mut(&mut self) -> &mut [u8] {
-        let inner = self.inner_mut();
+        let inner = self.inner();
         return unsafe { std::slice::from_raw_parts_mut(inner.outdated_scales_ptr, inner.num_outdated) };
+    }
+
+    /// The unique identifier of the animation that the context is sampling.
+    #[inline]
+    pub fn animation_id(&self) -> u64 {
+        return self.animation_id;
+    }
+
+    /// The current time ratio in the animation.
+    #[inline]
+    pub fn ratio(&self) -> f32 {
+        return self.ratio;
+    }
+
+    /// Current cursors in the animation. 0 means that the context is invalid.
+    #[inline]
+    pub fn translation_cursor(&self) -> usize {
+        return self.translation_cursor;
+    }
+
+    /// Current cursors in the animation. 0 means that the context is invalid.
+    #[inline]
+    pub fn rotation_cursor(&self) -> usize {
+        return self.rotation_cursor;
+    }
+
+    /// Current cursors in the animation. 0 means that the context is invalid.
+    #[inline]
+    pub fn scale_cursor(&self) -> usize {
+        return self.scale_cursor;
     }
 }
 
@@ -592,9 +569,9 @@ impl rkyv::Archive for SamplingContext {
         usize::resolve(&self.num_outdated(), pos + fp, (), fo);
 
         let (fp, fo) = rkyv::out_field!(out.animation_id);
-        u64::resolve(&self.animation_id(), pos + fp, (), fo);
+        u64::resolve(&self.animation_id, pos + fp, (), fo);
         let (fp, fo) = rkyv::out_field!(out.ratio);
-        f32::resolve(&self.ratio(), pos + fp, (), fo);
+        f32::resolve(&self.ratio, pos + fp, (), fo);
 
         let (fp, fo) = rkyv::out_field!(out.translations_ptr);
         rkyv::RelPtr::emplace(pos + fp, resolver.translations_pos, fo);
@@ -611,11 +588,11 @@ impl rkyv::Archive for SamplingContext {
         rkyv::RelPtr::emplace(pos + fp, resolver.scale_keys_pos, fo);
 
         let (fp, fo) = rkyv::out_field!(out.translation_cursor);
-        usize::resolve(&self.translation_cursor(), pos + fp, (), fo);
+        usize::resolve(&self.translation_cursor, pos + fp, (), fo);
         let (fp, fo) = rkyv::out_field!(out.rotation_cursor);
-        usize::resolve(&self.rotation_cursor(), pos + fp, (), fo);
+        usize::resolve(&self.rotation_cursor, pos + fp, (), fo);
         let (fp, fo) = rkyv::out_field!(out.scale_cursor);
-        usize::resolve(&self.scale_cursor(), pos + fp, (), fo);
+        usize::resolve(&self.scale_cursor, pos + fp, (), fo);
 
         let (fp, fo) = rkyv::out_field!(out.outdated_translations_ptr);
         rkyv::RelPtr::emplace(pos + fp, resolver.outdated_translations_pos, fo);
@@ -691,8 +668,8 @@ impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SamplingContext, D> for Archi
     fn deserialize(&self, _: &mut D) -> Result<SamplingContext, D::Error> {
         let archived = rkyv::from_archived!(self);
         let mut context = SamplingContext::new(archived.max_tracks as usize);
-        context.set_animation_id(archived.animation_id);
-        context.set_ratio(archived.ratio);
+        context.animation_id = archived.animation_id;
+        context.ratio = archived.ratio;
         context.translations_mut().copy_from_slice(archived.translations());
         context.rotations_mut().copy_from_slice(archived.rotations());
         context.scales_mut().copy_from_slice(archived.scales());
@@ -701,9 +678,9 @@ impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SamplingContext, D> for Archi
             .copy_from_slice(archived.translation_keys());
         context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
         context.scale_keys_mut().copy_from_slice(archived.scale_keys());
-        context.set_translation_cursor(archived.translation_cursor as usize);
-        context.set_rotation_cursor(archived.rotation_cursor as usize);
-        context.set_scale_cursor(archived.scale_cursor as usize);
+        context.translation_cursor = archived.translation_cursor as usize;
+        context.rotation_cursor = archived.rotation_cursor as usize;
+        context.scale_cursor = archived.scale_cursor as usize;
         context
             .outdated_translations_mut()
             .copy_from_slice(archived.outdated_translations());
@@ -747,38 +724,38 @@ impl<C: ?Sized> bytecheck::CheckBytes<C> for ArchivedSamplingContext {
 #[derive(Debug)]
 pub struct SamplingJob<A = Rc<Animation>, O = Rc<RefCell<Vec<SoaTransform>>>>
 where
-    A: OzzRef<Animation>,
-    O: OzzBuf<SoaTransform>,
+    A: OzzObj<Animation>,
+    O: OzzMutBuf<SoaTransform>,
 {
     animation: Option<A>,
-    output: Option<O>,
-    verified: bool,
-    ratio: f32,
     context: Option<SamplingContext>,
+    ratio: f32,
+    output: Option<O>,
 }
 
-pub type ASamplingJob = SamplingJob<Arc<Animation>, Arc<RwLock<Vec<SoaTransform>>>>;
+pub type SamplingJobRef<'t> = SamplingJob<&'t Animation, &'t mut [SoaTransform]>;
+pub type SamplingJobRc = SamplingJob<Rc<Animation>, Rc<RefCell<Vec<SoaTransform>>>>;
+pub type SamplingJobArc = SamplingJob<Arc<Animation>, Arc<RwLock<Vec<SoaTransform>>>>;
 
 impl<A, O> Default for SamplingJob<A, O>
 where
-    A: OzzRef<Animation>,
-    O: OzzBuf<SoaTransform>,
+    A: OzzObj<Animation>,
+    O: OzzMutBuf<SoaTransform>,
 {
     fn default() -> SamplingJob<A, O> {
         return SamplingJob {
             animation: None,
-            output: None,
-            verified: false,
-            ratio: 0.0,
             context: None,
+            ratio: 0.0,
+            output: None,
         };
     }
 }
 
 impl<A, O> SamplingJob<A, O>
 where
-    A: OzzRef<Animation>,
-    O: OzzBuf<SoaTransform>,
+    A: OzzObj<Animation>,
+    O: OzzMutBuf<SoaTransform>,
 {
     /// Gets animation to sample of `SamplingJob`.
     #[inline]
@@ -789,14 +766,12 @@ where
     /// Sets animation to sample of `SamplingJob`.
     #[inline]
     pub fn set_animation(&mut self, animation: A) {
-        self.verified = false;
         self.animation = Some(animation);
     }
 
     /// Clears animation to sample of `SamplingJob`.
     #[inline]
     pub fn clear_animation(&mut self) {
-        self.verified = false;
         self.animation = None;
     }
 
@@ -809,48 +784,19 @@ where
     /// Sets context of `SamplingJob`. See [SamplingContext].
     #[inline]
     pub fn set_context(&mut self, ctx: SamplingContext) {
-        self.verified = false;
         self.context = Some(ctx);
     }
 
     /// Clears context of `SamplingJob`. See [SamplingContext].
     #[inline]
     pub fn clear_context(&mut self) {
-        self.verified = false;
         self.context = None;
     }
 
     /// Takes context of `SamplingJob`. See [SamplingContext].
     #[inline]
     pub fn take_context(&mut self) -> Option<SamplingContext> {
-        self.verified = false;
         return self.context.take();
-    }
-
-    /// Gets output of `SamplingJob`.
-    #[inline]
-    pub fn output(&self) -> Option<&O> {
-        return self.output.as_ref();
-    }
-
-    /// Sets output of `SamplingJob`.
-    ///
-    /// The output range to be filled with sampled joints during job execution.
-    ///
-    /// If there are less joints in the animation compared to the output range, then remaining
-    /// `SoaTransform` are left unchanged.
-    /// If there are more joints in the animation, then the last joints are not sampled.
-    #[inline]
-    pub fn set_output(&mut self, output: O) {
-        self.verified = false;
-        self.output = Some(output);
-    }
-
-    /// Clears output of `SamplingJob`.
-    #[inline]
-    pub fn clear_output(&mut self) {
-        self.verified = false;
-        self.output = None;
     }
 
     /// Gets the time ratio of `SamplingJob`.
@@ -872,85 +818,90 @@ where
         self.ratio = f32_clamp_or_max(ratio, 0.0f32, 1.0f32);
     }
 
+    /// Gets output of `SamplingJob`.
+    #[inline]
+    pub fn output(&self) -> Option<&O> {
+        return self.output.as_ref();
+    }
+
+    /// Sets output of `SamplingJob`.
+    ///
+    /// The output range to be filled with sampled joints during job execution.
+    ///
+    /// If there are less joints in the animation compared to the output range, then remaining
+    /// `SoaTransform` are left unchanged.
+    /// If there are more joints in the animation, then the last joints are not sampled.
+    #[inline]
+    pub fn set_output(&mut self, output: O) {
+        self.output = Some(output);
+    }
+
+    /// Clears output of `SamplingJob`.
+    #[inline]
+    pub fn clear_output(&mut self) {
+        self.output = None;
+    }
+
     /// Validates `SamplingJob` parameters.
     pub fn validate(&self) -> bool {
-        let animation = match &self.animation {
-            Some(animation) => animation,
-            None => return false,
-        };
-        let ctx = match &self.context {
-            Some(ctx) => ctx,
-            None => return false,
-        };
+        return (|| {
+            let animation = self.animation.as_ref()?.obj();
+            let context = self.context.as_ref()?;
+            let output = self.output.as_ref()?.buf().ok()?;
 
-        if ctx.max_soa_tracks() < animation.num_soa_tracks() {
-            return false;
-        }
-
-        let output = match self.output.as_ref() {
-            Some(output) => match output.vec() {
-                Ok(output) => output,
-                Err(_) => return false,
-            },
-            None => return false,
-        };
-        if output.len() < animation.num_soa_tracks() {
-            return false;
-        }
-
-        return true;
+            let mut ok = context.max_soa_tracks() >= animation.num_soa_tracks();
+            ok &= output.len() >= animation.num_soa_tracks();
+            return Some(ok);
+        })()
+        .unwrap_or(false);
     }
 
     /// Runs job's sampling task.
-    /// The job call `validate()` to validate job before any operation is performed.
+    /// The validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
-        if !self.verified {
-            if !self.validate() {
-                return Err(OzzError::InvalidJob);
-            }
-            self.verified = true;
+        let animation = self.animation.as_ref().ok_or(OzzError::InvalidJob)?.obj();
+        let ctx = self.context.as_mut().ok_or(OzzError::InvalidJob)?;
+        let mut output = self.output.as_mut().ok_or(OzzError::InvalidJob)?.mut_buf()?;
+
+        let mut ok = ctx.max_soa_tracks() >= animation.num_soa_tracks();
+        ok &= output.len() >= animation.num_soa_tracks();
+        if !ok {
+            return Err(OzzError::InvalidJob);
         }
 
-        let animation = self.animation.as_ref().unwrap();
         if animation.num_soa_tracks() == 0 {
             return Ok(());
         }
 
-        self.step_context();
+        Self::step_context(animation, ctx, self.ratio);
 
-        self.update_translation_cursor();
-        self.update_translation_key_frames();
+        Self::update_translation_cursor(animation, ctx, self.ratio);
+        Self::update_translation_key_frames(animation, ctx);
 
-        self.update_rotation_cursor();
-        self.update_rotation_key_frames();
+        Self::update_rotation_cursor(animation, ctx, self.ratio);
+        Self::update_rotation_key_frames(animation, ctx);
 
-        self.update_scale_cursor();
-        self.update_scale_key_frames();
+        Self::update_scale_cursor(animation, ctx, self.ratio);
+        Self::update_scale_key_frames(animation, ctx);
 
-        self.interpolates()?;
+        Self::interpolates(animation, ctx, self.ratio, &mut output)?;
 
         return Ok(());
     }
 
-    fn step_context(&mut self) {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-
+    fn step_context(animation: &Animation, ctx: &mut SamplingContext, ratio: f32) {
         let animation_id = animation as *const _ as u64;
-        if (ctx.animation_id() != animation_id) || self.ratio < ctx.ratio() {
-            ctx.set_animation_id(animation_id);
-            ctx.set_translation_cursor(0);
-            ctx.set_rotation_cursor(0);
-            ctx.set_scale_cursor(0);
+        if (ctx.animation_id != animation_id) || ratio < ctx.ratio {
+            ctx.animation_id = animation_id;
+            ctx.translation_cursor = 0;
+            ctx.rotation_cursor = 0;
+            ctx.scale_cursor = 0;
         }
-        ctx.set_ratio(self.ratio);
+        ctx.ratio = ratio;
     }
 
-    fn update_translation_cursor(&mut self) {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-
-        if ctx.translation_cursor() == 0 {
+    fn update_translation_cursor(animation: &Animation, ctx: &mut SamplingContext, ratio: f32) {
+        if ctx.translation_cursor == 0 {
             for i in 0..animation.num_soa_tracks() {
                 let in_idx0 = i * 4;
                 let in_idx1 = in_idx0 + animation.num_aligned_tracks();
@@ -971,29 +922,26 @@ where
                 .last_mut()
                 .map(|x| *x = 0xFF >> last_offset);
 
-            ctx.set_translation_cursor(animation.num_aligned_tracks() * 2);
+            ctx.translation_cursor = animation.num_aligned_tracks() * 2;
         }
 
-        while ctx.translation_cursor() < animation.translations().len() {
-            let track = animation.translations()[ctx.translation_cursor()].track as usize;
+        while ctx.translation_cursor < animation.translations().len() {
+            let track = animation.translations()[ctx.translation_cursor].track as usize;
             let key_idx = ctx.translation_keys()[track * 2 + 1] as usize;
-            let ratio = animation.translations()[key_idx].ratio;
-            if ratio > self.ratio {
+            let ani_ratio = animation.translations()[key_idx].ratio;
+            if ani_ratio > ratio {
                 break;
             }
 
             ctx.outdated_translations_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.translations()[ctx.translation_cursor()].track as usize) * 2;
+            let base = (animation.translations()[ctx.translation_cursor].track as usize) * 2;
             ctx.translation_keys_mut()[base] = ctx.translation_keys()[base + 1];
-            ctx.translation_keys_mut()[base + 1] = ctx.translation_cursor() as i32;
-            ctx.set_translation_cursor(ctx.translation_cursor() + 1);
+            ctx.translation_keys_mut()[base + 1] = ctx.translation_cursor as i32;
+            ctx.translation_cursor = ctx.translation_cursor + 1;
         }
     }
 
-    fn update_translation_key_frames(&mut self) {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-
+    fn update_translation_key_frames(animation: &Animation, ctx: &mut SamplingContext) {
         let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
         for j in 0..num_outdated_flags {
             let mut outdated = ctx.outdated_translations()[j];
@@ -1022,11 +970,8 @@ where
         }
     }
 
-    fn update_rotation_cursor(&mut self) {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-
-        if ctx.rotation_cursor() == 0 {
+    fn update_rotation_cursor(animation: &Animation, ctx: &mut SamplingContext, ratio: f32) {
+        if ctx.rotation_cursor == 0 {
             for i in 0..animation.num_soa_tracks() {
                 let in_idx0 = i * 4;
                 let in_idx1 = in_idx0 + animation.num_aligned_tracks();
@@ -1047,29 +992,26 @@ where
                 .last_mut()
                 .map(|x| *x = 0xFF >> last_offset);
 
-            ctx.set_rotation_cursor(animation.num_aligned_tracks() * 2);
+            ctx.rotation_cursor = animation.num_aligned_tracks() * 2;
         }
 
-        while ctx.rotation_cursor() < animation.rotations().len() {
-            let track = animation.rotations()[ctx.rotation_cursor()].track() as usize;
+        while ctx.rotation_cursor < animation.rotations().len() {
+            let track = animation.rotations()[ctx.rotation_cursor].track() as usize;
             let key_idx = ctx.rotation_keys()[track * 2 + 1] as usize;
-            let ratio = animation.rotations()[key_idx].ratio;
-            if ratio > self.ratio {
+            let ani_ratio = animation.rotations()[key_idx].ratio;
+            if ani_ratio > ratio {
                 break;
             }
 
             ctx.outdated_rotations_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.rotations()[ctx.rotation_cursor()].track() as usize) * 2;
+            let base = (animation.rotations()[ctx.rotation_cursor].track() as usize) * 2;
             ctx.rotation_keys_mut()[base] = ctx.rotation_keys()[base + 1];
-            ctx.rotation_keys_mut()[base + 1] = ctx.rotation_cursor() as i32;
-            ctx.set_rotation_cursor(ctx.rotation_cursor() + 1);
+            ctx.rotation_keys_mut()[base + 1] = ctx.rotation_cursor as i32;
+            ctx.rotation_cursor = ctx.rotation_cursor + 1;
         }
     }
 
-    fn update_rotation_key_frames(&mut self) {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-
+    fn update_rotation_key_frames(animation: &Animation, ctx: &mut SamplingContext) {
         let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
         for j in 0..num_outdated_flags {
             let mut outdated = ctx.outdated_rotations()[j];
@@ -1098,11 +1040,8 @@ where
         }
     }
 
-    fn update_scale_cursor(&mut self) {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-
-        if ctx.scale_cursor() == 0 {
+    fn update_scale_cursor(animation: &Animation, ctx: &mut SamplingContext, ratio: f32) {
+        if ctx.scale_cursor == 0 {
             for i in 0..animation.num_soa_tracks() {
                 let in_idx0 = i * 4;
                 let in_idx1 = in_idx0 + animation.num_aligned_tracks();
@@ -1121,29 +1060,26 @@ where
             let last_offset = ((animation.num_soa_tracks() + 7) / 8 * 8) - animation.num_soa_tracks();
             ctx.outdated_scales_mut().last_mut().map(|x| *x = 0xFF >> last_offset);
 
-            ctx.set_scale_cursor(animation.num_aligned_tracks() * 2);
+            ctx.scale_cursor = animation.num_aligned_tracks() * 2;
         }
 
-        while ctx.scale_cursor() < animation.scales().len() {
-            let track = animation.scales()[ctx.scale_cursor()].track as usize;
+        while ctx.scale_cursor < animation.scales().len() {
+            let track = animation.scales()[ctx.scale_cursor].track as usize;
             let key_idx = ctx.scale_keys()[track * 2 + 1] as usize;
-            let ratio = animation.scales()[key_idx].ratio;
-            if ratio > self.ratio {
+            let ani_ratio = animation.scales()[key_idx].ratio;
+            if ani_ratio > ratio {
                 break;
             }
 
             ctx.outdated_scales_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.scales()[ctx.scale_cursor()].track as usize) * 2;
+            let base = (animation.scales()[ctx.scale_cursor].track as usize) * 2;
             ctx.scale_keys_mut()[base] = ctx.scale_keys()[base + 1];
-            ctx.scale_keys_mut()[base + 1] = ctx.scale_cursor() as i32;
-            ctx.set_scale_cursor(ctx.scale_cursor() + 1);
+            ctx.scale_keys_mut()[base + 1] = ctx.scale_cursor as i32;
+            ctx.scale_cursor = ctx.scale_cursor + 1;
         }
     }
 
-    fn update_scale_key_frames(&mut self) {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-
+    fn update_scale_key_frames(animation: &Animation, ctx: &mut SamplingContext) {
         let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
         for j in 0..num_outdated_flags {
             let mut outdated = ctx.outdated_scales()[j];
@@ -1172,12 +1108,13 @@ where
         }
     }
 
-    fn interpolates(&mut self) -> Result<(), OzzError> {
-        let animation = self.animation.as_ref().unwrap();
-        let ctx = self.context.as_mut().unwrap();
-        let mut output = self.output.as_mut().unwrap().vec_mut()?;
-
-        let ratio4 = f32x4::splat(self.ratio);
+    fn interpolates(
+        animation: &Animation,
+        ctx: &mut SamplingContext,
+        ratio: f32,
+        output: &mut [SoaTransform],
+    ) -> Result<(), OzzError> {
+        let ratio4 = f32x4::splat(ratio);
         for idx in 0..animation.num_soa_tracks() {
             let translation = &ctx.translations()[idx];
             let translation_ratio = (ratio4 - translation.ratio[0]) / (translation.ratio[1] - translation.ratio[0]);
@@ -1202,7 +1139,11 @@ mod sampling_tests {
     use wasm_bindgen_test::*;
 
     use super::*;
-    use crate::base::ozz_buf;
+    use crate::base::OzzBuf;
+
+    fn make_buf<T>(v: Vec<T>) -> Rc<RefCell<Vec<T>>> {
+        return Rc::new(RefCell::new(v));
+    }
 
     // f16 -> f32
     // ignore overflow, infinite, NaN
@@ -1227,24 +1168,28 @@ mod sampling_tests {
         let mut job: SamplingJob = SamplingJob::default();
         job.set_animation(animation.clone());
         assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
 
         // invalid animation
         let mut job: SamplingJob = SamplingJob::default();
-        job.set_output(ozz_buf(vec![SoaTransform::default(); animation.num_soa_tracks() + 10]));
+        job.set_output(make_buf(vec![SoaTransform::default(); animation.num_soa_tracks() + 10]));
         assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
 
         // invalid cache size
         let mut job = SamplingJob::default();
         job.set_animation(animation.clone());
         job.set_context(SamplingContext::new(5));
-        job.set_output(ozz_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
+        job.set_output(make_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
         assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
 
         let mut job = SamplingJob::default();
         job.set_animation(animation.clone());
         job.set_context(SamplingContext::new(aligned_tracks));
-        job.set_output(ozz_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
+        job.set_output(make_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
         assert!(job.validate());
+        assert!(job.run().is_ok());
     }
 
     fn new_translations() -> Vec<Float3Key> {
@@ -1318,7 +1263,7 @@ mod sampling_tests {
         let mut job = SamplingJob::default();
         job.set_animation(animation);
         job.set_context(SamplingContext::new(T));
-        let output = ozz_buf(vec![TX; T + 1]);
+        let output = make_buf(vec![TX; T + 1]);
 
         for frame in &frames {
             job.set_output(output.clone());
@@ -1354,7 +1299,7 @@ mod sampling_tests {
                 );
             }
 
-            assert_eq!(job.context().unwrap().ratio(), f32_clamp_or_max(frame.ratio, 0.0, 1.0));
+            assert_eq!(job.context().unwrap().ratio, f32_clamp_or_max(frame.ratio, 0.0, 1.0));
         }
     }
 
@@ -1587,10 +1532,10 @@ mod sampling_tests {
         job.set_context(SamplingContext::new(animation1.num_tracks()));
 
         fn run_test(job: &mut SamplingJob) -> Result<(), OzzError> {
-            let output = ozz_buf(vec![TX; 1]);
+            let output = make_buf(vec![TX; 1]);
             job.set_output(output.clone());
             job.run()?;
-            for item in output.vec().unwrap().iter() {
+            for item in output.buf().unwrap().iter() {
                 assert_eq!(item.translation.col(0), Vec3::new(1.0, -1.0, 5.0));
                 assert_eq!(item.rotation.col(0), Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
                 assert_eq!(item.scale.col(0), Vec3::new(1.0, 1.0, 1.0));
@@ -1629,7 +1574,7 @@ mod sampling_tests {
         let mut job = SamplingJob::default();
         job.set_animation(animation.clone());
         job.set_context(SamplingContext::new(aligned_tracks));
-        job.set_output(ozz_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
+        job.set_output(make_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
         job.set_ratio(0.5);
         job.run().unwrap();
 
@@ -1637,11 +1582,11 @@ mod sampling_tests {
         let bytes = rkyv::to_bytes::<_, 256>(&ctx).unwrap();
         let archived = rkyv::check_archived_root::<SamplingContext>(&bytes[..]).unwrap();
         assert_eq!(archived.size as usize, ctx.size());
-        assert_eq!(archived.animation_id, ctx.animation_id());
-        assert_eq!(archived.ratio, ctx.ratio());
-        assert_eq!(archived.translation_cursor as usize, ctx.translation_cursor());
-        assert_eq!(archived.rotation_cursor as usize, ctx.rotation_cursor());
-        assert_eq!(archived.scale_cursor as usize, ctx.scale_cursor());
+        assert_eq!(archived.animation_id, ctx.animation_id);
+        assert_eq!(archived.ratio, ctx.ratio);
+        assert_eq!(archived.translation_cursor as usize, ctx.translation_cursor);
+        assert_eq!(archived.rotation_cursor as usize, ctx.rotation_cursor);
+        assert_eq!(archived.scale_cursor as usize, ctx.scale_cursor);
         assert_eq!(archived.translations(), ctx.translations());
         assert_eq!(archived.rotations(), ctx.rotations());
         assert_eq!(archived.scales(), ctx.scales());
@@ -1654,11 +1599,11 @@ mod sampling_tests {
 
         let ctx_de: SamplingContext = archived.deserialize(&mut rkyv::Infallible).unwrap();
         assert_eq!(ctx_de.size(), ctx.size());
-        assert_eq!(ctx_de.animation_id(), ctx.animation_id());
-        assert_eq!(ctx_de.ratio(), ctx.ratio());
-        assert_eq!(ctx_de.translation_cursor(), ctx.translation_cursor());
-        assert_eq!(ctx_de.rotation_cursor(), ctx.rotation_cursor());
-        assert_eq!(ctx_de.scale_cursor(), ctx.scale_cursor());
+        assert_eq!(ctx_de.animation_id, ctx.animation_id);
+        assert_eq!(ctx_de.ratio, ctx.ratio);
+        assert_eq!(ctx_de.translation_cursor, ctx.translation_cursor);
+        assert_eq!(ctx_de.rotation_cursor, ctx.rotation_cursor);
+        assert_eq!(ctx_de.scale_cursor, ctx.scale_cursor);
         assert_eq!(ctx_de.translations(), ctx.translations());
         assert_eq!(ctx_de.rotations(), ctx.rotations());
         assert_eq!(ctx_de.scales(), ctx.scales());
