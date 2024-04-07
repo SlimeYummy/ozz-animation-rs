@@ -46,25 +46,27 @@ Here is a very sample example:
 use glam::Mat4;
 use ozz_animation_rs::*;
 use ozz_animation_rs::math::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 // Load resources
 let skeleton = Rc::new(Skeleton::from_path("./resource/skeleton.ozz").unwrap());
 let animation = Rc::new(Animation::from_path("./resource/animation.ozz").unwrap());
 
-// Init sample job
-let mut sample_job: SamplingJob = SamplingJob::default();
+// Init sample job (Rc style)
+let mut sample_job: SamplingJobRc = SamplingJob::default();
 sample_job.set_animation(animation.clone());
 sample_job.set_context(SamplingContext::new(animation.num_tracks()));
-let sample_out = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+let sample_out = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
 sample_job.set_output(sample_out.clone());
 
-// Init local to model job
-let mut l2m_job: LocalToModelJob = LocalToModelJob::default();
-l2m_job.set_skeleton(skeleton.clone());
-l2m_job.set_input(sample_out.clone());
-let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
-l2m_job.set_output(l2m_out.clone());
+// Init local to model job (Ref style)
+let mut l2m_job: LocalToModelJobRef = LocalToModelJob::default();
+l2m_job.set_skeleton(&skeleton);
+let sample_out_ref = sample_out.borrow();
+l2m_job.set_input(sample_out_ref.as_ref());
+let mut l2m_out = vec![Mat4::default(); skeleton.num_joints()];
+l2m_job.set_output(&mut l2m_out);
 
 // Run the jobs
 let ratio = 0.5;
@@ -73,7 +75,7 @@ sample_job.set_ratio(ratio);
 sample_job.run().unwrap();
 
 l2m_job.run().unwrap();
-l2m_out.vec().unwrap(); // Outputs here, are model-space matrices
+l2m_out.buf().unwrap(); // Outputs here, are model-space matrices
 ```
 
 ### Toolchain
