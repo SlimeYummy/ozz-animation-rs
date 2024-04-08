@@ -1,6 +1,7 @@
 use glam::Mat4;
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen_test::*;
 
@@ -50,24 +51,24 @@ where
     let mut sample_job1: SamplingJob = SamplingJob::default();
     sample_job1.set_animation(animation1.clone());
     sample_job1.set_context(SamplingContext::new(animation1.num_tracks()));
-    let sample_out1 = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let sample_out1 = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job1.set_output(sample_out1.clone());
 
     let mut sample_job2: SamplingJob = SamplingJob::default();
     sample_job2.set_animation(animation2.clone());
     sample_job2.set_context(SamplingContext::new(animation2.num_tracks()));
-    let sample_out2 = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let sample_out2 = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job2.set_output(sample_out2.clone());
 
     let mut sample_job3: SamplingJob = SamplingJob::default();
     sample_job3.set_animation(animation3.clone());
     sample_job3.set_context(SamplingContext::new(animation3.num_tracks()));
-    let sample_out3 = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let sample_out3 = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job3.set_output(sample_out3.clone());
 
     let mut blending_job = BlendingJob::default();
     blending_job.set_skeleton(skeleton.clone());
-    let blending_out = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let blending_out = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     blending_job.set_output(blending_out.clone());
     blending_job.layers_mut().push(BlendingLayer::new(sample_out1.clone()));
     blending_job.layers_mut().push(BlendingLayer::new(sample_out2.clone()));
@@ -76,7 +77,7 @@ where
     let mut l2m_job: LocalToModelJob = LocalToModelJob::default();
     l2m_job.set_skeleton(skeleton.clone());
     l2m_job.set_input(blending_out.clone());
-    let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
+    let l2m_out = Rc::new(RefCell::new(vec![Mat4::default(); skeleton.num_joints()]));
     l2m_job.set_output(l2m_out.clone());
 
     for i in range {
@@ -105,14 +106,14 @@ where
             ratio,
             &TestData {
                 ratio,
-                sample_out1: sample_out1.vec().unwrap().clone(),
+                sample_out1: sample_out1.buf().unwrap().to_vec(),
                 sample_ctx1: sample_job1.context().unwrap().clone_without_animation_id(),
-                sample_out2: sample_out2.vec().unwrap().clone(),
+                sample_out2: sample_out2.buf().unwrap().to_vec(),
                 sample_ctx2: sample_job2.context().unwrap().clone_without_animation_id(),
-                sample_out3: sample_out3.vec().unwrap().clone(),
+                sample_out3: sample_out3.buf().unwrap().to_vec(),
                 sample_ctx3: sample_job3.context().unwrap().clone_without_animation_id(),
-                blending_out: blending_out.vec().unwrap().clone(),
-                l2m_out: l2m_out.vec().unwrap().clone(),
+                blending_out: blending_out.buf().unwrap().to_vec(),
+                l2m_out: l2m_out.buf().unwrap().to_vec(),
             },
         );
     }

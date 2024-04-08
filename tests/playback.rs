@@ -1,6 +1,7 @@
 use glam::Mat4;
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen_test::*;
 
@@ -47,13 +48,13 @@ where
     let mut sample_job: SamplingJob = SamplingJob::default();
     sample_job.set_animation(animation.clone());
     sample_job.set_context(SamplingContext::new(animation.num_tracks()));
-    let sample_out = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
+    let sample_out = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job.set_output(sample_out.clone());
 
     let mut l2m_job: LocalToModelJob = LocalToModelJob::default();
     l2m_job.set_skeleton(skeleton.clone());
     l2m_job.set_input(sample_out.clone());
-    let l2m_out = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
+    let l2m_out = Rc::new(RefCell::new(vec![Mat4::default(); skeleton.num_joints()]));
     l2m_job.set_output(l2m_out.clone());
 
     for i in range {
@@ -66,9 +67,9 @@ where
             ratio,
             &TestData {
                 ratio,
-                sample_out: sample_out.vec().unwrap().clone(),
+                sample_out: sample_out.buf().unwrap().to_vec(),
                 sample_ctx: sample_job.context().unwrap().clone_without_animation_id(),
-                l2m_out: l2m_out.vec().unwrap().clone(),
+                l2m_out: l2m_out.buf().unwrap().to_vec(),
             },
         );
     }

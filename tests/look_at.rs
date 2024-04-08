@@ -1,6 +1,7 @@
 use glam::{Mat4, Quat, Vec3A};
 use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen_test::*;
 
@@ -58,10 +59,10 @@ where
         panic!("Invalid joints chain");
     }
 
-    let locals1 = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
-    let locals2 = ozz_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]);
-    let models1 = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
-    let models2 = ozz_buf(vec![Mat4::default(); skeleton.num_joints()]);
+    let locals1 = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
+    let locals2 = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
+    let models1 = Rc::new(RefCell::new(vec![Mat4::default(); skeleton.num_joints()]));
+    let models2 = Rc::new(RefCell::new(vec![Mat4::default(); skeleton.num_joints()]));
 
     let mut sample_job: SamplingJob = SamplingJob::default();
     sample_job.set_animation(animation.clone());
@@ -102,7 +103,7 @@ where
 
         let mut previous_joint = SKELETON_NO_PARENT;
         for (idx, joint) in joints_chain.iter().enumerate() {
-            ik_job.set_joint(models1.vec().unwrap()[*joint as usize].into());
+            ik_job.set_joint(models1.buf().unwrap()[*joint as usize].into());
             ik_job.set_up(Vec3A::X);
 
             if idx == joints_chain.len() - 1 {
@@ -115,13 +116,13 @@ where
                 ik_job.set_offset(EYES_OFFSET);
                 ik_job.set_forward(Vec3A::Y);
             } else {
-                let transform: Mat4 = models1.vec().unwrap()[previous_joint as usize].into();
+                let transform: Mat4 = models1.buf().unwrap()[previous_joint as usize].into();
                 let corrected_forward_ms =
                     transform.transform_vector3a(ik_job.joint_correction().mul_vec3a(ik_job.forward()));
                 let corrected_offset_ms =
                     transform.transform_point3a(ik_job.joint_correction().mul_vec3a(ik_job.offset()));
 
-                let transform: Mat4 = models1.vec().unwrap()[*joint as usize].into();
+                let transform: Mat4 = models1.buf().unwrap()[*joint as usize].into();
                 let inv_transform = transform.inverse();
                 ik_job.set_offset(inv_transform.transform_point3a(corrected_offset_ms));
                 ik_job.set_forward(inv_transform.transform_vector3a(corrected_forward_ms));
@@ -132,7 +133,7 @@ where
             reacheds[idx] = ik_job.reached();
 
             {
-                let mut locals_mut = locals2.vec_mut().unwrap();
+                let mut locals_mut = locals2.borrow_mut();
                 let idx = *joint as usize;
                 let quat = locals_mut[idx / 4].rotation.col(idx & 3) * ik_job.joint_correction();
                 locals_mut[idx / 4].rotation.set_col(idx & 3, quat);
@@ -147,10 +148,10 @@ where
         tester(
             idx,
             &TestData {
-                locals1: locals1.vec().unwrap().clone(),
-                locals2: locals2.vec().unwrap().clone(),
-                models1: models1.vec().unwrap().clone(),
-                models2: models2.vec().unwrap().clone(),
+                locals1: locals1.buf().unwrap().to_vec(),
+                locals2: locals2.buf().unwrap().to_vec(),
+                models1: models1.buf().unwrap().to_vec(),
+                models2: models2.buf().unwrap().to_vec(),
                 joint_corrections,
                 reacheds,
             },
