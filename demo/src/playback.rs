@@ -8,8 +8,8 @@ use crate::base::*;
 
 pub struct OzzPlayback {
     skeleton: Arc<Skeleton>,
-    sample_job: SamplingJobMT,
-    l2m_job: LocalToModelJobMT,
+    sample_job: SamplingJobArc,
+    l2m_job: LocalToModelJobArc,
     models: Arc<RwLock<Vec<Mat4>>>,
     bone_trans: Vec<OzzTransform>,
     spine_trans: Vec<OzzTransform>,

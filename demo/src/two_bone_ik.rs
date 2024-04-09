@@ -10,9 +10,9 @@ const TARGET_OFFSET: Vec3 = Vec3::new(0.0, 0.2, 0.1);
 
 pub struct OzzTwoBoneIK {
     skeleton: Arc<Skeleton>,
-    l2m_job1: LocalToModelJobMT,
+    l2m_job1: LocalToModelJobArc,
     ik_job: IKTwoBoneJob,
-    l2m_job2: LocalToModelJobMT,
+    l2m_job2: LocalToModelJobArc,
     locals: Arc<RwLock<Vec<SoaTransform>>>,
     models1: Arc<RwLock<Vec<Mat4>>>,
     models2: Arc<RwLock<Vec<Mat4>>>,
@@ -122,7 +122,7 @@ impl OzzExample for OzzTwoBoneIK {
         self.models2
             .mut_buf()
             .unwrap()
-            .clone_from_slice(self.models1.buf().unwrap().as_slice());
+            .clone_from_slice(self.models1.buf().unwrap().as_ref());
         {
             let mut locals_mut = self.locals.mut_buf().unwrap();
 

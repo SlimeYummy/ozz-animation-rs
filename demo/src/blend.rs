@@ -8,11 +8,11 @@ use crate::base::*;
 
 pub struct OzzBlend {
     skeleton: Arc<Skeleton>,
-    sample_job1: SamplingJobMT,
-    sample_job2: SamplingJobMT,
-    sample_job3: SamplingJobMT,
-    blending_job: BlendingJobMT,
-    l2m_job: LocalToModelJobMT,
+    sample_job1: SamplingJobArc,
+    sample_job2: SamplingJobArc,
+    sample_job3: SamplingJobArc,
+    blending_job: BlendingJobArc,
+    l2m_job: LocalToModelJobArc,
     models: Arc<RwLock<Vec<Mat4>>>,
     bone_trans: Vec<OzzTransform>,
     spine_trans: Vec<OzzTransform>,
