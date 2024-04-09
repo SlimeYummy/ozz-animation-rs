@@ -136,6 +136,9 @@ pub struct SamplingContext {
     scale_cursor: usize,
 }
 
+unsafe impl Send for SamplingContext {}
+unsafe impl Sync for SamplingContext {}
+
 impl Debug for SamplingContext {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         return f
