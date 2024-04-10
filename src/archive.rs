@@ -203,7 +203,7 @@ impl ArchiveRead<String> for String {
                 break;
             }
         }
-        let text = String::from_utf8(buffer)?;
+        let text = String::from_utf8(buffer).map_err(|e| e.utf8_error())?;
         return Ok(text);
     }
 }

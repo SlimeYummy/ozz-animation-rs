@@ -30,7 +30,7 @@ pub enum OzzError {
     IO(#[from] std::io::Error),
     /// Std string errors.
     #[error("Utf8 error: {0}")]
-    Utf8(#[from] std::string::FromUtf8Error),
+    Utf8(#[from] std::str::Utf8Error),
 
     /// Read ozz archive tag error.
     #[error("Invalid tag")]

@@ -259,7 +259,7 @@ impl Animation {
         let mut name = String::new();
         if name_len != 0 {
             let buf = archive.read_vec(name_len as usize)?;
-            name = String::from_utf8(buf)?;
+            name = String::from_utf8(buf).map_err(|e| e.utf8_error())?;
         }
         let translations: Vec<Float3Key> = archive.read_vec(translation_count as usize)?;
         let rotations: Vec<QuaternionKey> = archive.read_vec(rotation_count as usize)?;
