@@ -597,3 +597,529 @@ where
     skinning_n!(skinning_n_pnt_it, IT, PNT);
 }
 
+#[cfg(test)]
+mod skinning_tests {
+    use wasm_bindgen_test::*;
+
+    use super::*;
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_validate() {
+        let matrices = Rc::new(RefCell::new(vec![Mat4::default(); 2]));
+        let it_matrices = Rc::new(RefCell::new(vec![Mat4::default(); 2]));
+        let joint_indices = Rc::new(RefCell::new(vec![0; 8]));
+        let joint_weights = Rc::new(RefCell::new(vec![0.0f32; 6]));
+        let in_positions = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+        let in_normals = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+        let in_tangents = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+        let out_positions = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+        let out_normals = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+        let out_tangents = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+
+        let mut job: SkinningJob = SkinningJob::default();
+        assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
+
+        // Valid job with 0 vertex.
+        let mut job: SkinningJob = SkinningJob::default();
+        job.set_vertex_count(0);
+        job.set_influences_count(1);
+        job.set_joint_matrices(matrices.clone());
+        job.set_joint_indices(joint_indices.clone());
+        job.set_in_positions(in_positions.clone());
+        job.set_out_positions(out_positions.clone());
+        assert!(job.validate());
+        assert!(job.run().is_ok());
+
+        // Invalid job with 0 influence.
+        let mut job: SkinningJob = SkinningJob::default();
+        job.set_vertex_count(0);
+        job.set_influences_count(0);
+        job.set_joint_matrices(matrices.clone());
+        job.set_joint_indices(joint_indices.clone());
+        job.set_in_positions(in_positions.clone());
+        job.set_out_positions(out_positions.clone());
+        assert!(!job.validate());
+        assert!(job.run().unwrap_err().is_invalid_job());
+
+        // Valid job with 1/2/3/4 influence.
+        {
+            let mut job: SkinningJob = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_joint_matrices(matrices.clone());
+            job.set_joint_indices(joint_indices.clone());
+            job.set_joint_weights(joint_weights.clone());
+            job.set_in_positions(in_positions.clone());
+            job.set_out_positions(out_positions.clone());
+
+            job.set_influences_count(1);
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+
+            job.set_influences_count(2);
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+
+            job.set_influences_count(3);
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+
+            job.set_influences_count(4);
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+
+            job.set_joint_it_matrices(it_matrices.clone());
+            job.set_influences_count(1);
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+
+            job.set_influences_count(2);
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+
+            job.set_in_normals(in_normals.clone());
+            job.set_out_normals(out_normals.clone());
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+
+            job.set_in_tangents(in_tangents.clone());
+            job.set_out_tangents(out_tangents.clone());
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+        }
+
+        // Invalid job with 2 influences, missing xxx.
+        {
+            let mut job: SkinningJob = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_influences_count(2);
+            job.set_joint_matrices(matrices.clone());
+            job.set_joint_indices(joint_indices.clone());
+            job.set_joint_weights(joint_weights.clone());
+            job.set_in_positions(in_positions.clone());
+            job.set_out_positions(out_positions.clone());
+
+            // indices
+            job.clear_joint_indices();
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_joint_indices(joint_indices.clone());
+
+            // weights
+            job.clear_joint_weights();
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_joint_weights(joint_weights.clone());
+
+            // in positions
+            job.clear_in_positions();
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_in_positions(in_positions.clone());
+
+            // out positions
+            job.clear_out_positions();
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_out_positions(out_positions.clone());
+
+            job.set_in_normals(in_normals.clone());
+            job.set_out_normals(out_normals.clone());
+
+            // in normals
+            job.clear_in_normals();
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+            job.set_in_normals(in_normals.clone());
+
+            // out normals
+            job.clear_out_normals();
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_out_normals(out_normals.clone());
+
+            job.set_in_tangents(in_tangents.clone());
+            job.set_out_tangents(out_tangents.clone());
+
+            // in tangents
+            job.clear_in_tangents();
+            assert!(job.validate());
+            assert!(job.run().is_ok());
+            job.set_in_tangents(in_tangents.clone());
+
+            // out tangents
+            job.clear_out_tangents();
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+        }
+
+        // Invalid job with 2 influences, not enough xxx.
+        {
+            let mut job: SkinningJob = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_influences_count(2);
+            job.set_joint_matrices(matrices.clone());
+            job.set_joint_indices(joint_indices.clone());
+            job.set_joint_weights(joint_weights.clone());
+            job.set_in_positions(in_positions.clone());
+            job.set_out_positions(out_positions.clone());
+
+            job.set_joint_indices(Rc::new(RefCell::new(vec![0; 3])));
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_joint_indices(joint_indices.clone());
+
+            job.set_joint_weights(Rc::new(RefCell::new(vec![0.0; 1])));
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_joint_weights(joint_weights.clone());
+        }
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_run() {
+        type SkinningJobTest<'t> = SkinningJob<&'t [Mat4], &'t [u16], &'t [f32], &'t [Vec3], Rc<RefCell<Vec<Vec3>>>>;
+
+        let matrices: [Mat4; 4] = [
+            Mat4::from_cols(
+                Vec4::new(-1.0, 0.0, 0.0, 0.0),
+                Vec4::new(0.0, 1.0, 0.0, 0.0),
+                Vec4::new(0.0, 0.0, -1.0, 0.0),
+                Vec4::new(0.0, 0.0, 0.0, 1.0),
+            ),
+            Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0)),
+            Mat4::from_scale(Vec3::new(1.0, 2.0, 3.0)),
+            Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0)),
+        ];
+        let it_matrices: [Mat4; 4] = [
+            Mat4::from_cols(
+                Vec4::new(1.0, 0.0, 0.0, 0.0),
+                Vec4::new(0.0, -1.0, 0.0, 0.0),
+                Vec4::new(0.0, 0.0, 1.0, 0.0),
+                Vec4::new(0.0, 0.0, 0.0, 1.0),
+            ),
+            Mat4::IDENTITY,
+            Mat4::from_cols(
+                Vec4::new(-1.0, 0.0, 0.0, 0.0),
+                Vec4::new(0.0, -1.0, 0.0, 0.0),
+                Vec4::new(0.0, 0.0, -1.0, 0.0),
+                Vec4::new(0.0, 0.0, 0.0, 1.0),
+            ),
+            Mat4::IDENTITY,
+        ];
+
+        let in_positions: [Vec3; 2] = [Vec3::new(1.0, 2.0, 3.0), Vec3::new(4.0, 5.0, 6.0)];
+        let in_normals: [Vec3; 2] = [Vec3::new(0.1, 0.2, 0.3), Vec3::new(0.4, 0.5, 0.6)];
+        let in_tangents: [Vec3; 2] = [Vec3::new(0.01, 0.02, 0.03), Vec3::new(0.04, 0.05, 0.06)];
+        let out_positions = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+        let out_normals = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+        let out_tangents = Rc::new(RefCell::new(vec![Vec3::ZERO; 2]));
+
+        {
+            let mut job: SkinningJobTest = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_influences_count(1);
+            job.set_joint_matrices(&matrices);
+            job.set_joint_indices(&[0, 3]);
+            job.set_in_positions(&in_positions);
+            job.set_out_positions(out_positions.clone());
+
+            // P1
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(-1.0, 2.0, -3.0), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(5.0, 7.0, 9.0), 1e-6));
+
+            // PN1 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(-1.0, 2.0, -3.0), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.1, -0.2, 0.3), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(5.0, 7.0, 9.0), 1e-6));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.4, 0.5, 0.6), 1e-6));
+
+            // PNT1
+            job.clear_joint_it_matrices();
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(-1.0, 2.0, -3.0), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(-0.1, 0.2, -0.3), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(-0.01, 0.02, -0.03), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(5.0, 7.0, 9.0), 1e-6));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.4, 0.5, 0.6), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.04, 0.05, 0.06), 1e-6));
+
+            // PNT1 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(-1.0, 2.0, -3.0), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.1, -0.2, 0.3), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.01, -0.02, 0.03), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(5.0, 7.0, 9.0), 1e-6));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.4, 0.5, 0.6), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.04, 0.05, 0.06), 1e-6));
+        }
+
+        {
+            let mut job: SkinningJobTest = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_influences_count(2);
+            job.set_joint_matrices(&matrices);
+            job.set_joint_indices(&[0, 1, 3, 2]);
+            job.set_joint_weights(&[0.5, 0.1]);
+            job.set_in_positions(&in_positions);
+            job.set_out_positions(out_positions.clone());
+
+            // P2
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.5, 3.0, 1.5), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.1, 9.7, 17.1), 1e-5));
+
+            // PN2
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.5, 3.0, 1.5), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.2, 0.0), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.1, 9.7, 17.1), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.4, 0.95, 1.68), 1e-6));
+
+            // PN2 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.5, 3.0, 1.5), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.1, 0.0, 0.3), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.1, 9.7, 17.1), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(-0.32, -0.4, -0.48), 1e-6));
+
+            // PNT2
+            job.clear_joint_it_matrices();
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.5, 3.0, 1.5), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.2, 0.0), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.02, 0.0), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.1, 9.7, 17.1), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.4, 0.95, 1.68), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.04, 0.095, 0.168), 1e-6));
+
+            // PNT2 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.5, 3.0, 1.5), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.1, 0.0, 0.3), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.01, 0.0, 0.03), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.1, 9.7, 17.1), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(-0.32, -0.4, -0.48), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(-0.032, -0.04, -0.048), 1e-6));
+        }
+
+        {
+            let mut job: SkinningJobTest = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_influences_count(3);
+            job.set_joint_matrices(&matrices);
+            job.set_joint_indices(&[0, 1, 2, 3, 2, 1]);
+            job.set_joint_weights(&[0.5, 0.25, 0.1, 0.25]);
+            job.set_in_positions(&in_positions);
+            job.set_out_positions(out_positions.clone());
+
+            // P3
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.75, 7.75, 11.25), 1e-5));
+
+            // PN3
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.25, 0.15), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.75, 7.75, 11.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.4, 0.625, 0.9), 1e-6));
+
+            // PN3 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.05, -0.1, 0.15), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.75, 7.75, 11.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.2, 0.25, 0.3), 1e-6));
+
+            // PNT3
+            job.clear_joint_it_matrices();
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.25, 0.15), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.025, 0.015), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.75, 7.75, 11.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.4, 0.625, 0.9), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.04, 0.0625, 0.09), 1e-6));
+
+            // PNT3 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.05, -0.1, 0.15), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.005, -0.01, 0.015), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(4.75, 7.75, 11.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.2, 0.25, 0.3), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.02, 0.025, 0.03), 1e-6));
+        }
+
+        {
+            let mut job: SkinningJobTest = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_influences_count(4);
+            job.set_joint_matrices(&matrices);
+            job.set_joint_indices(&[0, 1, 2, 3, 3, 2, 1, 0]);
+            job.set_joint_weights(&[0.5, 0.25, 0.25, 0.1, 0.25, 0.25]);
+            job.set_in_positions(&in_positions);
+            job.set_out_positions(out_positions.clone());
+
+            // P4
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(1.15, 6.95, 5.25), 1e-5));
+
+            // PN4
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.25, 0.15), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(1.15, 6.95, 5.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.08, 0.625, 0.42), 1e-6));
+
+            // PN4 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.05, -0.1, 0.15), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(1.15, 6.95, 5.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.2, -0.15, 0.3), 1e-6));
+
+            // PNT4
+            job.clear_joint_it_matrices();
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.25, 0.15), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.0, 0.025, 0.015), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(1.15, 6.95, 5.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.08, 0.625, 0.42), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.008, 0.0625, 0.042), 1e-6));
+
+            // PNT4 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.25, 3.0, 2.25), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.05, -0.1, 0.15), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.005, -0.01, 0.015), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(1.15, 6.95, 5.25), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.2, -0.15, 0.3), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.02, -0.015, 0.03), 1e-6));
+        }
+
+        {
+            let mut job: SkinningJobTest = SkinningJob::default();
+            job.set_vertex_count(2);
+            job.set_influences_count(5);
+            job.set_joint_matrices(&matrices);
+            job.set_joint_indices(&[0, 1, 2, 3, 0, 3, 2, 1, 0, 3]);
+            job.set_joint_weights(&[0.5, 0.25, 0.25, 0.1, 0.1, 0.25, 0.25, 0.15]);
+            job.set_in_positions(&in_positions);
+            job.set_out_positions(out_positions.clone());
+
+            // P5
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.55, 3.2, 3.15), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(3.4, 7.45, 9.0), 1e-5));
+
+            // PN5
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.55, 3.2, 3.15), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.02, 0.25, 0.21), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(3.4, 7.45, 9.0), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.28, 0.625, 0.72), 1e-6));
+
+            // PN5 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.55, 3.2, 3.15), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.05, -0.06, 0.15), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(3.4, 7.45, 9.0), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.2, 0.1, 0.3), 1e-6));
+
+            // PNT5
+            job.clear_joint_it_matrices();
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.55, 3.2, 3.15), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.02, 0.25, 0.21), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.002, 0.025, 0.021), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(3.4, 7.45, 9.0), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.28, 0.625, 0.72), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.028, 0.0625, 0.072), 1e-6));
+
+            // PNT5 it
+            job.set_joint_it_matrices(&it_matrices);
+            job.set_in_normals(&in_normals);
+            job.set_out_normals(out_normals.clone());
+            job.set_in_tangents(&in_tangents);
+            job.set_out_tangents(out_tangents.clone());
+            job.run().unwrap();
+            assert!(out_positions.borrow()[0].abs_diff_eq(Vec3::new(0.55, 3.2, 3.15), 1e-6));
+            assert!(out_normals.borrow()[0].abs_diff_eq(Vec3::new(0.05, -0.06, 0.15), 1e-6));
+            assert!(out_tangents.borrow()[0].abs_diff_eq(Vec3::new(0.005, -0.006, 0.015), 1e-6));
+            assert!(out_positions.borrow()[1].abs_diff_eq(Vec3::new(3.4, 7.45, 9.0), 1e-5));
+            assert!(out_normals.borrow()[1].abs_diff_eq(Vec3::new(0.2, 0.1, 0.3), 1e-6));
+            assert!(out_tangents.borrow()[1].abs_diff_eq(Vec3::new(0.02, 0.01, 0.03), 1e-6));
+        }
+    }
+}
