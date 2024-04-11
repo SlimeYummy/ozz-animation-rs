@@ -1,6 +1,6 @@
 [package]
 name = "ozz-animation-rs"
-version = "0.8.1"
+version = "0.9.0"
 authors = ["SlimeYummy <zzzcccnnn@outlook.com>"]
 edition = "2021"
 rust-version = "1.75"
