@@ -287,3 +287,505 @@ where
     }
 }
 
+#[cfg(test)]
+mod track_triggering_tests {
+    use wasm_bindgen_test::*;
+
+    use super::*;
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_validity() {
+        let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
+        assert_eq!(job.validate(), false);
+        assert!(job.run().unwrap_err().is_invalid_job());
+
+        let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
+        job.set_track(Rc::new(Track::new(0, 0)));
+        job.set_from(0.0);
+        job.set_to(1.0);
+        assert_eq!(job.validate(), true);
+        assert!(job.run().is_ok());
+
+        let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
+        job.set_track(Rc::new(Track::new(0, 0)));
+        job.set_from(0.0);
+        job.set_to(0.0);
+        assert_eq!(job.validate(), true);
+        assert!(job.run().is_ok());
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_default() {
+        let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
+        job.set_track(Rc::new(Track::new(0, 0)));
+        assert!(job.run().unwrap().count() == 0);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_empty() {
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        let track = Track::from_raw(&[0.0, 0.0], &[0.0, 1.0], &[0]).unwrap();
+        job.set_track(&track);
+        job.set_from(0.0);
+        job.set_to(1.0);
+        job.set_threshold(1.0);
+        assert!(job.run().unwrap().count() == 0);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_no_range() {
+        let track = Track::from_raw(&[0.0, 2.0, 0.0], &[0.0, 0.5, 1.0], &[7]).unwrap();
+
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        job.set_track(&track);
+        job.set_threshold(1.0);
+
+        job.set_from(0.0);
+        job.set_to(0.0);
+        assert!(job.run().unwrap().count() == 0);
+
+        job.set_from(0.1);
+        job.set_to(0.1);
+        assert!(job.run().unwrap().count() == 0);
+
+        job.set_from(0.5);
+        job.set_to(0.5);
+        assert!(job.run().unwrap().count() == 0);
+
+        job.set_from(1.0);
+        job.set_to(1.0);
+        assert!(job.run().unwrap().count() == 0);
+
+        job.set_from(-0.5);
+        job.set_to(-0.5);
+        assert!(job.run().unwrap().count() == 0);
+    }
+
+    fn check_forward<FI, FR>(
+        job: &mut TrackTriggeringJobRef,
+        from: f32,
+        to: f32,
+        len: usize,
+        edges: &[Edge],
+        index_map: FI,
+        ratio_map: FR,
+    ) where
+        FI: Fn(usize) -> usize,
+        FR: Fn(usize, f32) -> f32,
+    {
+        job.set_from(from);
+        job.set_to(to);
+        let actual = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(actual.len(), len, "forward len [{}, {}]", from, to);
+        for (idx, edge) in actual.into_iter().enumerate() {
+            let index = index_map(idx);
+            let ratio = ratio_map(idx, edges[index].ratio);
+            assert_eq!(edge.ratio, ratio, "forward ratio {} [{}, {}]", idx, from, to);
+            assert_eq!(
+                edge.rising, edges[index].rising,
+                "forward rising {} [{}, {}]",
+                idx, from, to
+            );
+        }
+    }
+
+    fn check_backward(job: &mut TrackTriggeringJobRef, from: f32, to: f32) {
+        job.set_from(from);
+        job.set_to(to);
+        let forward = job.run().unwrap().collect::<Vec<_>>();
+        job.set_from(to);
+        job.set_to(from);
+        let backward = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(forward.len(), backward.len(), "backward len [{}, {}]", from, to);
+        for (idx, edge) in forward.into_iter().rev().enumerate() {
+            assert_eq!(
+                edge.ratio, backward[idx].ratio,
+                "backward ratio {} [{}, {}]",
+                idx, from, to
+            );
+            assert_eq!(
+                edge.rising, !backward[idx].rising,
+                "backward rising {} [{}, {}]",
+                idx, from, to
+            );
+        }
+    }
+
+    fn check_all<FI, FR>(
+        job: &mut TrackTriggeringJobRef,
+        from: f32,
+        to: f32,
+        len: usize,
+        edges: &[Edge],
+        index_map: FI,
+        ratio_map: FR,
+    ) where
+        FI: Fn(usize) -> usize,
+        FR: Fn(usize, f32) -> f32,
+    {
+        check_forward(job, from, to, len, edges, index_map, ratio_map);
+        check_backward(job, from, to);
+    }
+
+    fn assert_edges(track: Rc<Track<f32>>, threshold: f32, edges: &[Edge]) {
+        let len = edges.len();
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        job.set_track(&track);
+        job.set_threshold(threshold);
+
+        // [0, 1]
+        check_all(&mut job, 0.0, 1.0, len, edges, |i| i, |_, r| r);
+
+        // [1, 2]
+        check_all(&mut job, 1.0, 2.0, len, edges, |i| i, |_, r| r + 1.0);
+
+        // [0, 3]
+        check_all(
+            &mut job,
+            0.0,
+            3.0,
+            len * 3,
+            edges,
+            |i| i % len,
+            |i, r| r + (i / len) as f32,
+        );
+
+        // [first, last]
+        check_all(
+            &mut job,
+            edges[0].ratio,
+            edges[len - 1].ratio,
+            if edges[len - 1].ratio == 1.0 { len } else { len - 1 },
+            edges,
+            |i| i,
+            |_, r| r,
+        );
+
+        // [first, 1.0]
+        check_all(
+            &mut job,
+            edges[0].ratio + 1e-6,
+            1.0,
+            len - 1,
+            edges,
+            |i| i + 1,
+            |_, r| r,
+        );
+
+        // [0, first]
+        check_all(&mut job, 0.0, edges[0].ratio, 0, edges, |i| i, |_, r| r);
+
+        // [0, first+]
+        check_all(&mut job, 0.0, edges[0].ratio + 1e-6, 1, edges, |i| i, |_, r| r);
+
+        // [0, last-]
+        check_all(
+            &mut job,
+            0.0,
+            edges[len - 1].ratio - 1e-6,
+            len - 1,
+            edges,
+            |i| i,
+            |_, r| r,
+        );
+
+        // [0, last+]
+        check_all(&mut job, 0.0, edges[len - 1].ratio + 1e-6, len, edges, |i| i, |_, r| r);
+
+        // [1, 1+last+]
+        check_all(
+            &mut job,
+            1.0,
+            edges[len - 1].ratio + 1.0 + 1e-6,
+            len,
+            edges,
+            |i| i,
+            |_, r| r + 1.0,
+        );
+
+        // [46, 46+last+]
+        check_all(
+            &mut job,
+            46.0,
+            46.0 + edges[len - 1].ratio + 1e-5,
+            len,
+            edges,
+            |i| i,
+            |_, r| r + 46.0,
+        );
+
+        // [46, 46+last-]
+        check_all(
+            &mut job,
+            46.0,
+            46.0 + edges[len - 1].ratio - 1e-5,
+            len - 1,
+            edges,
+            |i| i,
+            |_, r| r + 46.0,
+        );
+
+        // [46, 46+last]
+        check_all(
+            &mut job,
+            46.0,
+            46.0 + edges[len - 1].ratio,
+            if edges[len - 1].ratio == 1.0 { len } else { len - 1 },
+            edges,
+            |i| i,
+            |_, r| r + 46.0,
+        );
+
+        // [0, 1+last-]
+        check_all(
+            &mut job,
+            0.0,
+            edges[len - 1].ratio + 1.0,
+            if edges[len - 1].ratio == 1.0 {
+                2 * len
+            } else {
+                2 * len - 1
+            },
+            edges,
+            |i| i % len,
+            |i, r| r + (i / len) as f32,
+        );
+
+        // [-1, 0]
+        check_all(&mut job, -1.0, 0.0, len, edges, |i| i, |_, r| r - 1.0);
+
+        // [-2, -1]
+        check_all(&mut job, -2.0, -1.0, len, edges, |i| i, |_, r| r - 2.0);
+
+        // [-1, 1]
+        check_all(
+            &mut job,
+            -1.0,
+            1.0,
+            len * 2,
+            edges,
+            |i| i % len,
+            |i, r| if i < len { r - 1.0 } else { r },
+        );
+
+        // [-1, first]
+        check_all(&mut job, -1.0, edges[0].ratio - 1.0, 0, edges, |i| i, |_, r| r);
+
+        // [-1, last+]
+        check_all(
+            &mut job,
+            -1.0,
+            edges[len - 1].ratio - 0.999999,
+            len,
+            edges,
+            |i| i,
+            |_, r| r - 1.0,
+        );
+
+        // [-1, -eps]
+        check_all(
+            &mut job,
+            -1.0,
+            -core::f32::MIN_POSITIVE,
+            if edges[len - 1].ratio != 1.0 { len } else { len - 1 },
+            edges,
+            |i| i,
+            |_, r| r - 1.0,
+        );
+
+        // [-46.0, -46+last+]
+        check_all(
+            &mut job,
+            -46.0,
+            edges[len - 1].ratio - 46.0 + 1e-5,
+            len,
+            edges,
+            |i| i,
+            |_, r| r - 46.0,
+        );
+
+        // [-46.0, -46+last-]
+        check_all(
+            &mut job,
+            -46.0,
+            edges[len - 1].ratio - 46.0 - 1e-5,
+            len - 1,
+            edges,
+            |i| i,
+            |_, r| r - 46.0,
+        );
+
+        // [-46.0, -46+last]
+        check_all(
+            &mut job,
+            -46.0,
+            edges[len - 1].ratio - 46.0,
+            if edges[len - 1].ratio == 1.0 { len } else { len - 1 },
+            edges,
+            |i| i,
+            |_, r| r - 46.0,
+        );
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_square_step() {
+        let track = Rc::new(Track::from_raw(&[0.0, 2.0, 0.0], &[0.0, 0.5, 1.0], &[7]).unwrap());
+        let edges = vec![Edge::new(0.5, true), Edge::new(1.0, false)];
+        assert_edges(track.clone(), 0.0, &edges);
+        assert_edges(track.clone(), 1.0, &edges);
+
+        let track = Rc::new(Track::from_raw(&[0.0, 2.0, 2.0], &[0.0, 0.6, 1.0], &[3]).unwrap());
+        let edges = vec![Edge::new(0.0, false), Edge::new(0.6, true)];
+        assert_edges(track.clone(), 0.0, &edges);
+        assert_edges(track.clone(), 1.0, &edges);
+
+        let track = Rc::new(Track::from_raw(&[2.0, 0.0, 0.0], &[0.0, 0.5, 1.0], &[3]).unwrap());
+        let edges = vec![Edge::new(0.0, true), Edge::new(0.5, false)];
+        assert_edges(track.clone(), 0.0, &edges);
+        assert_edges(track.clone(), 1.0, &edges);
+
+        let track = Rc::new(Track::from_raw(&[-1.0, 1.0, -1.0], &[0.0, 0.5, 1.0], &[7]).unwrap());
+        let edges = vec![Edge::new(0.5, true), Edge::new(1.0, false)];
+        assert_edges(track.clone(), 0.0, &edges);
+        assert_edges(track.clone(), -1.0, &edges);
+
+        let track =
+            Rc::new(Track::from_raw(&[0.0, 2.0, 0.0, 1.0, 0.0, 0.0], &[0.0, 0.2, 0.3, 0.4, 0.5, 1.0], &[31]).unwrap());
+        let edges = vec![
+            Edge::new(0.2, true),
+            Edge::new(0.3, false),
+            Edge::new(0.4, true),
+            Edge::new(0.5, false),
+        ];
+        assert_edges(track.clone(), 0.0, &edges);
+        let edges = vec![Edge::new(0.2, true), Edge::new(0.3, false)];
+        assert_edges(track.clone(), 1.0, &edges);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_linear() {
+        let track = Rc::new(Track::from_raw(&[0.0, 2.0, 0.0], &[0.0, 0.5, 1.0], &[0]).unwrap());
+        let edges = vec![Edge::new(0.25, true), Edge::new(0.75, false)];
+        assert_edges(track.clone(), 1.0, &edges);
+        let edges = vec![Edge::new(0.125, true), Edge::new(0.875, false)];
+        assert_edges(track.clone(), 0.5, &edges);
+        let edges = vec![Edge::new(0.375, true), Edge::new(0.625, false)];
+        assert_edges(track.clone(), 1.5, &edges);
+
+        let track = Rc::new(Track::from_raw(&[0.0, 2.0, 2.0], &[0.0, 0.5, 1.0], &[0]).unwrap());
+        let edges = vec![Edge::new(0.0, false), Edge::new(0.25, true)];
+        assert_edges(track.clone(), 1.0, &edges);
+
+        let track = Rc::new(Track::from_raw(&[-1.0, 1.0, 1.0], &[0.0, 0.5, 1.0], &[0]).unwrap());
+        let edges = vec![Edge::new(0.0, false), Edge::new(0.25, true)];
+        assert_edges(track.clone(), 0.0, &edges);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_mixed() {
+        let track = Rc::new(Track::from_raw(&[0.0, 2.0, 0.0], &[0.0, 0.5, 1.0], &[1]).unwrap());
+        let edges = vec![Edge::new(0.5, true), Edge::new(0.75, false)];
+        assert_edges(track.clone(), 1.0, &edges);
+        let edges = vec![Edge::new(0.5, true), Edge::new(0.875, false)];
+        assert_edges(track.clone(), 0.5, &edges);
+        let edges = vec![Edge::new(0.5, true), Edge::new(0.625, false)];
+        assert_edges(track.clone(), 1.5, &edges);
+
+        let track = Rc::new(Track::from_raw(&[0.0, 2.0, 0.0], &[0.0, 0.5, 1.0], &[2]).unwrap());
+        let edges = vec![Edge::new(0.25, true), Edge::new(1.0, false)];
+        assert_edges(track.clone(), 1.0, &edges);
+        let edges = vec![Edge::new(0.125, true), Edge::new(1.0, false)];
+        assert_edges(track.clone(), 0.5, &edges);
+        let edges = vec![Edge::new(0.375, true), Edge::new(1.0, false)];
+        assert_edges(track.clone(), 1.5, &edges);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_step_threshold() {
+        let track = Track::from_raw(&[-1.0, 1.0, -1.0], &[0.0, 0.5, 1.0], &[7]).unwrap();
+
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        job.set_track(&track);
+        job.set_from(0.0);
+        job.set_to(1.0);
+
+        job.set_threshold(0.5);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![Edge::new(0.5, true), Edge::new(1.0, false)]);
+
+        job.set_threshold(1.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![]);
+
+        job.set_threshold(0.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![Edge::new(0.5, true), Edge::new(1.0, false)]);
+
+        job.set_threshold(2.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![]);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_step_threshold_bool() {
+        let track = Track::from_raw(&[0.0, 1.0, 0.0], &[0.0, 0.5, 1.0], &[7]).unwrap();
+
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        job.set_track(&track);
+        job.set_from(0.0);
+        job.set_to(1.0);
+
+        job.set_threshold(0.5);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![Edge::new(0.5, true), Edge::new(1.0, false)]);
+
+        job.set_threshold(1.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![]);
+        assert_eq!(edges, vec![]);
+
+        job.set_threshold(0.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![Edge::new(0.5, true), Edge::new(1.0, false)]);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_linear_threshold() {
+        let track = Track::from_raw(&[-1.0, 1.0, -1.0], &[0.0, 0.5, 1.0], &[0]).unwrap();
+
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        job.set_track(&track);
+        job.set_from(0.0);
+        job.set_to(1.0);
+
+        job.set_threshold(0.5);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![Edge::new(0.375, true), Edge::new(0.625, false)]);
+
+        job.set_threshold(1.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![]);
+
+        job.set_threshold(0.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![Edge::new(0.25, true), Edge::new(0.75, false)]);
+
+        job.set_threshold(-1.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![Edge::new(0.0, true), Edge::new(1.0, false)]);
+
+        job.set_threshold(2.0);
+        let edges = job.run().unwrap().collect::<Vec<_>>();
+        assert_eq!(edges, vec![]);
+    }
+}
