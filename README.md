@@ -19,14 +19,15 @@ The library supports almost all runtime features supported by C++ version ozz, i
 - Animation blending (partial/additive blending)
 - Two bone IK
 - Aim (Look-at) IK
+- User channels
+- Skinning
 - Multi-threading
 - SIMD (SSE2 + NEON)
 - WASM
 
 The following functions are not supported yet:
-- User channels (developing)
-- Skinning (developing)
 - Baked physic simulation (no plan)
+- All offline features (no plan, use C++ library instead)
 
 Ozz-animation offline features are not supported, and no plans to support. Please use the original C++ library, which has a many tools and plug-ins.
 

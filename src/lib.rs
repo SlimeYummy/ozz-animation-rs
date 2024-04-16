@@ -60,10 +60,10 @@ mod ik_two_bone_job;
 mod local_to_model_job;
 mod sampling_job;
 mod skeleton;
-// mod skinning_job;
-// mod track;
-// mod track_sampling_job;
-// mod track_triggering_job;
+mod skinning_job;
+mod track;
+mod track_sampling_job;
+mod track_triggering_job;
 
 pub mod math;
 #[cfg(all(feature = "wasm", feature = "nodejs"))]
@@ -80,9 +80,9 @@ pub use sampling_job::{
     InterpSoaFloat3, InterpSoaQuaternion, SamplingContext, SamplingJob, SamplingJobArc, SamplingJobRc, SamplingJobRef,
 };
 pub use skeleton::Skeleton;
-// pub use skinning_job::{SkinningJob, SkinningJobArc, SkinningJobRc, SkinningJobRef};
-// pub use track::Track;
-// pub use track_sampling_job::{TrackSamplingJob, TrackSamplingJobArc, TrackSamplingJobRc, TrackSamplingJobRef};
-// pub use track_triggering_job::{
-//     TrackTriggeringJob, TrackTriggeringJobArc, TrackTriggeringJobRc, TrackTriggeringJobRef,
-// };
+pub use skinning_job::{SkinningJob, SkinningJobArc, SkinningJobRc, SkinningJobRef};
+pub use track::Track;
+pub use track_sampling_job::{TrackSamplingJob, TrackSamplingJobArc, TrackSamplingJobRc, TrackSamplingJobRef};
+pub use track_triggering_job::{
+    TrackTriggeringJob, TrackTriggeringJobArc, TrackTriggeringJobRc, TrackTriggeringJobRef,
+};
