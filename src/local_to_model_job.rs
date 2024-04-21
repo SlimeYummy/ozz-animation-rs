@@ -257,12 +257,12 @@ where
 #[cfg(test)]
 mod local_to_model_tests {
     use glam::Vec3;
-    use std::collections::HashMap;
     use wasm_bindgen_test::*;
 
     use super::*;
     use crate::base::DeterministicState;
     use crate::math::{SoaQuat, SoaVec3};
+    use crate::skeleton::JointHashMap;
 
     #[test]
     #[wasm_bindgen_test]
@@ -339,7 +339,7 @@ mod local_to_model_tests {
             ],
             vec![-1, 0, 1, 0, 3, 3],
             (|| {
-                let mut map = HashMap::with_hasher(DeterministicState::new());
+                let mut map = JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new());
                 map.insert("j0".into(), 0);
                 map.insert("j1".into(), 1);
                 map.insert("j2".into(), 2);
@@ -398,7 +398,7 @@ mod local_to_model_tests {
             ],
             vec![-1, 0, 1, 0, 3, 4, 3, -1],
             (|| {
-                let mut map = HashMap::with_hasher(DeterministicState::new());
+                let mut map = JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new());
                 map.insert("j0".into(), 0);
                 map.insert("j1".into(), 1);
                 map.insert("j2".into(), 2);

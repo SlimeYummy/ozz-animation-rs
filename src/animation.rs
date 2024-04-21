@@ -197,7 +197,7 @@ impl ArchiveRead<QuaternionKey> for QuaternionKey {
 /// coherency when sampling the animation, Keyframes in this array are sorted by
 /// time, then by track number.
 ///
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Animation {
     duration: f32,

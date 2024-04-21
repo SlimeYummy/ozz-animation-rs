@@ -4,7 +4,6 @@
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::hash_map::DefaultHasher;
-use std::error::Error;
 use std::fmt::Debug;
 use std::hash::BuildHasher;
 use std::ops::{Deref, DerefMut};
@@ -40,9 +39,9 @@ pub enum OzzError {
     InvalidVersion,
 
     /// Custom errors.
-    /// Ozz-animation-rs does not generate this error, but you can use it in your own code.
+    /// Ozz-animation-rs does not generate this error (except test & nodejs), but you can use it in your own code.
     #[error("Custom error: {0}")]
-    Custom(Box<dyn Error>),
+    Custom(String),
 }
 
 impl OzzError {
@@ -111,7 +110,7 @@ pub const SKELETON_MAX_SOA_JOINTS: i32 = (SKELETON_MAX_JOINTS + 3) / 4;
 pub const SKELETON_NO_PARENT: i32 = -1;
 
 /// A hasher builder that creates `DefaultHasher` with default keys.
-#[derive(Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct DeterministicState;
 
 impl DeterministicState {

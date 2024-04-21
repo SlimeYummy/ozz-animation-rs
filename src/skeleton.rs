@@ -1,9 +1,65 @@
-use std::collections::HashMap;
+use bimap::BiHashMap;
 use std::io::Read;
 
 use crate::archive::Archive;
 use crate::base::{DeterministicState, OzzError, OzzIndex};
 use crate::math::SoaTransform;
+
+/// Rexported `BiHashMap` in bimap crate.
+pub type JointHashMap = BiHashMap<String, i16, DeterministicState, DeterministicState>;
+
+struct JointHashMapWrapper;
+
+#[cfg(feature = "rkyv")]
+const _: () = {
+    use rkyv::collections::util::Entry;
+    use rkyv::ser::{ScratchSpace, Serializer};
+    use rkyv::string::ArchivedString;
+    use rkyv::vec::{ArchivedVec, VecResolver};
+    use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
+    use rkyv::{Deserialize, Fallible};
+
+    impl ArchiveWith<JointHashMap> for JointHashMapWrapper {
+        type Archived = ArchivedVec<Entry<ArchivedString, i16>>;
+        type Resolver = VecResolver;
+
+        unsafe fn resolve_with(field: &JointHashMap, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
+            ArchivedVec::resolve_from_len(field.len(), pos, resolver, out);
+        }
+    }
+
+    impl<S> SerializeWith<JointHashMap, S> for JointHashMapWrapper
+    where
+        S: ScratchSpace + Serializer + ?Sized,
+    {
+        fn serialize_with(field: &JointHashMap, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+            return ArchivedVec::serialize_from_iter(field.iter().map(|(key, value)| Entry { key, value }), serializer);
+        }
+    }
+
+    impl<D> DeserializeWith<ArchivedVec<Entry<ArchivedString, i16>>, JointHashMap, D> for JointHashMapWrapper
+    where
+        D: Fallible + ?Sized,
+    {
+        fn deserialize_with(
+            field: &ArchivedVec<Entry<ArchivedString, i16>>,
+            deserializer: &mut D,
+        ) -> Result<JointHashMap, D::Error> {
+            let mut result = JointHashMap::with_capacity_and_hashers(
+                field.len() as usize,
+                DeterministicState::new(),
+                DeterministicState::new(),
+            );
+            for entry in field.iter() {
+                result.insert(
+                    entry.key.deserialize(deserializer)?,
+                    entry.value.deserialize(deserializer)?,
+                );
+            }
+            return Ok(result);
+        }
+    }
+};
 
 ///
 /// This runtime skeleton data structure provides a const-only access to joint
@@ -16,12 +72,13 @@ use crate::math::SoaTransform;
 /// order. This is enough to traverse the whole joint hierarchy. Use
 /// iter_depth_first() to implement a depth-first traversal utility.
 ///
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Skeleton {
     joint_rest_poses: Vec<SoaTransform>,
     joint_parents: Vec<i16>,
-    joint_names: HashMap<String, i16, DeterministicState>,
+    #[cfg_attr(feature = "rkyv", with(JointHashMapWrapper))]
+    joint_names: JointHashMap,
 }
 
 impl Skeleton {
@@ -41,7 +98,7 @@ impl Skeleton {
     pub(crate) fn from_raw(
         joint_rest_poses: Vec<SoaTransform>,
         joint_parents: Vec<i16>,
-        joint_names: HashMap<String, i16, DeterministicState>,
+        joint_names: JointHashMap,
     ) -> Skeleton {
         return Skeleton {
             joint_rest_poses,
@@ -64,12 +121,16 @@ impl Skeleton {
             return Ok(Skeleton {
                 joint_rest_poses: Vec::new(),
                 joint_parents: Vec::new(),
-                joint_names: HashMap::with_hasher(DeterministicState::new()),
+                joint_names: BiHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
             });
         }
 
         let _char_count: i32 = archive.read()?;
-        let mut joint_names = HashMap::with_capacity_and_hasher(num_joints as usize, DeterministicState::new());
+        let mut joint_names = BiHashMap::with_capacity_and_hashers(
+            num_joints as usize,
+            DeterministicState::new(),
+            DeterministicState::new(),
+        );
         for idx in 0..num_joints {
             joint_names.insert(archive.read::<String>()?, idx as i16);
         }
@@ -144,14 +205,20 @@ impl Skeleton {
 
     /// Gets joint's name map.
     #[inline]
-    pub fn joint_names(&self) -> &HashMap<String, i16, DeterministicState> {
+    pub fn joint_names(&self) -> &JointHashMap {
         return &self.joint_names;
     }
 
     /// Gets joint's index by name.
     #[inline]
     pub fn joint_by_name(&self, name: &str) -> Option<i16> {
-        return self.joint_names.get(name).map(|idx| *idx);
+        return self.joint_names.get_by_left(name).map(|idx| *idx);
+    }
+
+    /// Gets joint's name by index.
+    #[inline]
+    pub fn name_by_joint(&self, index: i16) -> Option<&str> {
+        return self.joint_names.get_by_right(&index).map(|s| s.as_str());
     }
 
     /// Test if a joint is a leaf.
@@ -267,7 +334,27 @@ mod tests {
         assert_eq!(skeleton.joint_parents()[66], 65);
 
         assert_eq!(skeleton.joint_names().len(), 67);
-        assert_eq!(skeleton.joint_names()["Hips"], 0);
-        assert_eq!(skeleton.joint_names()["Bip01 R Toe0Nub"], 66);
+        assert_eq!(skeleton.joint_by_name("Hips"), Some(0));
+        assert_eq!(skeleton.joint_by_name("Bip01 R Toe0Nub"), Some(66));
+    }
+
+    #[cfg(feature = "rkyv")]
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_rkyv_skeleton() {
+        use rkyv::ser::Serializer;
+        use rkyv::Deserialize;
+
+        let skeleton = Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap();
+        let mut serializer = rkyv::ser::serializers::AllocSerializer::<30720>::default();
+        serializer.serialize_value(&skeleton).unwrap();
+        let buf = serializer.into_serializer().into_inner();
+        let archived = unsafe { rkyv::archived_root::<Skeleton>(&buf) };
+        let mut deserializer = rkyv::Infallible::default();
+        let skeleton2: Skeleton = archived.deserialize(&mut deserializer).unwrap();
+
+        assert_eq!(skeleton.joint_rest_poses(), skeleton2.joint_rest_poses());
+        assert_eq!(skeleton.joint_parents(), skeleton2.joint_parents());
+        assert_eq!(skeleton.joint_names(), skeleton2.joint_names());
     }
 }
