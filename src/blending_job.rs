@@ -528,12 +528,12 @@ where
 
 #[cfg(test)]
 mod blending_tests {
-    use std::collections::HashMap;
     use std::mem;
     use wasm_bindgen_test::*;
 
     use super::*;
     use crate::base::DeterministicState;
+    use crate::skeleton::JointHashMap;
 
     const IDENTITY: SoaTransform = SoaTransform {
         translation: SoaVec3::splat_col([0.0; 3]),
@@ -787,7 +787,7 @@ mod blending_tests {
         let skeleton = Rc::new(Skeleton::from_raw(
             joint_rest_poses,
             vec![0; 8],
-            HashMap::with_hasher(DeterministicState::new()),
+            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
         ));
 
         execute_test(
@@ -849,7 +849,7 @@ mod blending_tests {
         let skeleton = Rc::new(Skeleton::from_raw(
             rest_poses,
             vec![0; 8],
-            HashMap::with_hasher(DeterministicState::new()),
+            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
         ));
 
         {
@@ -949,7 +949,7 @@ mod blending_tests {
         let skeleton = Rc::new(Skeleton::from_raw(
             rest_poses,
             vec![0; 8],
-            HashMap::with_hasher(DeterministicState::new()),
+            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
         ));
 
         {
@@ -1012,7 +1012,7 @@ mod blending_tests {
         return Rc::new(Skeleton::from_raw(
             joint_rest_poses,
             vec![0; 4],
-            HashMap::with_hasher(DeterministicState::new()),
+            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
         ));
     }
     #[test]
@@ -1232,7 +1232,7 @@ mod blending_tests {
         let skeleton = Rc::new(Skeleton::from_raw(
             vec![IDENTITY; 1],
             vec![0; 4],
-            HashMap::with_hasher(DeterministicState::new()),
+            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
         ));
 
         let mut input1 = vec![IDENTITY; 1];
@@ -1403,7 +1403,7 @@ mod blending_tests {
         let skeleton = Rc::new(Skeleton::from_raw(
             vec![IDENTITY; 1],
             vec![0; 4],
-            HashMap::with_hasher(DeterministicState::new()),
+            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
         ));
 
         let mut input1 = vec![IDENTITY; 1];
