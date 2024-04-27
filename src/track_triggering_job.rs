@@ -8,6 +8,7 @@ use crate::track::Track;
 
 /// Structure of an edge as detected by the job.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Edge {
     /// Ratio at which track value crossed threshold.
     ratio: f32,
@@ -301,14 +302,14 @@ mod track_triggering_tests {
         assert!(job.run().unwrap_err().is_invalid_job());
 
         let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
-        job.set_track(Rc::new(Track::new(0, 0)));
+        job.set_track(Rc::new(Track::default()));
         job.set_from(0.0);
         job.set_to(1.0);
         assert_eq!(job.validate(), true);
         assert!(job.run().is_ok());
 
         let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
-        job.set_track(Rc::new(Track::new(0, 0)));
+        job.set_track(Rc::new(Track::default()));
         job.set_from(0.0);
         job.set_to(0.0);
         assert_eq!(job.validate(), true);
@@ -319,7 +320,7 @@ mod track_triggering_tests {
     #[wasm_bindgen_test]
     fn test_default() {
         let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
-        job.set_track(Rc::new(Track::new(0, 0)));
+        job.set_track(Rc::new(Track::default()));
         assert!(job.run().unwrap().count() == 0);
     }
 

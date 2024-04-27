@@ -84,5 +84,5 @@ pub use skinning_job::{SkinningJob, SkinningJobArc, SkinningJobRc, SkinningJobRe
 pub use track::Track;
 pub use track_sampling_job::{TrackSamplingJob, TrackSamplingJobArc, TrackSamplingJobRc, TrackSamplingJobRef};
 pub use track_triggering_job::{
-    TrackTriggeringJob, TrackTriggeringJobArc, TrackTriggeringJobRc, TrackTriggeringJobRef,
+    Edge, TrackTriggeringJob, TrackTriggeringJobArc, TrackTriggeringJobRc, TrackTriggeringJobRef,
 };
