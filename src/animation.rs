@@ -215,8 +215,8 @@ impl Animation {
         return "ozz-animation";
     }
 
-    #[inline]
     /// `Animation` resource file version for `Archive`.
+    #[inline]
     pub fn version() -> u32 {
         return 6;
     }

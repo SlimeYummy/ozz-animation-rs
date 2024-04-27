@@ -148,7 +148,7 @@ mod track_sampling_tests {
         assert!(job.run().unwrap_err().is_invalid_job());
 
         let mut job: TrackSamplingJob<Vec3> = TrackSamplingJob::default();
-        job.set_track(Rc::new(Track::new(0, 0)));
+        job.set_track(Rc::new(Track::default()));
         assert!(job.validate());
         assert!(job.run().is_ok());
     }
