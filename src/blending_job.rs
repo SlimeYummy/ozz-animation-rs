@@ -81,6 +81,18 @@ impl Default for BlendingContext {
     }
 }
 
+impl BlendingContext {
+    /// New blending context with a given soa joints.
+    pub fn new(soa_joints: usize) -> BlendingContext {
+        return BlendingContext {
+            num_passes: 0,
+            num_partial_passes: 0,
+            accumulated_weight: 0.0,
+            accumulated_weights: vec![f32x4::splat(0.0); soa_joints],
+        };
+    }
+}
+
 ///
 /// `BlendingJob` is in charge of blending (mixing) multiple poses
 /// (the result of a sampled animation) according to their respective weight,
