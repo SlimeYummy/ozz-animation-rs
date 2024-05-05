@@ -158,7 +158,7 @@ impl<V: TrackValue> Track<V> {
 
         let key_count: u32 = archive.read()?;
         let name_len: u32 = archive.read()?;
-        
+
         let ratios: Vec<f32> = archive.read_vec(key_count as usize)?;
         let values: Vec<V> = archive.read_vec(key_count as usize)?;
         let steps: Vec<u8> = archive.read_vec((key_count + 7) as usize / 8)?;

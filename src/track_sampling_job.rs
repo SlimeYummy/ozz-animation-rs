@@ -6,6 +6,10 @@ use crate::base::{OzzError, OzzObj};
 use crate::math::f32_clamp_or_max;
 use crate::track::{Track, TrackValue};
 
+/// Track sampling job implementation.
+///
+/// Track sampling allows to query a track value for a specified ratio.
+/// This is a ratio rather than a time because tracks have no duration.
 #[derive(Debug)]
 pub struct TrackSamplingJob<V, T = Rc<Track<V>>>
 where

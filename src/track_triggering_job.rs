@@ -26,6 +26,17 @@ impl Edge {
     }
 }
 
+/// Track edge triggering job implementation.
+///
+/// Edge triggering wording refers to signal processing, where a signal edge is a transition from
+/// low to high or from high to low. A rising edge is the transition from low to high, a falling
+/// edge is from high to low.
+///
+/// TrackTriggeringJob detects when track curve crosses a threshold value, triggering dated events
+/// that can be processed as state changes. Only FloatTrack is supported.
+///
+/// The job execution actually performs a lazy evaluation of edges. It return in `Iterator` that
+/// will process the next edge on each call to `next()`.
 #[derive(Debug)]
 pub struct TrackTriggeringJob<T = Rc<Track<f32>>>
 where
