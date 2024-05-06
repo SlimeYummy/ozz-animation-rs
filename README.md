@@ -46,7 +46,6 @@ Here is a very sample example:
 ```rust
 use glam::Mat4;
 use ozz_animation_rs::*;
-use ozz_animation_rs::math::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 

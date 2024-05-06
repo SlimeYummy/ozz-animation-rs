@@ -17,21 +17,21 @@ use std::simd::*;
 use crate::archive::{Archive, ArchiveRead};
 use crate::base::OzzError;
 
-pub const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
-pub const ONE: f32x4 = f32x4::from_array([1.0; 4]);
-pub const TWO: f32x4 = f32x4::from_array([2.0; 4]);
-pub const THREE: f32x4 = f32x4::from_array([3.0; 4]);
-pub const NEG_ONE: f32x4 = f32x4::from_array([-1.0; 4]);
-pub const FRAC_1_2: f32x4 = f32x4::from_array([0.5; 4]);
-pub const PI: f32x4 = f32x4::from_array([core::f32::consts::PI; 4]);
-pub const FRAC_2_PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_2_PI; 4]);
-pub const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
+pub(crate) const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
+pub(crate) const ONE: f32x4 = f32x4::from_array([1.0; 4]);
+pub(crate) const TWO: f32x4 = f32x4::from_array([2.0; 4]);
+pub(crate) const THREE: f32x4 = f32x4::from_array([3.0; 4]);
+pub(crate) const NEG_ONE: f32x4 = f32x4::from_array([-1.0; 4]);
+pub(crate) const FRAC_1_2: f32x4 = f32x4::from_array([0.5; 4]);
+pub(crate) const PI: f32x4 = f32x4::from_array([core::f32::consts::PI; 4]);
+pub(crate) const FRAC_2_PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_2_PI; 4]);
+pub(crate) const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
 
-pub const X_AXIS: f32x4 = f32x4::from_array([1.0, 0.0, 0.0, 0.0]);
-pub const Y_AXIS: f32x4 = f32x4::from_array([0.0, 1.0, 0.0, 0.0]);
-pub const Z_AXIS: f32x4 = f32x4::from_array([0.0, 0.0, 1.0, 0.0]);
+pub(crate) const X_AXIS: f32x4 = f32x4::from_array([1.0, 0.0, 0.0, 0.0]);
+pub(crate) const Y_AXIS: f32x4 = f32x4::from_array([0.0, 1.0, 0.0, 0.0]);
+pub(crate) const Z_AXIS: f32x4 = f32x4::from_array([0.0, 0.0, 1.0, 0.0]);
 
-pub const QUAT_UNIT: f32x4 = f32x4::from_array([0.0, 0.0, 0.0, 1.0]);
+pub(crate) const QUAT_UNIT: f32x4 = f32x4::from_array([0.0, 0.0, 0.0, 1.0]);
 
 const SIGN: i32x4 = i32x4::from_array([core::i32::MIN; 4]);
 const SIGN_W: i32x4 = i32x4::from_array([0, 0, 0, core::i32::MIN]);
@@ -708,7 +708,7 @@ impl AosMat4 {
 }
 
 //
-// SoaVec3
+// SoaMat4
 //
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]

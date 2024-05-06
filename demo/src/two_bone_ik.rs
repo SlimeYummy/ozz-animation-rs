@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
 use std::sync::{Arc, RwLock};
 
