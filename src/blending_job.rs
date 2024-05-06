@@ -1,3 +1,7 @@
+//!
+//! Blending job.
+//!
+
 use glam::Vec4;
 use std::cell::RefCell;
 use std::rc::Rc;

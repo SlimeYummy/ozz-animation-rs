@@ -1,3 +1,7 @@
+//!
+//! Skeleton data structure definition.
+//!
+
 use bimap::BiHashMap;
 use std::io::Read;
 

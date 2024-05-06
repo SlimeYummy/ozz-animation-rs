@@ -1,3 +1,7 @@
+//!
+//! Sampling Job.
+//!
+
 use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
