@@ -1,3 +1,7 @@
+//!
+//! Skinning Job.
+//!
+
 use glam::{Mat4, Vec3, Vec4};
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -6,6 +10,9 @@ use std::sync::{Arc, RwLock};
 
 use crate::base::{OzzBuf, OzzError, OzzMutBuf};
 
+/// Skinning job.
+///
+/// TODO: Deterministic tests.
 #[derive(Debug)]
 pub struct SkinningJob<
     JM = Rc<RefCell<Vec<Mat4>>>,

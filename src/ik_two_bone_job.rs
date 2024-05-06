@@ -1,3 +1,7 @@
+//!
+//! Two bone IK job.
+//!
+
 use glam::{Mat4, Quat, Vec3A};
 use std::simd::prelude::*;
 use std::simd::StdFloat;

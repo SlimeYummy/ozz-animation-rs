@@ -1,3 +1,7 @@
+//!
+//! Track sampling job.
+//!
+
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;

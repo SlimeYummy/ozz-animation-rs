@@ -1,3 +1,7 @@
+//!
+//! Track data structure definition.
+//!
+
 use glam::{Quat, Vec2, Vec3, Vec4};
 use std::fmt::Debug;
 use std::io::Read;

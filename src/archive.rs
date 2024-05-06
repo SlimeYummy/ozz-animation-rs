@@ -1,3 +1,7 @@
+//!
+//! Animation data structure definition.
+//!
+
 use glam::{Quat, Vec2, Vec3, Vec4};
 #[cfg(not(feature = "wasm"))]
 use std::fs::File;
