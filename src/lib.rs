@@ -12,7 +12,6 @@
 //! ```no_run
 //! use glam::Mat4;
 //! use ozz_animation_rs::*;
-//! use ozz_animation_rs::math::*;
 //! use std::cell::RefCell;
 //! use std::rc::Rc;
 //!
@@ -50,32 +49,32 @@
 #![feature(const_collections_with_hasher)]
 #![feature(portable_simd)]
 
-mod animation;
-mod archive;
-mod base;
-mod blending_job;
+pub mod animation;
+pub mod archive;
+pub mod base;
+pub mod blending_job;
 mod endian;
-mod ik_aim_job;
-mod ik_two_bone_job;
-mod local_to_model_job;
-mod sampling_job;
-mod skeleton;
-mod skinning_job;
-mod track;
-mod track_sampling_job;
-mod track_triggering_job;
-
+pub mod ik_aim_job;
+pub mod ik_two_bone_job;
+pub mod local_to_model_job;
 pub mod math;
 #[cfg(all(feature = "wasm", feature = "nodejs"))]
 pub mod nodejs;
+pub mod sampling_job;
+pub mod skeleton;
+pub mod skinning_job;
+pub mod track;
+pub mod track_sampling_job;
+pub mod track_triggering_job;
 
 pub use animation::Animation;
 pub use archive::{Archive, ArchiveRead};
-pub use base::*;
+pub use base::{OzzBuf, OzzError, OzzMutBuf, OzzObj, SKELETON_MAX_JOINTS, SKELETON_MAX_SOA_JOINTS, SKELETON_NO_PARENT};
 pub use blending_job::{BlendingContext, BlendingJob, BlendingJobArc, BlendingJobRc, BlendingJobRef, BlendingLayer};
 pub use ik_aim_job::IKAimJob;
 pub use ik_two_bone_job::IKTwoBoneJob;
 pub use local_to_model_job::{LocalToModelJob, LocalToModelJobArc, LocalToModelJobRc, LocalToModelJobRef};
+pub use math::{SoaMat4, SoaQuat, SoaTransform, SoaVec3};
 pub use sampling_job::{
     InterpSoaFloat3, InterpSoaQuaternion, SamplingContext, SamplingJob, SamplingJobArc, SamplingJobRc, SamplingJobRef,
 };

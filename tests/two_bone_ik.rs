@@ -1,5 +1,5 @@
 use glam::{Mat4, Quat, Vec3A};
-use ozz_animation_rs::math::*;
+use ozz_animation_rs::math::f32_cos;
 use ozz_animation_rs::*;
 use std::cell::RefCell;
 use std::rc::Rc;

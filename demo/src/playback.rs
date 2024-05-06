@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy::tasks::futures_lite::future::try_zip;
-use ozz_animation_rs::math::*;
 use ozz_animation_rs::*;
 use std::sync::{Arc, RwLock};
 
