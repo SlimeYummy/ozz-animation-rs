@@ -85,6 +85,14 @@ pub struct Skeleton {
     joint_names: JointHashMap,
 }
 
+/// Skeleton meta in `Archive`.
+pub struct SkeletonMeta {
+    pub version: u32,
+    pub num_joints: i32,
+    pub joint_names: JointHashMap,
+    pub joint_parents: Vec<i16>,
+}
+
 impl Skeleton {
     /// `Skeleton` resource file tag for `Archive`.
     #[inline]
@@ -111,8 +119,8 @@ impl Skeleton {
         };
     }
 
-    /// Reads a `Skeleton` from a reader.
-    pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Skeleton, OzzError> {
+    /// Reads a `SkeletonMeta` from a reader.
+    pub fn read_meta(archive: &mut Archive<impl Read>, with_joints: bool) -> Result<SkeletonMeta, OzzError> {
         if archive.tag() != Self::tag() {
             return Err(OzzError::InvalidTag);
         }
@@ -121,11 +129,12 @@ impl Skeleton {
         }
 
         let num_joints: i32 = archive.read()?;
-        if num_joints == 0 {
-            return Ok(Skeleton {
-                joint_rest_poses: Vec::new(),
-                joint_parents: Vec::new(),
+        if num_joints == 0 || !with_joints {
+            return Ok(SkeletonMeta{
+                version: Self::version(),
+                num_joints,
                 joint_names: BiHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
+                joint_parents: Vec::new(),
             });
         }
 
@@ -141,7 +150,19 @@ impl Skeleton {
 
         let joint_parents: Vec<i16> = archive.read_vec(num_joints as usize)?;
 
-        let soa_num_joints = (num_joints + 3) / 4;
+        return Ok(SkeletonMeta{
+            version: Self::version(),
+            num_joints,
+            joint_names,
+            joint_parents,
+        });
+    }
+
+    /// Reads a `Skeleton` from a reader.
+    pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Skeleton, OzzError> {
+        let meta = Skeleton::read_meta(archive, true)?;
+
+        let soa_num_joints = (meta.num_joints + 3) / 4;
         let mut joint_rest_poses: Vec<SoaTransform> = Vec::with_capacity(soa_num_joints as usize);
         for _ in 0..soa_num_joints {
             joint_rest_poses.push(archive.read()?);
@@ -149,8 +170,8 @@ impl Skeleton {
 
         return Ok(Skeleton {
             joint_rest_poses,
-            joint_parents,
-            joint_names,
+            joint_parents: meta.joint_parents,
+            joint_names: meta.joint_names,
         });
     }
 

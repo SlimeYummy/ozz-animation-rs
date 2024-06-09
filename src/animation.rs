@@ -212,6 +212,18 @@ pub struct Animation {
     scales: Vec<Float3Key>,
 }
 
+/// Animation meta in `Archive`.
+#[derive(Debug, Clone)]
+pub struct AnimationMeta {
+    pub version: u32,
+    pub duration: f32,
+    pub num_tracks: i32,
+    pub name: String,
+    pub translation_count: i32,
+    pub rotation_count: i32,
+    pub scale_count: i32,
+}
+
 impl Animation {
     /// `Animation` resource file tag for `Archive`.
     #[inline]
@@ -244,8 +256,8 @@ impl Animation {
         };
     }
 
-    /// Reads an `Animation` from an `Archive`.
-    pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Animation, OzzError> {
+    /// Reads an `AnimationMeta` from an `Archive`.
+    pub fn read_meta(archive: &mut Archive<impl Read>) -> Result<AnimationMeta, OzzError> {
         if archive.tag() != Self::tag() {
             return Err(OzzError::InvalidTag);
         }
@@ -259,20 +271,36 @@ impl Animation {
         let translation_count: i32 = archive.read()?;
         let rotation_count: i32 = archive.read()?;
         let scale_count: i32 = archive.read()?;
-
+        
         let mut name = String::new();
         if name_len != 0 {
             let buf = archive.read_vec(name_len as usize)?;
             name = String::from_utf8(buf).map_err(|e| e.utf8_error())?;
         }
-        let translations: Vec<Float3Key> = archive.read_vec(translation_count as usize)?;
-        let rotations: Vec<QuaternionKey> = archive.read_vec(rotation_count as usize)?;
-        let scales: Vec<Float3Key> = archive.read_vec(scale_count as usize)?;
+
+        return Ok(AnimationMeta {
+            version: archive.version(),
+            duration,
+            num_tracks,
+            name,
+            translation_count,
+            rotation_count,
+            scale_count,
+        });
+    }
+
+    /// Reads an `Animation` from an `Archive`.
+    pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Animation, OzzError> {
+        let meta = Animation::read_meta(archive)?;
+        
+        let translations: Vec<Float3Key> = archive.read_vec(meta.translation_count as usize)?;
+        let rotations: Vec<QuaternionKey> = archive.read_vec(meta.rotation_count as usize)?;
+        let scales: Vec<Float3Key> = archive.read_vec(meta.scale_count as usize)?;
 
         return Ok(Animation {
-            duration,
-            num_tracks: num_tracks as usize,
-            name,
+            duration: meta.duration,
+            num_tracks: meta.num_tracks as usize,
+            name: meta.name,
             translations,
             rotations,
             scales,
