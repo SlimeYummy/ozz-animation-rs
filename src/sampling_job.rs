@@ -507,40 +507,40 @@ pub struct ArchivedSamplingContext {
 
 #[cfg(feature = "rkyv")]
 impl ArchivedSamplingContext {
-    pub fn translations(&self) -> &[InterpSoaFloat3] {
-        return unsafe { slice::from_raw_parts(self.translations_ptr.as_ptr(), self.max_soa_tracks as usize) };
+    pub unsafe fn translations(&self) -> &[InterpSoaFloat3] {
+        return slice::from_raw_parts(self.translations_ptr.as_ptr(), self.max_soa_tracks as usize);
     }
 
-    pub fn rotations(&self) -> &[InterpSoaQuaternion] {
-        return unsafe { slice::from_raw_parts(self.rotations_ptr.as_ptr(), self.max_soa_tracks as usize) };
+    pub unsafe fn rotations(&self) -> &[InterpSoaQuaternion] {
+        return slice::from_raw_parts(self.rotations_ptr.as_ptr(), self.max_soa_tracks as usize);
     }
 
-    pub fn scales(&self) -> &[InterpSoaFloat3] {
-        return unsafe { slice::from_raw_parts(self.scales_ptr.as_ptr(), self.max_soa_tracks as usize) };
+    pub unsafe fn scales(&self) -> &[InterpSoaFloat3] {
+        return slice::from_raw_parts(self.scales_ptr.as_ptr(), self.max_soa_tracks as usize);
     }
 
-    pub fn translation_keys(&self) -> &[i32] {
-        return unsafe { slice::from_raw_parts(self.translation_keys_ptr.as_ptr(), self.max_tracks as usize * 2) };
+    pub unsafe fn translation_keys(&self) -> &[i32] {
+        return slice::from_raw_parts(self.translation_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
     }
 
-    pub fn rotation_keys(&self) -> &[i32] {
-        return unsafe { slice::from_raw_parts(self.rotation_keys_ptr.as_ptr(), self.max_tracks as usize * 2) };
+    pub unsafe fn rotation_keys(&self) -> &[i32] {
+        return slice::from_raw_parts(self.rotation_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
     }
 
-    pub fn scale_keys(&self) -> &[i32] {
-        return unsafe { slice::from_raw_parts(self.scale_keys_ptr.as_ptr(), self.max_tracks as usize * 2) };
+    pub unsafe fn scale_keys(&self) -> &[i32] {
+        return slice::from_raw_parts(self.scale_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
     }
 
-    pub fn outdated_translations(&self) -> &[u8] {
-        return unsafe { slice::from_raw_parts(self.outdated_translations_ptr.as_ptr(), self.num_outdated as usize) };
+    pub unsafe fn outdated_translations(&self) -> &[u8] {
+        return slice::from_raw_parts(self.outdated_translations_ptr.as_ptr(), self.num_outdated as usize);
     }
 
-    pub fn outdated_rotations(&self) -> &[u8] {
-        return unsafe { slice::from_raw_parts(self.outdated_rotations_ptr.as_ptr(), self.num_outdated as usize) };
+    pub unsafe fn outdated_rotations(&self) -> &[u8] {
+        return slice::from_raw_parts(self.outdated_rotations_ptr.as_ptr(), self.num_outdated as usize);
     }
 
-    pub fn outdated_scales(&self) -> &[u8] {
-        return unsafe { slice::from_raw_parts(self.outdated_scales_ptr.as_ptr(), self.num_outdated as usize) };
+    pub unsafe fn outdated_scales(&self) -> &[u8] {
+        return slice::from_raw_parts(self.outdated_scales_ptr.as_ptr(), self.num_outdated as usize);
     }
 }
 
@@ -677,26 +677,28 @@ impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SamplingContext, D> for Archi
         let mut context = SamplingContext::new(archived.max_tracks as usize);
         context.animation_id = archived.animation_id;
         context.ratio = archived.ratio;
-        context.translations_mut().copy_from_slice(archived.translations());
-        context.rotations_mut().copy_from_slice(archived.rotations());
-        context.scales_mut().copy_from_slice(archived.scales());
-        context
-            .translation_keys_mut()
-            .copy_from_slice(archived.translation_keys());
-        context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
-        context.scale_keys_mut().copy_from_slice(archived.scale_keys());
-        context.translation_cursor = archived.translation_cursor as usize;
-        context.rotation_cursor = archived.rotation_cursor as usize;
-        context.scale_cursor = archived.scale_cursor as usize;
-        context
-            .outdated_translations_mut()
-            .copy_from_slice(archived.outdated_translations());
-        context
-            .outdated_rotations_mut()
-            .copy_from_slice(archived.outdated_rotations());
-        context
-            .outdated_scales_mut()
-            .copy_from_slice(archived.outdated_scales());
+        unsafe {
+            context.translations_mut().copy_from_slice(archived.translations());
+            context.rotations_mut().copy_from_slice(archived.rotations());
+            context.scales_mut().copy_from_slice(archived.scales());
+            context
+                .translation_keys_mut()
+                .copy_from_slice(archived.translation_keys());
+            context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
+            context.scale_keys_mut().copy_from_slice(archived.scale_keys());
+            context.translation_cursor = archived.translation_cursor as usize;
+            context.rotation_cursor = archived.rotation_cursor as usize;
+            context.scale_cursor = archived.scale_cursor as usize;
+            context
+                .outdated_translations_mut()
+                .copy_from_slice(archived.outdated_translations());
+            context
+                .outdated_rotations_mut()
+                .copy_from_slice(archived.outdated_rotations());
+            context
+                .outdated_scales_mut()
+                .copy_from_slice(archived.outdated_scales());
+        }
         return Ok(context);
     }
 }
@@ -1594,15 +1596,17 @@ mod sampling_tests {
         assert_eq!(archived.translation_cursor as usize, ctx.translation_cursor);
         assert_eq!(archived.rotation_cursor as usize, ctx.rotation_cursor);
         assert_eq!(archived.scale_cursor as usize, ctx.scale_cursor);
-        assert_eq!(archived.translations(), ctx.translations());
-        assert_eq!(archived.rotations(), ctx.rotations());
-        assert_eq!(archived.scales(), ctx.scales());
-        assert_eq!(archived.translation_keys(), ctx.translation_keys());
-        assert_eq!(archived.rotation_keys(), ctx.rotation_keys());
-        assert_eq!(archived.scale_keys(), ctx.scale_keys());
-        assert_eq!(archived.outdated_translations(), ctx.outdated_translations());
-        assert_eq!(archived.outdated_rotations(), ctx.outdated_rotations());
-        assert_eq!(archived.outdated_scales(), ctx.outdated_scales());
+        unsafe {
+            assert_eq!(archived.translations(), ctx.translations());
+            assert_eq!(archived.rotations(), ctx.rotations());
+            assert_eq!(archived.scales(), ctx.scales());
+            assert_eq!(archived.translation_keys(), ctx.translation_keys());
+            assert_eq!(archived.rotation_keys(), ctx.rotation_keys());
+            assert_eq!(archived.scale_keys(), ctx.scale_keys());
+            assert_eq!(archived.outdated_translations(), ctx.outdated_translations());
+            assert_eq!(archived.outdated_rotations(), ctx.outdated_rotations());
+            assert_eq!(archived.outdated_scales(), ctx.outdated_scales());
+        }
 
         let ctx_de: SamplingContext = archived.deserialize(&mut rkyv::Infallible).unwrap();
         assert_eq!(ctx_de.size(), ctx.size());
