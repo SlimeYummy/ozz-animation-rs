@@ -15,6 +15,7 @@ use crate::math::{f16_to_f32, fx4, ix4, simd_f16_to_f32, SoaQuat, SoaVec3};
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Float3Key {
     pub ratio: f32,
     pub track: u16,
@@ -53,6 +54,7 @@ impl ArchiveRead<Float3Key> for Float3Key {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct QuaternionKey {
     pub ratio: f32,
     // track: 13 => The track this key frame belongs to.
@@ -203,6 +205,7 @@ impl ArchiveRead<QuaternionKey> for QuaternionKey {
 ///
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Animation {
     duration: f32,
     num_tracks: usize,
@@ -271,7 +274,7 @@ impl Animation {
         let translation_count: i32 = archive.read()?;
         let rotation_count: i32 = archive.read()?;
         let scale_count: i32 = archive.read()?;
-        
+
         let mut name = String::new();
         if name_len != 0 {
             let buf = archive.read_vec(name_len as usize)?;
@@ -292,7 +295,7 @@ impl Animation {
     /// Reads an `Animation` from an `Archive`.
     pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Animation, OzzError> {
         let meta = Animation::read_meta(archive)?;
-        
+
         let translations: Vec<Float3Key> = archive.read_vec(meta.translation_count as usize)?;
         let rotations: Vec<QuaternionKey> = archive.read_vec(meta.rotation_count as usize)?;
         let scales: Vec<Float3Key> = archive.read_vec(meta.scale_count as usize)?;
