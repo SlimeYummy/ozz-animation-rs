@@ -17,70 +17,125 @@ use crate::math::{f32_clamp_or_max, SoaQuat, SoaTransform, SoaVec3};
 /// Soa hot `SoaVec3` data to interpolate.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InterpSoaFloat3 {
+    #[cfg_attr(feature = "serde", serde(with = "serde_interp"))]
     pub ratio: [f32x4; 2],
     pub value: [SoaVec3; 2],
 }
 
 #[cfg(feature = "rkyv")]
-impl rkyv::Archive for InterpSoaFloat3 {
-    type Archived = InterpSoaFloat3;
-    type Resolver = ();
+const _: () = {
+    use bytecheck::CheckBytes;
+    use rkyv::{from_archived, to_archived, Archive, Deserialize, Fallible, Serialize};
+    use std::io::{Error, ErrorKind};
 
-    #[inline]
-    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
-        out.write(rkyv::to_archived!(*self as Self));
-    }
-}
+    impl Archive for InterpSoaFloat3 {
+        type Archived = InterpSoaFloat3;
+        type Resolver = ();
 
-#[cfg(feature = "rkyv")]
-impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for InterpSoaFloat3 {
-    #[inline]
-    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
-        return Ok(());
+        #[inline]
+        unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+            out.write(to_archived!(*self as Self));
+        }
     }
-}
 
-#[cfg(feature = "rkyv")]
-impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<InterpSoaFloat3, D> for InterpSoaFloat3 {
-    #[inline]
-    fn deserialize(&self, _: &mut D) -> Result<InterpSoaFloat3, D::Error> {
-        return Ok(rkyv::from_archived!(*self));
+    impl<S: Fallible + ?Sized> Serialize<S> for InterpSoaFloat3 {
+        #[inline]
+        fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
+            return Ok(());
+        }
     }
-}
+
+    impl<D: Fallible + ?Sized> Deserialize<InterpSoaFloat3, D> for InterpSoaFloat3 {
+        #[inline]
+        fn deserialize(&self, _: &mut D) -> Result<InterpSoaFloat3, D::Error> {
+            return Ok(from_archived!(*self));
+        }
+    }
+
+    impl<C: ?Sized> CheckBytes<C> for InterpSoaFloat3 {
+        type Error = Error;
+
+        #[inline]
+        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+            if value as usize % mem::align_of::<InterpSoaFloat3>() != 0 {
+                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+            }
+            return Ok(&*value);
+        }
+    }
+};
 
 /// Soa hot `SoaQuat` data to interpolate.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct InterpSoaQuaternion {
+    #[cfg_attr(feature = "serde", serde(with = "serde_interp"))]
     pub ratio: [f32x4; 2],
     pub value: [SoaQuat; 2],
 }
 
 #[cfg(feature = "rkyv")]
-impl rkyv::Archive for InterpSoaQuaternion {
-    type Archived = InterpSoaQuaternion;
-    type Resolver = ();
+const _: () = {
+    use bytecheck::CheckBytes;
+    use rkyv::{from_archived, to_archived, Archive, Deserialize, Fallible, Serialize};
+    use std::io::{Error, ErrorKind};
 
-    #[inline]
-    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
-        out.write(rkyv::to_archived!(*self as Self));
+    impl Archive for InterpSoaQuaternion {
+        type Archived = InterpSoaQuaternion;
+        type Resolver = ();
+
+        #[inline]
+        unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+            out.write(to_archived!(*self as Self));
+        }
     }
-}
 
-#[cfg(feature = "rkyv")]
-impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for InterpSoaQuaternion {
-    #[inline]
-    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
-        return Ok(());
+    impl<S: Fallible + ?Sized> Serialize<S> for InterpSoaQuaternion {
+        #[inline]
+        fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
+            return Ok(());
+        }
     }
-}
 
-#[cfg(feature = "rkyv")]
-impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<InterpSoaQuaternion, D> for InterpSoaQuaternion {
-    #[inline]
-    fn deserialize(&self, _: &mut D) -> Result<InterpSoaQuaternion, D::Error> {
-        return Ok(rkyv::from_archived!(*self));
+    impl<D: Fallible + ?Sized> Deserialize<InterpSoaQuaternion, D> for InterpSoaQuaternion {
+        #[inline]
+        fn deserialize(&self, _: &mut D) -> Result<InterpSoaQuaternion, D::Error> {
+            return Ok(from_archived!(*self));
+        }
+    }
+
+    impl<C: ?Sized> CheckBytes<C> for InterpSoaQuaternion {
+        type Error = Error;
+
+        #[inline]
+        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+            if value as usize % mem::align_of::<InterpSoaQuaternion>() != 0 {
+                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+            }
+            return Ok(&*value);
+        }
+    }
+};
+
+#[cfg(feature = "serde")]
+mod serde_interp {
+    use serde::ser::SerializeSeq;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::simd::prelude::*;
+
+    pub(crate) fn serialize<S: Serializer>(value: &[f32x4; 2], serializer: S) -> Result<S::Ok, S::Error> {
+        let mut seq = serializer.serialize_seq(Some(2))?;
+        seq.serialize_element(value[0].as_array())?;
+        seq.serialize_element(value[1].as_array())?;
+        return seq.end();
+    }
+
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[f32x4; 2], D::Error> {
+        let tmp: [[f32; 4]; 2] = Deserialize::deserialize(deserializer)?;
+        return Ok([f32x4::from_array(tmp[0]), f32x4::from_array(tmp[1])]);
     }
 }
 
@@ -479,245 +534,360 @@ impl SamplingContext {
 }
 
 #[cfg(feature = "rkyv")]
-pub struct ArchivedSamplingContext {
-    pub size: u32,
-    pub max_tracks: u32,
-    pub max_soa_tracks: u32,
-    pub num_outdated: u32,
+const _: () = {
+    use bytecheck::CheckBytes;
+    use rkyv::ser::Serializer;
+    use rkyv::{from_archived, out_field, Archive, Deserialize, Fallible, RelPtr, Serialize};
+    use std::io::{Error, ErrorKind};
 
-    pub animation_id: u64,
-    pub ratio: f32,
+    #[cfg(feature = "rkyv")]
+    pub struct ArchivedSamplingContext {
+        pub size: u32,
+        pub max_tracks: u32,
+        pub max_soa_tracks: u32,
+        pub num_outdated: u32,
 
-    translations_ptr: rkyv::RelPtr<InterpSoaFloat3>,
-    rotations_ptr: rkyv::RelPtr<InterpSoaQuaternion>,
-    scales_ptr: rkyv::RelPtr<InterpSoaFloat3>,
+        pub animation_id: u64,
+        pub ratio: f32,
 
-    translation_keys_ptr: rkyv::RelPtr<i32>,
-    rotation_keys_ptr: rkyv::RelPtr<i32>,
-    scale_keys_ptr: rkyv::RelPtr<i32>,
+        translations_ptr: RelPtr<InterpSoaFloat3>,
+        rotations_ptr: RelPtr<InterpSoaQuaternion>,
+        scales_ptr: RelPtr<InterpSoaFloat3>,
 
-    pub translation_cursor: u32,
-    pub rotation_cursor: u32,
-    pub scale_cursor: u32,
+        translation_keys_ptr: RelPtr<i32>,
+        rotation_keys_ptr: RelPtr<i32>,
+        scale_keys_ptr: RelPtr<i32>,
 
-    outdated_translations_ptr: rkyv::RelPtr<u8>,
-    outdated_rotations_ptr: rkyv::RelPtr<u8>,
-    outdated_scales_ptr: rkyv::RelPtr<u8>,
-}
+        pub translation_cursor: u32,
+        pub rotation_cursor: u32,
+        pub scale_cursor: u32,
 
-#[cfg(feature = "rkyv")]
-impl ArchivedSamplingContext {
-    pub unsafe fn translations(&self) -> &[InterpSoaFloat3] {
-        return slice::from_raw_parts(self.translations_ptr.as_ptr(), self.max_soa_tracks as usize);
+        outdated_translations_ptr: RelPtr<u8>,
+        outdated_rotations_ptr: RelPtr<u8>,
+        outdated_scales_ptr: RelPtr<u8>,
     }
 
-    pub unsafe fn rotations(&self) -> &[InterpSoaQuaternion] {
-        return slice::from_raw_parts(self.rotations_ptr.as_ptr(), self.max_soa_tracks as usize);
-    }
-
-    pub unsafe fn scales(&self) -> &[InterpSoaFloat3] {
-        return slice::from_raw_parts(self.scales_ptr.as_ptr(), self.max_soa_tracks as usize);
-    }
-
-    pub unsafe fn translation_keys(&self) -> &[i32] {
-        return slice::from_raw_parts(self.translation_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
-    }
-
-    pub unsafe fn rotation_keys(&self) -> &[i32] {
-        return slice::from_raw_parts(self.rotation_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
-    }
-
-    pub unsafe fn scale_keys(&self) -> &[i32] {
-        return slice::from_raw_parts(self.scale_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
-    }
-
-    pub unsafe fn outdated_translations(&self) -> &[u8] {
-        return slice::from_raw_parts(self.outdated_translations_ptr.as_ptr(), self.num_outdated as usize);
-    }
-
-    pub unsafe fn outdated_rotations(&self) -> &[u8] {
-        return slice::from_raw_parts(self.outdated_rotations_ptr.as_ptr(), self.num_outdated as usize);
-    }
-
-    pub unsafe fn outdated_scales(&self) -> &[u8] {
-        return slice::from_raw_parts(self.outdated_scales_ptr.as_ptr(), self.num_outdated as usize);
-    }
-}
-
-#[derive(Default)]
-#[cfg(feature = "rkyv")]
-pub struct SamplingContextResolver {
-    translations_pos: usize,
-    rotations_pos: usize,
-    scales_pos: usize,
-
-    translation_keys_pos: usize,
-    rotation_keys_pos: usize,
-    scale_keys_pos: usize,
-
-    outdated_translations_pos: usize,
-    outdated_rotations_pos: usize,
-    outdated_scales_pos: usize,
-}
-
-#[cfg(feature = "rkyv")]
-impl rkyv::Archive for SamplingContext {
-    type Archived = ArchivedSamplingContext;
-    type Resolver = SamplingContextResolver;
-
-    unsafe fn resolve(&self, pos: usize, resolver: SamplingContextResolver, out: *mut ArchivedSamplingContext) {
-        let (fp, fo) = rkyv::out_field!(out.size);
-        usize::resolve(&self.size(), pos + fp, (), fo);
-        let (fp, fo) = rkyv::out_field!(out.max_tracks);
-        usize::resolve(&self.max_tracks(), pos + fp, (), fo);
-        let (fp, fo) = rkyv::out_field!(out.max_soa_tracks);
-        usize::resolve(&self.max_soa_tracks(), pos + fp, (), fo);
-        let (fp, fo) = rkyv::out_field!(out.num_outdated);
-        usize::resolve(&self.num_outdated(), pos + fp, (), fo);
-
-        let (fp, fo) = rkyv::out_field!(out.animation_id);
-        u64::resolve(&self.animation_id, pos + fp, (), fo);
-        let (fp, fo) = rkyv::out_field!(out.ratio);
-        f32::resolve(&self.ratio, pos + fp, (), fo);
-
-        let (fp, fo) = rkyv::out_field!(out.translations_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.translations_pos, fo);
-        let (fp, fo) = rkyv::out_field!(out.rotations_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.rotations_pos, fo);
-        let (fp, fo) = rkyv::out_field!(out.scales_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.scales_pos, fo);
-
-        let (fp, fo) = rkyv::out_field!(out.translation_keys_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.translation_keys_pos, fo);
-        let (fp, fo) = rkyv::out_field!(out.rotation_keys_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.rotation_keys_pos, fo);
-        let (fp, fo) = rkyv::out_field!(out.scale_keys_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.scale_keys_pos, fo);
-
-        let (fp, fo) = rkyv::out_field!(out.translation_cursor);
-        usize::resolve(&self.translation_cursor, pos + fp, (), fo);
-        let (fp, fo) = rkyv::out_field!(out.rotation_cursor);
-        usize::resolve(&self.rotation_cursor, pos + fp, (), fo);
-        let (fp, fo) = rkyv::out_field!(out.scale_cursor);
-        usize::resolve(&self.scale_cursor, pos + fp, (), fo);
-
-        let (fp, fo) = rkyv::out_field!(out.outdated_translations_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.outdated_translations_pos, fo);
-        let (fp, fo) = rkyv::out_field!(out.outdated_rotations_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.outdated_rotations_pos, fo);
-        let (fp, fo) = rkyv::out_field!(out.outdated_scales_ptr);
-        rkyv::RelPtr::emplace(pos + fp, resolver.outdated_scales_pos, fo);
-    }
-}
-
-impl<S: rkyv::ser::Serializer + ?Sized> rkyv::Serialize<S> for SamplingContext {
-    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        let mut resolver = SamplingContextResolver::default();
-
-        resolver.translations_pos = serializer.align_for::<InterpSoaFloat3>()?;
-        serializer.write(unsafe {
-            slice::from_raw_parts(
-                self.translations().as_ptr() as *const u8,
-                self.translations().len() * mem::size_of::<InterpSoaFloat3>(),
-            )
-        })?;
-        resolver.rotations_pos = serializer.align_for::<InterpSoaQuaternion>()?;
-        serializer.write(unsafe {
-            slice::from_raw_parts(
-                self.rotations().as_ptr() as *const u8,
-                self.rotations().len() * mem::size_of::<InterpSoaQuaternion>(),
-            )
-        })?;
-        resolver.scales_pos = serializer.align_for::<InterpSoaFloat3>()?;
-        serializer.write(unsafe {
-            slice::from_raw_parts(
-                self.scales().as_ptr() as *const u8,
-                self.scales().len() * mem::size_of::<InterpSoaFloat3>(),
-            )
-        })?;
-
-        resolver.translation_keys_pos = serializer.align_for::<i32>()?;
-        serializer.write(unsafe {
-            slice::from_raw_parts(
-                self.translation_keys().as_ptr() as *const u8,
-                self.translation_keys().len() * mem::size_of::<i32>(),
-            )
-        })?;
-        resolver.rotation_keys_pos = serializer.align_for::<i32>()?;
-        serializer.write(unsafe {
-            slice::from_raw_parts(
-                self.rotation_keys().as_ptr() as *const u8,
-                self.rotation_keys().len() * mem::size_of::<i32>(),
-            )
-        })?;
-        resolver.scale_keys_pos = serializer.align_for::<i32>()?;
-        serializer.write(unsafe {
-            slice::from_raw_parts(
-                self.scale_keys().as_ptr() as *const u8,
-                self.scale_keys().len() * mem::size_of::<i32>(),
-            )
-        })?;
-
-        resolver.outdated_translations_pos = serializer.align_for::<u8>()?;
-        serializer.write(self.outdated_translations())?;
-        resolver.outdated_rotations_pos = serializer.align_for::<u8>()?;
-        serializer.write(self.outdated_rotations())?;
-        resolver.outdated_scales_pos = serializer.align_for::<u8>()?;
-        serializer.write(self.outdated_scales())?;
-
-        return Ok(resolver);
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SamplingContext, D> for ArchivedSamplingContext {
-    #[inline]
-    fn deserialize(&self, _: &mut D) -> Result<SamplingContext, D::Error> {
-        let archived = rkyv::from_archived!(self);
-        let mut context = SamplingContext::new(archived.max_tracks as usize);
-        context.animation_id = archived.animation_id;
-        context.ratio = archived.ratio;
-        unsafe {
-            context.translations_mut().copy_from_slice(archived.translations());
-            context.rotations_mut().copy_from_slice(archived.rotations());
-            context.scales_mut().copy_from_slice(archived.scales());
-            context
-                .translation_keys_mut()
-                .copy_from_slice(archived.translation_keys());
-            context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
-            context.scale_keys_mut().copy_from_slice(archived.scale_keys());
-            context.translation_cursor = archived.translation_cursor as usize;
-            context.rotation_cursor = archived.rotation_cursor as usize;
-            context.scale_cursor = archived.scale_cursor as usize;
-            context
-                .outdated_translations_mut()
-                .copy_from_slice(archived.outdated_translations());
-            context
-                .outdated_rotations_mut()
-                .copy_from_slice(archived.outdated_rotations());
-            context
-                .outdated_scales_mut()
-                .copy_from_slice(archived.outdated_scales());
+    impl ArchivedSamplingContext {
+        pub unsafe fn translations(&self) -> &[InterpSoaFloat3] {
+            return slice::from_raw_parts(self.translations_ptr.as_ptr(), self.max_soa_tracks as usize);
         }
-        return Ok(context);
-    }
-}
 
-#[cfg(feature = "rkyv")]
-impl<C: ?Sized> bytecheck::CheckBytes<C> for ArchivedSamplingContext {
-    type Error = std::io::Error;
-
-    #[inline]
-    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
-        if value as usize % mem::align_of::<ArchivedSamplingContext>() != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "must be aligned to 16 bytes",
-            ));
+        pub unsafe fn rotations(&self) -> &[InterpSoaQuaternion] {
+            return slice::from_raw_parts(self.rotations_ptr.as_ptr(), self.max_soa_tracks as usize);
         }
-        return Ok(&*value);
+
+        pub unsafe fn scales(&self) -> &[InterpSoaFloat3] {
+            return slice::from_raw_parts(self.scales_ptr.as_ptr(), self.max_soa_tracks as usize);
+        }
+
+        pub unsafe fn translation_keys(&self) -> &[i32] {
+            return slice::from_raw_parts(self.translation_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
+        }
+
+        pub unsafe fn rotation_keys(&self) -> &[i32] {
+            return slice::from_raw_parts(self.rotation_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
+        }
+
+        pub unsafe fn scale_keys(&self) -> &[i32] {
+            return slice::from_raw_parts(self.scale_keys_ptr.as_ptr(), self.max_tracks as usize * 2);
+        }
+
+        pub unsafe fn outdated_translations(&self) -> &[u8] {
+            return slice::from_raw_parts(self.outdated_translations_ptr.as_ptr(), self.num_outdated as usize);
+        }
+
+        pub unsafe fn outdated_rotations(&self) -> &[u8] {
+            return slice::from_raw_parts(self.outdated_rotations_ptr.as_ptr(), self.num_outdated as usize);
+        }
+
+        pub unsafe fn outdated_scales(&self) -> &[u8] {
+            return slice::from_raw_parts(self.outdated_scales_ptr.as_ptr(), self.num_outdated as usize);
+        }
     }
-}
+
+    #[derive(Default)]
+    pub struct SamplingContextResolver {
+        translations_pos: usize,
+        rotations_pos: usize,
+        scales_pos: usize,
+
+        translation_keys_pos: usize,
+        rotation_keys_pos: usize,
+        scale_keys_pos: usize,
+
+        outdated_translations_pos: usize,
+        outdated_rotations_pos: usize,
+        outdated_scales_pos: usize,
+    }
+
+    impl Archive for SamplingContext {
+        type Archived = ArchivedSamplingContext;
+        type Resolver = SamplingContextResolver;
+
+        unsafe fn resolve(&self, pos: usize, resolver: SamplingContextResolver, out: *mut ArchivedSamplingContext) {
+            let (fp, fo) = out_field!(out.size);
+            usize::resolve(&self.size(), pos + fp, (), fo);
+            let (fp, fo) = out_field!(out.max_tracks);
+            usize::resolve(&self.max_tracks(), pos + fp, (), fo);
+            let (fp, fo) = out_field!(out.max_soa_tracks);
+            usize::resolve(&self.max_soa_tracks(), pos + fp, (), fo);
+            let (fp, fo) = out_field!(out.num_outdated);
+            usize::resolve(&self.num_outdated(), pos + fp, (), fo);
+
+            let (fp, fo) = out_field!(out.animation_id);
+            u64::resolve(&self.animation_id, pos + fp, (), fo);
+            let (fp, fo) = out_field!(out.ratio);
+            f32::resolve(&self.ratio, pos + fp, (), fo);
+
+            let (fp, fo) = out_field!(out.translations_ptr);
+            RelPtr::emplace(pos + fp, resolver.translations_pos, fo);
+            let (fp, fo) = out_field!(out.rotations_ptr);
+            RelPtr::emplace(pos + fp, resolver.rotations_pos, fo);
+            let (fp, fo) = out_field!(out.scales_ptr);
+            RelPtr::emplace(pos + fp, resolver.scales_pos, fo);
+
+            let (fp, fo) = out_field!(out.translation_keys_ptr);
+            RelPtr::emplace(pos + fp, resolver.translation_keys_pos, fo);
+            let (fp, fo) = out_field!(out.rotation_keys_ptr);
+            RelPtr::emplace(pos + fp, resolver.rotation_keys_pos, fo);
+            let (fp, fo) = out_field!(out.scale_keys_ptr);
+            RelPtr::emplace(pos + fp, resolver.scale_keys_pos, fo);
+
+            let (fp, fo) = out_field!(out.translation_cursor);
+            usize::resolve(&self.translation_cursor, pos + fp, (), fo);
+            let (fp, fo) = out_field!(out.rotation_cursor);
+            usize::resolve(&self.rotation_cursor, pos + fp, (), fo);
+            let (fp, fo) = out_field!(out.scale_cursor);
+            usize::resolve(&self.scale_cursor, pos + fp, (), fo);
+
+            let (fp, fo) = out_field!(out.outdated_translations_ptr);
+            RelPtr::emplace(pos + fp, resolver.outdated_translations_pos, fo);
+            let (fp, fo) = out_field!(out.outdated_rotations_ptr);
+            RelPtr::emplace(pos + fp, resolver.outdated_rotations_pos, fo);
+            let (fp, fo) = out_field!(out.outdated_scales_ptr);
+            RelPtr::emplace(pos + fp, resolver.outdated_scales_pos, fo);
+        }
+    }
+
+    impl<S: Serializer + Fallible + ?Sized> Serialize<S> for SamplingContext {
+        fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+            let mut resolver = SamplingContextResolver::default();
+
+            resolver.translations_pos = serializer.align_for::<InterpSoaFloat3>()?;
+            serializer.write(unsafe {
+                slice::from_raw_parts(
+                    self.translations().as_ptr() as *const u8,
+                    self.translations().len() * mem::size_of::<InterpSoaFloat3>(),
+                )
+            })?;
+            resolver.rotations_pos = serializer.align_for::<InterpSoaQuaternion>()?;
+            serializer.write(unsafe {
+                slice::from_raw_parts(
+                    self.rotations().as_ptr() as *const u8,
+                    self.rotations().len() * mem::size_of::<InterpSoaQuaternion>(),
+                )
+            })?;
+            resolver.scales_pos = serializer.align_for::<InterpSoaFloat3>()?;
+            serializer.write(unsafe {
+                slice::from_raw_parts(
+                    self.scales().as_ptr() as *const u8,
+                    self.scales().len() * mem::size_of::<InterpSoaFloat3>(),
+                )
+            })?;
+
+            resolver.translation_keys_pos = serializer.align_for::<i32>()?;
+            serializer.write(unsafe {
+                slice::from_raw_parts(
+                    self.translation_keys().as_ptr() as *const u8,
+                    self.translation_keys().len() * mem::size_of::<i32>(),
+                )
+            })?;
+            resolver.rotation_keys_pos = serializer.align_for::<i32>()?;
+            serializer.write(unsafe {
+                slice::from_raw_parts(
+                    self.rotation_keys().as_ptr() as *const u8,
+                    self.rotation_keys().len() * mem::size_of::<i32>(),
+                )
+            })?;
+            resolver.scale_keys_pos = serializer.align_for::<i32>()?;
+            serializer.write(unsafe {
+                slice::from_raw_parts(
+                    self.scale_keys().as_ptr() as *const u8,
+                    self.scale_keys().len() * mem::size_of::<i32>(),
+                )
+            })?;
+
+            resolver.outdated_translations_pos = serializer.align_for::<u8>()?;
+            serializer.write(self.outdated_translations())?;
+            resolver.outdated_rotations_pos = serializer.align_for::<u8>()?;
+            serializer.write(self.outdated_rotations())?;
+            resolver.outdated_scales_pos = serializer.align_for::<u8>()?;
+            serializer.write(self.outdated_scales())?;
+
+            return Ok(resolver);
+        }
+    }
+
+    impl<D: Fallible + ?Sized> Deserialize<SamplingContext, D> for ArchivedSamplingContext {
+        #[inline]
+        fn deserialize(&self, _: &mut D) -> Result<SamplingContext, D::Error> {
+            let archived = from_archived!(self);
+            let mut context = SamplingContext::new(archived.max_tracks as usize);
+            context.animation_id = archived.animation_id;
+            context.ratio = archived.ratio;
+            unsafe {
+                context.translations_mut().copy_from_slice(archived.translations());
+                context.rotations_mut().copy_from_slice(archived.rotations());
+                context.scales_mut().copy_from_slice(archived.scales());
+                context
+                    .translation_keys_mut()
+                    .copy_from_slice(archived.translation_keys());
+                context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
+                context.scale_keys_mut().copy_from_slice(archived.scale_keys());
+                context.translation_cursor = archived.translation_cursor as usize;
+                context.rotation_cursor = archived.rotation_cursor as usize;
+                context.scale_cursor = archived.scale_cursor as usize;
+                context
+                    .outdated_translations_mut()
+                    .copy_from_slice(archived.outdated_translations());
+                context
+                    .outdated_rotations_mut()
+                    .copy_from_slice(archived.outdated_rotations());
+                context
+                    .outdated_scales_mut()
+                    .copy_from_slice(archived.outdated_scales());
+            }
+            return Ok(context);
+        }
+    }
+
+    impl<C: ?Sized> CheckBytes<C> for ArchivedSamplingContext {
+        type Error = Error;
+
+        #[inline]
+        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+            if value as usize % mem::align_of::<f32x4>() != 0 {
+                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+            }
+            return Ok(&*value);
+        }
+    }
+};
+
+#[cfg(feature = "serde")]
+const _: () = {
+    use serde::de::value::Error;
+    use serde::de::{self, MapAccess, Visitor};
+    use serde::ser::{SerializeMap, SerializeSeq};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    impl Serialize for SamplingContext {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut map = serializer.serialize_map(None)?;
+            map.serialize_entry("size", &self.size())?;
+            map.serialize_entry("max_tracks", &self.max_tracks())?;
+            map.serialize_entry("max_soa_tracks", &self.max_soa_tracks())?;
+            map.serialize_entry("num_outdated", &self.num_outdated())?;
+            map.serialize_entry("animation_id", &self.animation_id())?;
+            map.serialize_entry("ratio", &self.ratio())?;
+            map.serialize_entry("translations", self.translations())?;
+            map.serialize_entry("rotations", self.rotations())?;
+            map.serialize_entry("scales", self.scales())?;
+            map.serialize_entry("translations_keys", self.translation_keys())?;
+            map.serialize_entry("rotations_keys", self.rotation_keys())?;
+            map.serialize_entry("scales_keys", self.scale_keys())?;
+            map.serialize_entry("translation_cursor", &self.translation_cursor())?;
+            map.serialize_entry("rotation_cursor", &self.rotation_cursor())?;
+            map.serialize_entry("scale_cursor", &self.scale_cursor())?;
+            map.serialize_entry("outdated_translations", self.outdated_translations())?;
+            map.serialize_entry("outdated_rotations", self.outdated_rotations())?;
+            map.serialize_entry("outdated_scales", self.outdated_scales())?;
+            return map.end();
+        }
+    }
+
+    impl<'de> Deserialize<'de> for SamplingContext {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<SamplingContext, D::Error> {
+            let mut ctx = SamplingContext::new(0);
+            return Ok(ctx);
+        }
+    }
+
+    struct SamplingContextVisitor;
+
+    impl<'de> Visitor<'de> for SamplingContextVisitor {
+        type Value = SamplingContext;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            return formatter.write_str("struct SamplingContext");
+        }
+
+        fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<Self::Value, V::Error> {
+            let mut max_tracks: Option<usize> = None;
+            while let Some(key) = map.next_key::<&str>()? {
+                if key == "max_tracks" {
+                    max_tracks = Some(map.next_value()?);
+                } else {
+                    map.next_value::<serde::de::IgnoredAny>()?;
+                }
+            }
+            let mut ctx: SamplingContext = match max_tracks {
+                Some(max_tracks) => SamplingContext::new(max_tracks),
+                None => return Err(de::Error::custom("Miss field max_tracks")),
+            };
+
+            while let Some(key) = map.next_key()? {
+                match key {
+                    "animation_id" => ctx.animation_id = map.next_value()?,
+                    "ratio" => ctx.ratio = map.next_value()?,
+                    "translations" => {
+                        let translations: Vec<InterpSoaFloat3> = map.next_value()?;
+                        ctx.translations_mut().copy_from_slice(&translations);
+                    }
+                    "rotations" => {
+                        let rotations: Vec<InterpSoaQuaternion> = map.next_value()?;
+                        ctx.rotations_mut().copy_from_slice(&rotations);
+                    }
+                    "scales" => {
+                        let scales: Vec<InterpSoaFloat3> = map.next_value()?;
+                        ctx.scales_mut().copy_from_slice(&scales);
+                    }
+                    "translations_keys" => {
+                        let translations_keys: Vec<i32> = map.next_value()?;
+                        ctx.translation_keys_mut().copy_from_slice(&translations_keys);
+                    }
+                    "rotations_keys" => {
+                        let rotations_keys: Vec<i32> = map.next_value()?;
+                        ctx.rotation_keys_mut().copy_from_slice(&rotations_keys);
+                    }
+                    "scales_keys" => {
+                        let scales_keys: Vec<i32> = map.next_value()?;
+                        ctx.scale_keys_mut().copy_from_slice(&scales_keys);
+                    }
+                    "translation_cursor" => ctx.translation_cursor = map.next_value()?,
+                    "rotation_cursor" => ctx.rotation_cursor = map.next_value()?,
+                    "scale_cursor" => ctx.scale_cursor = map.next_value()?,
+                    "outdated_translations" => {
+                        let outdated_translations: Vec<u8> = map.next_value()?;
+                        ctx.outdated_translations_mut().copy_from_slice(&outdated_translations);
+                    }
+                    "outdated_rotations" => {
+                        let outdated_rotations: Vec<u8> = map.next_value()?;
+                        ctx.outdated_rotations_mut().copy_from_slice(&outdated_rotations);
+                    }
+                    "outdated_scales" => {
+                        let outdated_scales: Vec<u8> = map.next_value()?;
+                        ctx.outdated_scales_mut().copy_from_slice(&outdated_scales);
+                    }
+                    _ => {
+                        map.next_value::<serde::de::IgnoredAny>()?;
+                    }
+                }
+            }
+            return Ok(ctx);
+        }
+    }
+};
 
 ///
 /// Samples an animation at a given time ratio in the unit interval 0.0-1.0 (where 0.0 is the beginning of

@@ -167,47 +167,70 @@ impl SoaVec3 {
 }
 
 #[cfg(feature = "rkyv")]
-impl rkyv::Archive for SoaVec3 {
-    type Archived = SoaVec3;
-    type Resolver = ();
+const _: () = {
+    use bytecheck::CheckBytes;
+    use rkyv::{from_archived, to_archived, Archive, Deserialize, Fallible, Serialize};
+    use std::io::{Error, ErrorKind};
 
-    #[inline]
-    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
-        out.write(rkyv::to_archived!(*self as Self));
-    }
-}
+    impl Archive for SoaVec3 {
+        type Archived = SoaVec3;
+        type Resolver = ();
 
-#[cfg(feature = "rkyv")]
-impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for SoaVec3 {
-    #[inline]
-    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
-        return Ok(());
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SoaVec3, D> for SoaVec3 {
-    #[inline]
-    fn deserialize(&self, _: &mut D) -> Result<SoaVec3, D::Error> {
-        return Ok(rkyv::from_archived!(*self));
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<C: ?Sized> bytecheck::CheckBytes<C> for SoaVec3 {
-    type Error = std::io::Error;
-
-    #[inline]
-    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
-        if value as usize % mem::align_of::<SoaVec3>() != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "must be aligned to 16 bytes",
-            ));
+        #[inline]
+        unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+            out.write(to_archived!(*self as Self));
         }
-        return Ok(&*value);
     }
-}
+
+    impl<S: Fallible + ?Sized> Serialize<S> for SoaVec3 {
+        #[inline]
+        fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
+            return Ok(());
+        }
+    }
+
+    impl<D: Fallible + ?Sized> Deserialize<SoaVec3, D> for SoaVec3 {
+        #[inline]
+        fn deserialize(&self, _: &mut D) -> Result<SoaVec3, D::Error> {
+            return Ok(from_archived!(*self));
+        }
+    }
+
+    impl<C: ?Sized> CheckBytes<C> for SoaVec3 {
+        type Error = Error;
+
+        #[inline]
+        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+            if value as usize % mem::align_of::<SoaVec3>() != 0 {
+                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+            }
+            return Ok(&*value);
+        }
+    }
+};
+
+#[cfg(feature = "serde")]
+const _: () = {
+    use serde::ser::SerializeSeq;
+    use serde::{Deserialize, Serialize, Serializer};
+
+    impl Serialize for SoaVec3 {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut seq = serializer.serialize_seq(Some(3))?;
+            seq.serialize_element(&self.x.as_array())?;
+            seq.serialize_element(&self.y.as_array())?;
+            seq.serialize_element(&self.z.as_array())?;
+            return seq.end();
+        }
+    }
+
+    impl<'de> Deserialize<'de> for SoaVec3 {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let tmp: [[f32; 4]; 3] = Deserialize::deserialize(deserializer)?;
+            return Ok(SoaVec3::new(tmp[0], tmp[1], tmp[2]));
+        }
+    }
+};
 
 //
 // SoaQuat
@@ -376,47 +399,71 @@ impl SoaQuat {
 }
 
 #[cfg(feature = "rkyv")]
-impl rkyv::Archive for SoaQuat {
-    type Archived = SoaQuat;
-    type Resolver = ();
+const _: () = {
+    use bytecheck::CheckBytes;
+    use rkyv::{from_archived, to_archived, Archive, Deserialize, Fallible, Serialize};
+    use std::io::{Error, ErrorKind};
 
-    #[inline]
-    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
-        out.write(rkyv::to_archived!(*self as Self));
-    }
-}
+    impl Archive for SoaQuat {
+        type Archived = SoaQuat;
+        type Resolver = ();
 
-#[cfg(feature = "rkyv")]
-impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for SoaQuat {
-    #[inline]
-    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
-        return Ok(());
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SoaQuat, D> for SoaQuat {
-    #[inline]
-    fn deserialize(&self, _: &mut D) -> Result<SoaQuat, D::Error> {
-        return Ok(rkyv::from_archived!(*self));
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<C: ?Sized> bytecheck::CheckBytes<C> for SoaQuat {
-    type Error = std::io::Error;
-
-    #[inline]
-    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
-        if value as usize % mem::align_of::<SoaQuat>() != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "must be aligned to 16 bytes",
-            ));
+        #[inline]
+        unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+            out.write(to_archived!(*self as Self));
         }
-        return Ok(&*value);
     }
-}
+
+    impl<S: Fallible + ?Sized> Serialize<S> for SoaQuat {
+        #[inline]
+        fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
+            return Ok(());
+        }
+    }
+
+    impl<D: Fallible + ?Sized> Deserialize<SoaQuat, D> for SoaQuat {
+        #[inline]
+        fn deserialize(&self, _: &mut D) -> Result<SoaQuat, D::Error> {
+            return Ok(from_archived!(*self));
+        }
+    }
+
+    impl<C: ?Sized> CheckBytes<C> for SoaQuat {
+        type Error = Error;
+
+        #[inline]
+        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+            if value as usize % mem::align_of::<SoaQuat>() != 0 {
+                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+            }
+            return Ok(&*value);
+        }
+    }
+};
+
+#[cfg(feature = "serde")]
+const _: () = {
+    use serde::ser::SerializeSeq;
+    use serde::{Deserialize, Serialize, Serializer};
+
+    impl Serialize for SoaQuat {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut seq = serializer.serialize_seq(Some(3))?;
+            seq.serialize_element(&self.x.as_array())?;
+            seq.serialize_element(&self.y.as_array())?;
+            seq.serialize_element(&self.z.as_array())?;
+            seq.serialize_element(&self.w.as_array())?;
+            return seq.end();
+        }
+    }
+
+    impl<'de> Deserialize<'de> for SoaQuat {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let tmp: [[f32; 4]; 4] = Deserialize::deserialize(deserializer)?;
+            return Ok(SoaQuat::new(tmp[0], tmp[1], tmp[2], tmp[3]));
+        }
+    }
+};
 
 //
 // SoaTransform
@@ -424,6 +471,7 @@ impl<C: ?Sized> bytecheck::CheckBytes<C> for SoaQuat {
 
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SoaTransform {
     pub translation: SoaVec3,
     pub rotation: SoaQuat,
@@ -452,47 +500,47 @@ impl SoaTransform {
 }
 
 #[cfg(feature = "rkyv")]
-impl rkyv::Archive for SoaTransform {
-    type Archived = SoaTransform;
-    type Resolver = ();
+const _: () = {
+    use bytecheck::CheckBytes;
+    use rkyv::{from_archived, to_archived, Archive, Deserialize, Fallible, Serialize};
+    use std::io::{Error, ErrorKind};
 
-    #[inline]
-    unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
-        out.write(rkyv::to_archived!(*self as Self));
-    }
-}
+    impl Archive for SoaTransform {
+        type Archived = SoaTransform;
+        type Resolver = ();
 
-#[cfg(feature = "rkyv")]
-impl<S: rkyv::Fallible + ?Sized> rkyv::Serialize<S> for SoaTransform {
-    #[inline]
-    fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
-        return Ok(());
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<D: rkyv::Fallible + ?Sized> rkyv::Deserialize<SoaTransform, D> for SoaTransform {
-    #[inline]
-    fn deserialize(&self, _: &mut D) -> Result<SoaTransform, D::Error> {
-        return Ok(rkyv::from_archived!(*self));
-    }
-}
-
-#[cfg(feature = "rkyv")]
-impl<C: ?Sized> bytecheck::CheckBytes<C> for SoaTransform {
-    type Error = std::io::Error;
-
-    #[inline]
-    unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
-        if value as usize % mem::align_of::<SoaTransform>() != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "must be aligned to 16 bytes",
-            ));
+        #[inline]
+        unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
+            out.write(to_archived!(*self as Self));
         }
-        return Ok(&*value);
     }
-}
+
+    impl<S: Fallible + ?Sized> Serialize<S> for SoaTransform {
+        #[inline]
+        fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
+            return Ok(());
+        }
+    }
+
+    impl<D: Fallible + ?Sized> Deserialize<SoaTransform, D> for SoaTransform {
+        #[inline]
+        fn deserialize(&self, _: &mut D) -> Result<SoaTransform, D::Error> {
+            return Ok(from_archived!(*self));
+        }
+    }
+
+    impl<C: ?Sized> CheckBytes<C> for SoaTransform {
+        type Error = Error;
+
+        #[inline]
+        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+            if value as usize % mem::align_of::<SoaTransform>() != 0 {
+                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+            }
+            return Ok(&*value);
+        }
+    }
+};
 
 //
 // AosMat4

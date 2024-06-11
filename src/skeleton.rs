@@ -78,6 +78,7 @@ const _: () = {
 ///
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Skeleton {
     joint_rest_poses: Vec<SoaTransform>,
     joint_parents: Vec<i16>,
@@ -130,7 +131,7 @@ impl Skeleton {
 
         let num_joints: i32 = archive.read()?;
         if num_joints == 0 || !with_joints {
-            return Ok(SkeletonMeta{
+            return Ok(SkeletonMeta {
                 version: Self::version(),
                 num_joints,
                 joint_names: BiHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
@@ -150,7 +151,7 @@ impl Skeleton {
 
         let joint_parents: Vec<i16> = archive.read_vec(num_joints as usize)?;
 
-        return Ok(SkeletonMeta{
+        return Ok(SkeletonMeta {
             version: Self::version(),
             num_joints,
             joint_names,

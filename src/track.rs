@@ -116,6 +116,7 @@ impl TrackValue for Quat {
 /// all start by looking up the keyframes to interpolate indeed.
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Track<V: TrackValue> {
     key_count: u32,
     ratios: Vec<f32>,

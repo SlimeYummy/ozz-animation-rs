@@ -13,6 +13,7 @@ use crate::track::Track;
 /// Structure of an edge as detected by the job.
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Edge {
     /// Ratio at which track value crossed threshold.
     ratio: f32,
