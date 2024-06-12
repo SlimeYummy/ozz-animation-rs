@@ -14,7 +14,7 @@ exclude = ["/.circleci", "/.github", "/demo", "/expected", "/output", "/resource
 resolver = "2"
 
 [features]
-default = ["rkyv"]
+default = ["rkyv", "serde"]
 serde = ["dep:serde", "glam/serde", "bimap/serde" ]
 rkyv = ["dep:rkyv", "dep:bytecheck", "glam/rkyv", "glam/bytecheck"]
 wasm = []
@@ -33,4 +33,5 @@ wasm-bindgen = { version = "0.2", optional = true }
 
 [dev-dependencies]
 miniz_oxide = "0.7"
+serde_json = "1.0"
 wasm-bindgen-test = "0.3"

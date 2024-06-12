@@ -498,9 +498,7 @@ macro_rules! skinning_impl {
 
 #[inline(always)]
 fn mat4_col_mul(m: &Mat4, v: Vec4) -> Mat4 {
-    // println!("mat4_col_mul: {:?}, {:?}", m, v);
     let res = Mat4::from_cols(m.x_axis * v, m.y_axis * v, m.z_axis * v, m.w_axis * v);
-    // println!("mat4_col_mul_res: {:?}", res);
     return res;
 }
 
