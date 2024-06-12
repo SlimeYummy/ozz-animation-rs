@@ -1514,4 +1514,19 @@ mod tests {
         let transform_de: SoaTransform = archived.deserialize(&mut rkyv::Infallible).unwrap();
         assert_eq!(transform_de, transform);
     }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_serde() {
+        let vec3 = SoaVec3::splat_col([2.0, 3.0, 4.0]);
+        let json = serde_json::to_string(&vec3).unwrap();
+        let vec3_de: SoaVec3 = serde_json::from_str(&json).unwrap();
+        assert_eq!(vec3_de, vec3);
+        
+        let quat = SoaQuat::splat_col([2.0, 3.0, 4.0, 5.0]);
+        let json = serde_json::to_string(&quat).unwrap();
+        let quat_de: SoaQuat = serde_json::from_str(&json).unwrap();
+        assert_eq!(quat_de, quat);
+    }
 }

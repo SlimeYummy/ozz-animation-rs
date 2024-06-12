@@ -776,9 +776,8 @@ const _: () = {
 
 #[cfg(feature = "serde")]
 const _: () = {
-    use serde::de::value::Error;
     use serde::de::{self, MapAccess, Visitor};
-    use serde::ser::{SerializeMap, SerializeSeq};
+    use serde::ser::SerializeMap;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     impl Serialize for SamplingContext {
@@ -808,8 +807,7 @@ const _: () = {
 
     impl<'de> Deserialize<'de> for SamplingContext {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<SamplingContext, D::Error> {
-            let mut ctx = SamplingContext::new(0);
-            return Ok(ctx);
+            return deserializer.deserialize_map(SamplingContextVisitor);
         }
     }
 
@@ -827,6 +825,7 @@ const _: () = {
             while let Some(key) = map.next_key::<&str>()? {
                 if key == "max_tracks" {
                     max_tracks = Some(map.next_value()?);
+                    break;
                 } else {
                     map.next_value::<serde::de::IgnoredAny>()?;
                 }
@@ -1779,6 +1778,41 @@ mod sampling_tests {
         }
 
         let ctx_de: SamplingContext = archived.deserialize(&mut rkyv::Infallible).unwrap();
+        assert_eq!(ctx_de.size(), ctx.size());
+        assert_eq!(ctx_de.animation_id, ctx.animation_id);
+        assert_eq!(ctx_de.ratio, ctx.ratio);
+        assert_eq!(ctx_de.translation_cursor, ctx.translation_cursor);
+        assert_eq!(ctx_de.rotation_cursor, ctx.rotation_cursor);
+        assert_eq!(ctx_de.scale_cursor, ctx.scale_cursor);
+        assert_eq!(ctx_de.translations(), ctx.translations());
+        assert_eq!(ctx_de.rotations(), ctx.rotations());
+        assert_eq!(ctx_de.scales(), ctx.scales());
+        assert_eq!(ctx_de.translation_keys(), ctx.translation_keys());
+        assert_eq!(ctx_de.rotation_keys(), ctx.rotation_keys());
+        assert_eq!(ctx_de.scale_keys(), ctx.scale_keys());
+        assert_eq!(ctx_de.outdated_translations(), ctx.outdated_translations());
+        assert_eq!(ctx_de.outdated_rotations(), ctx.outdated_rotations());
+        assert_eq!(ctx_de.outdated_scales(), ctx.outdated_scales());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_serde() {
+        let animation = Rc::new(Animation::from_path("./resource/animation-blending-1.ozz").unwrap());
+        let aligned_tracks = animation.num_aligned_tracks();
+
+        let mut job = SamplingJob::default();
+        job.set_animation(animation.clone());
+        job.set_context(SamplingContext::new(aligned_tracks));
+        job.set_output(make_buf(vec![SoaTransform::default(); animation.num_soa_tracks()]));
+        job.set_ratio(0.5);
+        job.run().unwrap();
+
+        let ctx: SamplingContext = job.context().unwrap().clone();
+        let json = serde_json::to_string(&ctx).unwrap();
+        let ctx_de: SamplingContext = serde_json::from_str(&json).unwrap();
+
         assert_eq!(ctx_de.size(), ctx.size());
         assert_eq!(ctx_de.animation_id, ctx.animation_id);
         assert_eq!(ctx_de.ratio, ctx.ratio);
