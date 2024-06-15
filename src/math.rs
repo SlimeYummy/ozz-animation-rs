@@ -40,6 +40,7 @@ const SIGN_W: i32x4 = i32x4::from_array([0, 0, 0, core::i32::MIN]);
 // SoaVec3
 //
 
+/// Structure of Arrays (SoA) for Vec3.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct SoaVec3 {
@@ -236,6 +237,7 @@ const _: () = {
 // SoaQuat
 //
 
+/// Structure of Arrays (SoA) for Quaternions.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct SoaQuat {
@@ -469,6 +471,7 @@ const _: () = {
 // SoaTransform
 //
 
+/// Structure of Arrays (SoA) for Transformations.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -758,6 +761,8 @@ impl AosMat4 {
 //
 // SoaMat4
 //
+
+/// Structure of Arrays (SoA) for 4x4 Matrices.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct SoaMat4 {

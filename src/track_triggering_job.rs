@@ -173,6 +173,7 @@ where
     }
 }
 
+/// Iterator of `Edge` that represents the detected edges.
 #[derive(Debug)]
 pub struct TrackTriggeringIter<'t, T>
 where
