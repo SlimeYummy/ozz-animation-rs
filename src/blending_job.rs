@@ -66,6 +66,7 @@ impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
     }
 }
 
+/// Blending context for storing intermediate blending data in `BlendingJob`.
 #[derive(Debug, Clone)]
 pub struct BlendingContext {
     num_passes: u32,

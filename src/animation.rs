@@ -1,5 +1,5 @@
 //!
-//!
+//! Animation data structure definition.
 //!
 
 use glam::{Quat, Vec3, Vec4};
@@ -12,6 +12,7 @@ use crate::archive::{Archive, ArchiveRead};
 use crate::base::OzzError;
 use crate::math::{f16_to_f32, fx4, ix4, simd_f16_to_f32, SoaQuat, SoaVec3};
 
+/// Float3 key for `Animation` track.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
@@ -51,6 +52,7 @@ impl ArchiveRead<Float3Key> for Float3Key {
     }
 }
 
+/// Quaternion key for `Animation` track.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
