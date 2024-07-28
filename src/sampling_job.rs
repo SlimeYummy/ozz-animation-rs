@@ -888,6 +888,35 @@ const _: () = {
     }
 };
 
+pub trait AsSamplingContext {
+    fn as_ref(&self) -> &SamplingContext;
+    fn as_mut(&mut self) -> &mut SamplingContext;
+}
+
+impl AsSamplingContext for SamplingContext {
+    #[inline(always)]
+    fn as_ref(&self) -> &SamplingContext {
+        return self;
+    }
+
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut SamplingContext {
+        return self;
+    }
+}
+
+impl AsSamplingContext for &'_ mut SamplingContext {
+    #[inline(always)]
+    fn as_ref(&self) -> &SamplingContext {
+        return self;
+    }
+
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut SamplingContext {
+        return *self;
+    }
+}
+
 ///
 /// Samples an animation at a given time ratio in the unit interval 0.0-1.0 (where 0.0 is the beginning of
 /// the animation, 1.0 is the end), to output the corresponding posture in local-space.
@@ -900,27 +929,29 @@ const _: () = {
 /// (in/output) and will thus not delete them during job's destruction.
 ///
 #[derive(Debug)]
-pub struct SamplingJob<A = Rc<Animation>, O = Rc<RefCell<Vec<SoaTransform>>>>
+pub struct SamplingJob<A = Rc<Animation>, O = Rc<RefCell<Vec<SoaTransform>>>, C = SamplingContext>
 where
     A: OzzObj<Animation>,
     O: OzzMutBuf<SoaTransform>,
+    C: AsSamplingContext,
 {
     animation: Option<A>,
-    context: Option<SamplingContext>,
+    context: Option<C>,
     ratio: f32,
     output: Option<O>,
 }
 
-pub type SamplingJobRef<'t> = SamplingJob<&'t Animation, &'t mut [SoaTransform]>;
-pub type SamplingJobRc = SamplingJob<Rc<Animation>, Rc<RefCell<Vec<SoaTransform>>>>;
-pub type SamplingJobArc = SamplingJob<Arc<Animation>, Arc<RwLock<Vec<SoaTransform>>>>;
+pub type SamplingJobRef<'t> = SamplingJob<&'t Animation, &'t mut [SoaTransform], &'t mut SamplingContext>;
+pub type SamplingJobRc = SamplingJob<Rc<Animation>, Rc<RefCell<Vec<SoaTransform>>>, SamplingContext>;
+pub type SamplingJobArc = SamplingJob<Arc<Animation>, Arc<RwLock<Vec<SoaTransform>>>, SamplingContext>;
 
-impl<A, O> Default for SamplingJob<A, O>
+impl<A, O, C> Default for SamplingJob<A, O, C>
 where
     A: OzzObj<Animation>,
     O: OzzMutBuf<SoaTransform>,
+    C: AsSamplingContext,
 {
-    fn default() -> SamplingJob<A, O> {
+    fn default() -> SamplingJob<A, O, C> {
         return SamplingJob {
             animation: None,
             context: None,
@@ -930,10 +961,11 @@ where
     }
 }
 
-impl<A, O> SamplingJob<A, O>
+impl<A, O, C> SamplingJob<A, O, C>
 where
     A: OzzObj<Animation>,
     O: OzzMutBuf<SoaTransform>,
+    C: AsSamplingContext,
 {
     /// Gets animation to sample of `SamplingJob`.
     #[inline]
@@ -955,13 +987,13 @@ where
 
     /// Gets context of `SamplingJob`. See [SamplingContext].
     #[inline]
-    pub fn context(&self) -> Option<&SamplingContext> {
+    pub fn context(&self) -> Option<&C> {
         return self.context.as_ref();
     }
 
     /// Sets context of `SamplingJob`. See [SamplingContext].
     #[inline]
-    pub fn set_context(&mut self, ctx: SamplingContext) {
+    pub fn set_context(&mut self, ctx: C) {
         self.context = Some(ctx);
     }
 
@@ -973,7 +1005,7 @@ where
 
     /// Takes context of `SamplingJob`. See [SamplingContext].
     #[inline]
-    pub fn take_context(&mut self) -> Option<SamplingContext> {
+    pub fn take_context(&mut self) -> Option<C> {
         return self.context.take();
     }
 
@@ -1027,7 +1059,7 @@ where
             let context = self.context.as_ref()?;
             let output = self.output.as_ref()?.buf().ok()?;
 
-            let mut ok = context.max_soa_tracks() >= animation.num_soa_tracks();
+            let mut ok = context.as_ref().max_soa_tracks() >= animation.num_soa_tracks();
             ok &= output.len() >= animation.num_soa_tracks();
             return Some(ok);
         })()
@@ -1041,7 +1073,7 @@ where
         let ctx = self.context.as_mut().ok_or(OzzError::InvalidJob)?;
         let mut output = self.output.as_mut().ok_or(OzzError::InvalidJob)?.mut_buf()?;
 
-        let mut ok = ctx.max_soa_tracks() >= animation.num_soa_tracks();
+        let mut ok = ctx.as_ref().max_soa_tracks() >= animation.num_soa_tracks();
         ok &= output.len() >= animation.num_soa_tracks();
         if !ok {
             return Err(OzzError::InvalidJob);
@@ -1051,18 +1083,18 @@ where
             return Ok(());
         }
 
-        Self::step_context(animation, ctx, self.ratio);
+        Self::step_context(animation, ctx.as_mut(), self.ratio);
 
-        Self::update_translation_cursor(animation, ctx, self.ratio);
-        Self::update_translation_key_frames(animation, ctx);
+        Self::update_translation_cursor(animation, ctx.as_mut(), self.ratio);
+        Self::update_translation_key_frames(animation, ctx.as_mut());
 
-        Self::update_rotation_cursor(animation, ctx, self.ratio);
-        Self::update_rotation_key_frames(animation, ctx);
+        Self::update_rotation_cursor(animation, ctx.as_mut(), self.ratio);
+        Self::update_rotation_key_frames(animation, ctx.as_mut());
 
-        Self::update_scale_cursor(animation, ctx, self.ratio);
-        Self::update_scale_key_frames(animation, ctx);
+        Self::update_scale_cursor(animation, ctx.as_mut(), self.ratio);
+        Self::update_scale_key_frames(animation, ctx.as_mut());
 
-        Self::interpolates(animation, ctx, self.ratio, &mut output)?;
+        Self::interpolates(animation, ctx.as_mut(), self.ratio, &mut output)?;
 
         return Ok(());
     }
