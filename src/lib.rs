@@ -69,7 +69,10 @@ pub mod track_triggering_job;
 
 pub use animation::Animation;
 pub use archive::{Archive, ArchiveRead};
-pub use base::{OzzBuf, OzzError, OzzMutBuf, OzzObj, SKELETON_MAX_JOINTS, SKELETON_MAX_SOA_JOINTS, SKELETON_NO_PARENT};
+pub use base::{
+    ozz_arc_buf, ozz_rc_buf, OzzArcBuf, OzzBuf, OzzError, OzzMutBuf, OzzObj, OzzRcBuf, SKELETON_MAX_JOINTS,
+    SKELETON_MAX_SOA_JOINTS, SKELETON_NO_PARENT,
+};
 pub use blending_job::{BlendingContext, BlendingJob, BlendingJobArc, BlendingJobRc, BlendingJobRef, BlendingLayer};
 pub use ik_aim_job::IKAimJob;
 pub use ik_two_bone_job::IKTwoBoneJob;

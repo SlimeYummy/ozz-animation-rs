@@ -41,57 +41,40 @@ pub enum OzzError {
     /// Custom errors.
     /// Ozz-animation-rs does not generate this error (except test & nodejs), but you can use it in your own code.
     #[error("Custom error: {0}")]
-    Custom(String),
+    Custom(Box<String>),
 }
 
 impl OzzError {
+    pub fn custom<S: ToString>(s: S) -> OzzError {
+        return OzzError::Custom(Box::new(s.to_string()));
+    }
+
     pub fn is_lock_poison(&self) -> bool {
-        return match self {
-            OzzError::LockPoison => true,
-            _ => false,
-        };
+        return matches!(self, OzzError::LockPoison);
     }
 
     pub fn is_invalid_job(&self) -> bool {
-        return match self {
-            OzzError::InvalidJob => true,
-            _ => false,
-        };
+        return matches!(self, OzzError::InvalidJob);
     }
 
     pub fn is_io(&self) -> bool {
-        return match self {
-            OzzError::IO(_) => true,
-            _ => false,
-        };
+        return matches!(self, OzzError::IO(_));
     }
 
     pub fn is_utf8(&self) -> bool {
-        return match self {
-            OzzError::Utf8(_) => true,
-            _ => false,
-        };
+        return matches!(self, OzzError::Utf8(_));
     }
 
     pub fn is_invalid_tag(&self) -> bool {
-        return match self {
-            OzzError::InvalidTag => true,
-            _ => false,
-        };
+        return matches!(self, OzzError::InvalidTag);
     }
 
     pub fn is_invalid_version(&self) -> bool {
-        return match self {
-            OzzError::InvalidVersion => true,
-            _ => false,
-        };
+        return matches!(self, OzzError::InvalidVersion);
     }
 
     pub fn is_custom(&self) -> bool {
-        return match self {
-            OzzError::Custom(_) => true,
-            _ => false,
-        };
+        return matches!(self, OzzError::Custom(_));
     }
 }
 
@@ -239,7 +222,7 @@ impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a [T] {
     }
 }
 
-pub struct ObSliceRef<'t, T>(&'t [T]);
+pub struct ObSliceRef<'t, T>(pub &'t [T]);
 
 impl<'t, T> Deref for ObSliceRef<'t, T> {
     type Target = [T];
@@ -276,7 +259,7 @@ impl<'a, T: 'static + Debug + Clone> OzzMutBuf<T> for &'a mut [T] {
     }
 }
 
-pub struct ObSliceRefMut<'t, T>(&'t mut [T]);
+pub struct ObSliceRefMut<'t, T>(pub &'t mut [T]);
 
 impl<'t, T> Deref for ObSliceRefMut<'t, T> {
     type Target = [T];
@@ -329,7 +312,7 @@ impl<T: 'static + Debug + Clone> OzzBuf<T> for Rc<RefCell<Vec<T>>> {
     }
 }
 
-pub struct ObCellRef<'t, T>(Ref<'t, Vec<T>>);
+pub struct ObCellRef<'t, T>(pub Ref<'t, Vec<T>>);
 
 impl<'t, T> Deref for ObCellRef<'t, T> {
     type Target = [T];
@@ -349,7 +332,7 @@ impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Rc<RefCell<Vec<T>>> {
     }
 }
 
-pub struct ObCellRefMut<'t, T>(RefMut<'t, Vec<T>>);
+pub struct ObCellRefMut<'t, T>(pub RefMut<'t, Vec<T>>);
 
 impl<'t, T> Deref for ObCellRefMut<'t, T> {
     type Target = [T];
@@ -383,7 +366,7 @@ impl<T: 'static + Debug + Clone> OzzBuf<T> for Arc<RwLock<Vec<T>>> {
     }
 }
 
-pub struct ObRwLockReadGuard<'t, T>(RwLockReadGuard<'t, Vec<T>>);
+pub struct ObRwLockReadGuard<'t, T>(pub RwLockReadGuard<'t, Vec<T>>);
 
 impl<'t, T> Deref for ObRwLockReadGuard<'t, T> {
     type Target = [T];
@@ -406,7 +389,7 @@ impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Arc<RwLock<Vec<T>>> {
     }
 }
 
-pub struct ObRwLockWriteGuard<'t, T>(RwLockWriteGuard<'t, Vec<T>>);
+pub struct ObRwLockWriteGuard<'t, T>(pub RwLockWriteGuard<'t, Vec<T>>);
 
 impl<'t, T> Deref for ObRwLockWriteGuard<'t, T> {
     type Target = [T];
@@ -422,4 +405,22 @@ impl<'t, T> DerefMut for ObRwLockWriteGuard<'t, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         return self.0.as_mut_slice();
     }
+}
+
+/// Shortcuts for Rc<RefCell<T>>.
+pub type OzzRcBuf<T> = Rc<RefCell<Vec<T>>>;
+
+/// Creates a new `Rc<RefCell<Vec<T>>>`.
+#[inline]
+pub fn ozz_rc_buf<T>(v: Vec<T>) -> OzzRcBuf<T> {
+    return Rc::new(RefCell::new(v));
+}
+
+/// Shortcuts for Arc<RwLock<T>>.
+pub type OzzArcBuf<T> = Arc<RwLock<Vec<T>>>;
+
+/// Creates a new `Arc<RwLock<Vec<T>>>`.
+#[inline]
+pub fn ozz_arc_buf<T>(v: Vec<T>) -> OzzArcBuf<T> {
+    return Arc::new(RwLock::new(v));
 }
