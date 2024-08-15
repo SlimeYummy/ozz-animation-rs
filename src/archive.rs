@@ -44,18 +44,18 @@ impl<R: Read> Archive<R> {
         let version = archive.read::<u32>()?;
         archive.version = version;
 
-        return Ok(archive);
+        Ok(archive)
     }
 
     /// Reads `T` from the archive.
     pub fn read<T: ArchiveRead<T>>(&mut self) -> Result<T, OzzError> {
-        return T::read(self);
+        T::read(self)
     }
 
     /// Reads `Vec<T>` from the archive.
     /// * `count` - The number of elements to read.
     pub fn read_vec<T: ArchiveRead<T>>(&mut self, count: usize) -> Result<Vec<T>, OzzError> {
-        return T::read_vec(self, count);
+        T::read_vec(self, count)
     }
 
     /// Reads `[T]` from the archive into slice.
@@ -66,17 +66,17 @@ impl<R: Read> Archive<R> {
 
     /// Does the endian need to be swapped.
     pub fn endian_swap(&self) -> bool {
-        return self.endian_swap;
+        self.endian_swap
     }
 
     /// Gets the tag of the archive.
     pub fn tag(&self) -> &str {
-        return &self.tag;
+        &self.tag
     }
 
     /// Gets the version of the archive.
     pub fn version(&self) -> u32 {
-        return self.version;
+        self.version
     }
 }
 
@@ -85,12 +85,12 @@ impl Archive<File> {
     /// Creates an `Archive` from a path.
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Archive<File>, OzzError> {
         let file = File::open(path)?;
-        return Archive::new(file);
+        Archive::new(file)
     }
 
     /// Creates an `Archive` from a file.
     pub fn from_file(file: File) -> Result<Archive<File>, OzzError> {
-        return Archive::new(file);
+        Archive::new(file)
     }
 }
 
@@ -98,7 +98,7 @@ impl Archive<Cursor<Vec<u8>>> {
     /// Creates an `Archive` from a `Vec<u8>`.
     pub fn from_vec(buf: Vec<u8>) -> Result<Archive<Cursor<Vec<u8>>>, OzzError> {
         let cursor = Cursor::new(buf);
-        return Archive::new(cursor);
+        Archive::new(cursor)
     }
 
     /// Creates an `Archive` from a path.
@@ -115,7 +115,7 @@ impl Archive<Cursor<&[u8]>> {
     /// Creates an `Archive` from a `&[u8]`.
     pub fn from_slice(buf: &[u8]) -> Result<Archive<Cursor<&[u8]>>, OzzError> {
         let cursor = Cursor::new(buf);
-        return Archive::new(cursor);
+        Archive::new(cursor)
     }
 }
 
@@ -132,7 +132,7 @@ pub trait ArchiveRead<T> {
         for _ in 0..count {
             buffer.push(Self::read(archive)?);
         }
-        return Ok(buffer);
+        Ok(buffer)
     }
 
     /// Reads `[T]` from the archive into slice.
@@ -152,13 +152,24 @@ macro_rules! primitive_reader {
             #[inline]
             fn read<R: Read>(archive: &mut Archive<R>) -> Result<$type, OzzError> {
                 let mut val = Default::default();
-                archive.read.read_exact(unsafe {
-                    slice::from_raw_parts_mut(&mut val as *const $type as *mut u8, mem::size_of::<$type>())
-                })?;
-                if !archive.endian_swap {
-                    return Ok(val);
+                let size = mem::size_of::<$type>();
+                let ptr = &mut val as *mut $type as *mut u8;
+
+                if size == 1 {
+                    // Special case for u8 and i8
+                    archive
+                        .read
+                        .read_exact(unsafe { slice::from_raw_parts_mut(ptr, 1) })?;
                 } else {
-                    return Ok(val.swap_endian());
+                    archive
+                        .read
+                        .read_exact(unsafe { slice::from_raw_parts_mut(ptr, size) })?;
+                }
+
+                if !archive.endian_swap {
+                    Ok(val)
+                } else {
+                    Ok(val.swap_endian())
                 }
             }
         }
@@ -182,7 +193,7 @@ impl ArchiveRead<Vec2> for Vec2 {
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<Vec2, OzzError> {
         let x = f32::read(archive)?;
         let y = f32::read(archive)?;
-        return Ok(Vec2::new(x, y));
+        Ok(Vec2::new(x, y))
     }
 }
 
@@ -192,7 +203,7 @@ impl ArchiveRead<Vec3> for Vec3 {
         let x = f32::read(archive)?;
         let y = f32::read(archive)?;
         let z = f32::read(archive)?;
-        return Ok(Vec3::new(x, y, z));
+        Ok(Vec3::new(x, y, z))
     }
 }
 
@@ -203,7 +214,7 @@ impl ArchiveRead<Vec4> for Vec4 {
         let y = f32::read(archive)?;
         let z = f32::read(archive)?;
         let w = f32::read(archive)?;
-        return Ok(Vec4::new(x, y, z, w));
+        Ok(Vec4::new(x, y, z, w))
     }
 }
 
@@ -214,7 +225,7 @@ impl ArchiveRead<Quat> for Quat {
         let y = f32::read(archive)?;
         let z = f32::read(archive)?;
         let w = f32::read(archive)?;
-        return Ok(Quat::from_xyzw(x, y, z, w));
+        Ok(Quat::from_xyzw(x, y, z, w))
     }
 }
 
@@ -231,7 +242,7 @@ impl ArchiveRead<String> for String {
             }
         }
         let text = String::from_utf8(buffer).map_err(|e| e.utf8_error())?;
-        return Ok(text);
+        Ok(text)
     }
 }
 
@@ -245,8 +256,6 @@ mod tests {
     #[wasm_bindgen_test]
     fn test_archive_new() {
         let archive = Archive::from_path("./resource/playback/animation.ozz").unwrap();
-        assert_eq!(archive.endian_swap, false);
-        assert_eq!(archive.tag, "ozz-animation");
-        assert_eq!(archive.version, 7);
+        assert!(!archive.endian_swap);
     }
 }

@@ -69,7 +69,7 @@ where
     O: OzzMutBuf<Vec3>,
 {
     fn default() -> Self {
-        return SkinningJob {
+        SkinningJob {
             vertex_count: 0,
             influences_count: 0,
 
@@ -85,7 +85,7 @@ where
             out_positions: None,
             out_normals: None,
             out_tangents: None,
-        };
+        }
     }
 }
 
@@ -100,7 +100,7 @@ where
     /// Gets vertex count of `SkinningJob`.
     #[inline]
     pub fn vertex_count(&self) -> usize {
-        return self.vertex_count;
+        self.vertex_count
     }
 
     /// Sets vertex count of `SkinningJob`.
@@ -115,7 +115,7 @@ where
     /// Gets influences count of `SkinningJob`.
     #[inline]
     pub fn influences_count(&self) -> usize {
-        return self.influences_count;
+        self.influences_count
     }
 
     /// Sets influences count of `SkinningJob`.
@@ -134,7 +134,7 @@ where
     /// Gets joint matrices of `SkinningJob`.
     #[inline]
     pub fn joint_matrices(&self) -> Option<&JM> {
-        return self.joint_matrices.as_ref();
+        self.joint_matrices.as_ref()
     }
 
     /// Sets joint matrices of `SkinningJob`.
@@ -338,7 +338,7 @@ where
 
     /// Validates `SkinningJob` parameters.
     pub fn validate(&self) -> bool {
-        return (|| {
+        (|| {
             let mut ok = self.influences_count > 0;
             ok &= !self.joint_matrices.as_ref()?.buf().ok()?.is_empty();
 
@@ -365,13 +365,13 @@ where
                 ok &= self.in_tangents.is_none();
             }
 
-            return Some(ok);
+            Some(ok)
         })()
-        .unwrap_or(false);
+        .unwrap_or(false)
     }
 }
 
-fn unpack_buf<'t, T, B>(ozz_buf: &'t Option<B>, size: usize) -> Result<B::Buf<'t>, OzzError>
+fn unpack_buf<T, B>(ozz_buf: &Option<B>, size: usize) -> Result<B::Buf<'_>, OzzError>
 where
     T: Debug + Clone,
     B: OzzBuf<T>,
@@ -380,10 +380,10 @@ where
     if buf.len() < size {
         return Err(OzzError::InvalidJob);
     }
-    return Ok(buf);
+    Ok(buf)
 }
 
-fn unpack_mut_buf<'t, T, B>(ozz_buf: &'t mut Option<B>, size: usize) -> Result<B::MutBuf<'t>, OzzError>
+fn unpack_mut_buf<T, B>(ozz_buf: &mut Option<B>, size: usize) -> Result<B::MutBuf<'_>, OzzError>
 where
     T: Debug + Clone,
     B: OzzMutBuf<T>,
@@ -392,7 +392,7 @@ where
     if buf.len() < size {
         return Err(OzzError::InvalidJob);
     }
-    return Ok(buf);
+    Ok(buf)
 }
 
 #[rustfmt::skip]
@@ -464,27 +464,31 @@ macro_rules! skinning_impl {
         );
 
         for i in 0..$self.vertex_count {
-            let weight_offset = i * ($n - 1);
             let index_offset = i * $n;
+            let mut transform = Mat4::IDENTITY;
+            it!($it, let mut transform_it = Mat4::IDENTITY);
 
-            let weight = Vec4::splat(weights[weight_offset]);
-            let mut weight_sum = weight;
-            let joint_index = indices[index_offset] as usize;
-            let mut transform = mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
-            it!($it, let mut transform_it = mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
+            if $n == 1 {
+                let joint_index = indices[index_offset] as usize;
+                transform = *matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?;
+                it!($it, transform_it = *it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?);
+            } else {
+                let weight_offset = i * ($n - 1);
+                let mut weight_sum = Vec4::ZERO;
 
-            for j in 1..($n - 1) {
-                let weight = Vec4::splat(weights[weight_offset + j]);
-                weight_sum += weight;
-                let joint_index = indices[index_offset + j] as usize;
+                for j in 0..($n - 1) {
+                    let weight = Vec4::splat(weights[weight_offset + j]);
+                    weight_sum += weight;
+                    let joint_index = indices[index_offset + j] as usize;
+                    transform += mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
+                    it!($it, transform_it += mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
+                }
+
+                let weight = Vec4::ONE - weight_sum;
+                let joint_index = indices[index_offset + $n - 1] as usize;
                 transform += mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
                 it!($it, transform_it += mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
             }
-
-            let weight = Vec4::ONE - weight_sum;
-            let joint_index = indices[index_offset + $n - 1] as usize;
-            transform += mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
-            it!($it, transform_it += mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
 
             pnt!($pnt,
                 out_positions[i] = transform.transform_point3(in_positions[i]);
@@ -498,8 +502,7 @@ macro_rules! skinning_impl {
 
 #[inline(always)]
 fn mat4_col_mul(m: &Mat4, v: Vec4) -> Mat4 {
-    let res = Mat4::from_cols(m.x_axis * v, m.y_axis * v, m.z_axis * v, m.w_axis * v);
-    return res;
+    Mat4::from_cols(m.x_axis * v, m.y_axis * v, m.z_axis * v, m.w_axis * v)
 }
 
 macro_rules! skinning_c {
@@ -530,7 +533,7 @@ where
     /// Runs skinning job's task.
     /// The validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
-        if self.influences_count <= 0 {
+        if self.influences_count == 0 {
             return Err(OzzError::InvalidJob);
         }
 
@@ -545,7 +548,7 @@ where
             }
         }
 
-        return match branch {
+        match branch {
             0 => self.skinning_1_p(),
             1 => self.skinning_1_pn(),
             2 => self.skinning_1_pnt(),
@@ -572,7 +575,7 @@ where
             23 => self.skinning_n_pn_it(),
             24 => self.skinning_n_pnt_it(),
             _ => unreachable!(),
-        };
+        }
     }
 
     skinning_1!(skinning_1_p, _, P);

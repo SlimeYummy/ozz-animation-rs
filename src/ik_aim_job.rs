@@ -59,7 +59,7 @@ impl IKAimJob {
     /// Gets target of `IKAimJob`.
     #[inline]
     pub fn target(&self) -> Vec3A {
-        return fx4_to_vec3a(self.target);
+        fx4_to_vec3a(self.target)
     }
 
     /// Sets target of `IKAimJob`.
@@ -73,7 +73,7 @@ impl IKAimJob {
     /// Gets forward of `IKAimJob`.
     #[inline]
     pub fn forward(&self) -> Vec3A {
-        return fx4_to_vec3a(self.forward);
+        fx4_to_vec3a(self.forward)
     }
 
     /// Sets forward of `IKAimJob`.
@@ -89,7 +89,7 @@ impl IKAimJob {
     /// Gets offset of `IKAimJob`.
     #[inline]
     pub fn offset(&self) -> Vec3A {
-        return fx4_to_vec3a(self.offset);
+        fx4_to_vec3a(self.offset)
     }
 
     /// Sets offset of `IKAimJob`.
@@ -103,7 +103,7 @@ impl IKAimJob {
     /// Gets up of `IKAimJob`.
     #[inline]
     pub fn up(&self) -> Vec3A {
-        return fx4_to_vec3a(self.up);
+        fx4_to_vec3a(self.up)
     }
 
     /// Sets up of `IKAimJob`.
@@ -118,7 +118,7 @@ impl IKAimJob {
     /// Gets pole vector of `IKAimJob`.
     #[inline]
     pub fn pole_vector(&self) -> Vec3A {
-        return fx4_to_vec3a(self.pole_vector);
+        fx4_to_vec3a(self.pole_vector)
     }
 
     /// Sets pole vector of `IKAimJob`.
@@ -136,7 +136,7 @@ impl IKAimJob {
     /// Gets twist angle of `IKAimJob`.
     #[inline]
     pub fn twist_angle(&self) -> f32 {
-        return self.twist_angle;
+        self.twist_angle
     }
 
     /// Sets twist angle of `IKAimJob`.
@@ -150,7 +150,7 @@ impl IKAimJob {
     /// Gets weight of `IKAimJob`.
     #[inline]
     pub fn weight(&self) -> f32 {
-        return self.weight;
+        self.weight
     }
 
     /// Sets weight of `IKAimJob`.
@@ -165,7 +165,7 @@ impl IKAimJob {
     /// Gets joint of `IKAimJob`.
     #[inline]
     pub fn joint(&self) -> Mat4 {
-        return self.joint.into();
+        self.joint.into()
     }
 
     /// Sets joint of `IKAimJob`.
@@ -182,7 +182,7 @@ impl IKAimJob {
     /// It needs to be multiplied with joint local-space quaternion.
     #[inline]
     pub fn joint_correction(&self) -> Quat {
-        return fx4_to_quat(self.joint_correction);
+        fx4_to_quat(self.joint_correction)
     }
 
     /// Gets reached of `IKAimJob`.
@@ -198,7 +198,7 @@ impl IKAimJob {
     /// Target is considered not reachable when target is between joint and offset position.
     #[inline]
     pub fn reached(&self) -> bool {
-        return self.reached;
+        self.reached
     }
 
     /// Gets reached of `IKAimJob`.
@@ -217,7 +217,7 @@ impl IKAimJob {
     /// Validates `IKAimJob` parameters.
     #[inline]
     fn validate(&self) -> bool {
-        return vec3_is_normalized(self.forward);
+        vec3_is_normalized(self.forward)
     }
 
     /// Runs aim IK job's task.
@@ -275,13 +275,12 @@ impl IKAimJob {
             rotate_plane_js = QUAT_UNIT;
         }
 
-        let twisted;
-        if self.twist_angle != 0.0 {
+        let twisted = if self.twist_angle != 0.0 {
             let twist_ss = quat_from_axis_angle(rotate_plane_axis_js, f32x4::splat(self.twist_angle));
-            twisted = quat_mul(quat_mul(twist_ss, rotate_plane_js), joint_to_target_rot_js);
+            quat_mul(quat_mul(twist_ss, rotate_plane_js), joint_to_target_rot_js)
         } else {
-            twisted = quat_mul(rotate_plane_js, joint_to_target_rot_js);
-        }
+            quat_mul(rotate_plane_js, joint_to_target_rot_js)
+        };
 
         let twisted_fu = quat_positive_w(twisted);
         if self.weight < 1.0 {
@@ -290,7 +289,7 @@ impl IKAimJob {
         } else {
             self.joint_correction = twisted_fu;
         }
-        return Ok(());
+        Ok(())
     }
 
     fn compute_offsetted_forward(forward: f32x4, offset: f32x4, target: f32x4) -> Option<f32x4> {
@@ -302,7 +301,7 @@ impl IKAimJob {
         }
         let ai_l = (r2 - ac_l2).sqrt();
         let offsetted_forward = offset + forward * fx4_splat_x(ai_l - ao_l);
-        return Some(offsetted_forward);
+        Some(offsetted_forward)
     }
 }
 

@@ -35,11 +35,11 @@ where
     T: OzzObj<Track<V>>,
 {
     fn default() -> TrackSamplingJob<V, T> {
-        return TrackSamplingJob {
+        TrackSamplingJob {
             track: None,
             ratio: 0.0,
             result: V::default(),
-        };
+        }
     }
 }
 
@@ -71,7 +71,7 @@ where
     /// Gets ratio of `TrackSamplingJob`.
     #[inline]
     pub fn ratio(&self) -> f32 {
-        return self.ratio;
+        self.ratio
     }
 
     /// Sets ratio of `TrackSamplingJob`.
@@ -87,7 +87,7 @@ where
     /// Gets **output** result of `TrackSamplingJob`.
     #[inline]
     pub fn result(&self) -> V {
-        return self.result;
+        self.result
     }
 
     /// Clears result of `TrackSamplingJob`.
@@ -105,7 +105,7 @@ where
     /// Validates `TrackSamplingJob` parameters.
     #[inline]
     pub fn validate(&self) -> bool {
-        return self.track.is_some();
+        self.track.is_some()
     }
 
     /// Runs track sampling job's task.
@@ -137,7 +137,7 @@ where
             self.result = V::lerp(v0, v1, t);
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -319,11 +319,14 @@ mod track_sampling_tests {
         job.set_track(track.clone());
 
         execute_test(&mut job, 0.0, Quat::from_xyzw(0.70710677, 0.0, 0.0, 0.70710677));
+        #[allow(clippy::excessive_precision)]
         execute_test(&mut job, 0.1, Quat::from_xyzw(0.61721331, 0.15430345, 0.0, 0.77151674));
         execute_test(&mut job, 0.4999999, Quat::from_xyzw(0.0, 0.70710677, 0.0, 0.70710677));
         execute_test(&mut job, 0.5, Quat::from_xyzw(0.0, 0.70710677, 0.0, 0.70710677));
         execute_test(&mut job, 0.6, Quat::from_xyzw(0.0, 0.70710677, 0.0, 0.70710677));
+        #[allow(clippy::approx_constant)]
         execute_test(&mut job, 0.7, Quat::from_xyzw(0.70710677, 0.0, 0.0, 0.7071067));
+        #[allow(clippy::excessive_precision)]
         execute_test(&mut job, 0.8, Quat::from_xyzw(0.38268333, 0.0, 0.0, 0.92387962));
         execute_test(&mut job, 0.9, Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
         execute_test(&mut job, 1.0, Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));

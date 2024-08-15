@@ -27,85 +27,85 @@ where
 impl TrackValue for f32 {
     #[inline]
     fn tag() -> &'static str {
-        return "ozz-float_track";
+        "ozz-float_track"
     }
 
     #[inline]
     fn lerp(a: f32, b: f32, t: f32) -> f32 {
-        return a + (b - a) * t;
+        a + (b - a) * t
     }
 
     #[inline]
     fn abs_diff_eq(a: f32, b: f32, diff: f32) -> bool {
-        return (a - b).abs() <= diff;
+        (a - b).abs() <= diff
     }
 }
 
 impl TrackValue for Vec2 {
     #[inline]
     fn tag() -> &'static str {
-        return "ozz-float2_track";
+        "ozz-float2_track"
     }
 
     #[inline]
     fn lerp(a: Vec2, b: Vec2, t: f32) -> Vec2 {
-        return Vec2::lerp(a, b, t);
+        Vec2::lerp(a, b, t)
     }
 
     #[inline]
     fn abs_diff_eq(a: Vec2, b: Vec2, diff: f32) -> bool {
-        return Vec2::abs_diff_eq(a, b, diff);
+        Vec2::abs_diff_eq(a, b, diff)
     }
 }
 
 impl TrackValue for Vec3 {
     #[inline]
     fn tag() -> &'static str {
-        return "ozz-float3_track";
+        "ozz-float3_track"
     }
 
     #[inline]
     fn lerp(a: Vec3, b: Vec3, t: f32) -> Vec3 {
-        return Vec3::lerp(a, b, t);
+        Vec3::lerp(a, b, t)
     }
 
     #[inline]
     fn abs_diff_eq(a: Vec3, b: Vec3, diff: f32) -> bool {
-        return Vec3::abs_diff_eq(a, b, diff);
+        Vec3::abs_diff_eq(a, b, diff)
     }
 }
 
 impl TrackValue for Vec4 {
     #[inline]
     fn tag() -> &'static str {
-        return "ozz-float4_track";
+        "ozz-float4_track"
     }
 
     #[inline]
     fn lerp(a: Vec4, b: Vec4, t: f32) -> Vec4 {
-        return Vec4::lerp(a, b, t);
+        Vec4::lerp(a, b, t)
     }
 
     #[inline]
     fn abs_diff_eq(a: Vec4, b: Vec4, diff: f32) -> bool {
-        return Vec4::abs_diff_eq(a, b, diff);
+        Vec4::abs_diff_eq(a, b, diff)
     }
 }
 
 impl TrackValue for Quat {
     #[inline]
     fn tag() -> &'static str {
-        return "ozz-quat_track";
+        "ozz-quat_track"
     }
 
     #[inline]
     fn lerp(a: Quat, b: Quat, t: f32) -> Quat {
-        return Quat::lerp(a, b, t);
+        Quat::lerp(a, b, t)
     }
 
     #[inline]
     fn abs_diff_eq(a: Quat, b: Quat, diff: f32) -> bool {
-        return Quat::abs_diff_eq(a, b, diff);
+        Quat::abs_diff_eq(a, b, diff)
     }
 }
 
@@ -129,13 +129,13 @@ impl<V: TrackValue> Track<V> {
     /// `Track` resource file tag for `Archive`.
     #[inline]
     pub fn tag() -> &'static str {
-        return V::tag();
+        V::tag()
     }
 
     /// `Track` resource file version for `Archive`.
     #[inline]
     pub fn version() -> u32 {
-        return 1;
+        1
     }
 
     #[cfg(test)]
@@ -143,13 +143,13 @@ impl<V: TrackValue> Track<V> {
         if values.len() != ratios.len() || (values.len() + 7) / 8 != steps.len() {
             return Err(OzzError::custom("Invalid arguments"));
         }
-        return Ok(Track {
+        Ok(Track {
             key_count: values.len() as u32,
             ratios: ratios.to_vec(),
             values: values.to_vec(),
             steps: steps.to_vec(),
             name: String::new(),
-        });
+        })
     }
 
     /// Reads an `Track` from an `Archive`.
@@ -174,27 +174,27 @@ impl<V: TrackValue> Track<V> {
             name = String::from_utf8(buf).map_err(|e| e.utf8_error())?;
         }
 
-        return Ok(Track {
+        Ok(Track {
             key_count,
             ratios,
             values,
             steps,
             name,
-        });
+        })
     }
 
     /// Reads an `Track` from a file path.
     #[cfg(not(feature = "wasm"))]
     pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Track<V>, OzzError> {
         let mut archive = Archive::from_path(path)?;
-        return Track::from_archive(&mut archive);
+        Track::from_archive(&mut archive)
     }
 
     // Only for wasm test in NodeJS environment.
     #[cfg(all(feature = "wasm", feature = "nodejs"))]
     pub fn from_path(path: &str) -> Result<Track<V>, OzzError> {
         let mut archive = Archive::from_path(path)?;
-        return Track::from_archive(&mut archive);
+        Track::from_archive(&mut archive)
     }
 }
 
@@ -202,30 +202,30 @@ impl<V: TrackValue> Track<V> {
     /// The key count in the track.
     #[inline]
     pub fn key_count(&self) -> usize {
-        return self.key_count as usize;
+        self.key_count as usize
     }
 
     /// Keyframe values.
     #[inline]
     pub fn values(&self) -> &[V] {
-        return &self.values;
+        &self.values
     }
 
     /// Keyframe ratios (0 is the beginning of the track, 1 is the end).
     #[inline]
     pub fn ratios(&self) -> &[f32] {
-        return &self.ratios;
+        &self.ratios
     }
 
     /// Keyframe modes (1 bit per key): 1 for step, 0 for linear.
     #[inline]
     pub fn steps(&self) -> &[u8] {
-        return &self.steps;
+        &self.steps
     }
 
     /// Track name.
     #[inline]
     pub fn name(&self) -> &str {
-        return &self.name;
+        &self.name
     }
 }
