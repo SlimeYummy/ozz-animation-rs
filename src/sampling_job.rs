@@ -190,9 +190,9 @@ pub struct SamplingContext {
     animation_id: u64,
     ratio: f32,
 
-    translation_cursor: usize,
-    rotation_cursor: usize,
-    scale_cursor: usize,
+    translation_cursor: u32,
+    rotation_cursor: u32,
+    scale_cursor: u32,
 }
 
 unsafe impl Send for SamplingContext {}
@@ -517,19 +517,19 @@ impl SamplingContext {
     /// Current cursors in the animation. 0 means that the context is invalid.
     #[inline]
     pub fn translation_cursor(&self) -> usize {
-        return self.translation_cursor;
+        return self.translation_cursor as usize;
     }
 
     /// Current cursors in the animation. 0 means that the context is invalid.
     #[inline]
     pub fn rotation_cursor(&self) -> usize {
-        return self.rotation_cursor;
+        return self.rotation_cursor as usize;
     }
 
     /// Current cursors in the animation. 0 means that the context is invalid.
     #[inline]
     pub fn scale_cursor(&self) -> usize {
-        return self.scale_cursor;
+        return self.scale_cursor as usize;
     }
 }
 
@@ -654,11 +654,11 @@ const _: () = {
             RelPtr::emplace(pos + fp, resolver.scale_keys_pos, fo);
 
             let (fp, fo) = out_field!(out.translation_cursor);
-            usize::resolve(&self.translation_cursor, pos + fp, (), fo);
+            u32::resolve(&self.translation_cursor, pos + fp, (), fo);
             let (fp, fo) = out_field!(out.rotation_cursor);
-            usize::resolve(&self.rotation_cursor, pos + fp, (), fo);
+            u32::resolve(&self.rotation_cursor, pos + fp, (), fo);
             let (fp, fo) = out_field!(out.scale_cursor);
-            usize::resolve(&self.scale_cursor, pos + fp, (), fo);
+            u32::resolve(&self.scale_cursor, pos + fp, (), fo);
 
             let (fp, fo) = out_field!(out.outdated_translations_ptr);
             RelPtr::emplace(pos + fp, resolver.outdated_translations_pos, fo);
@@ -744,9 +744,9 @@ const _: () = {
                     .copy_from_slice(archived.translation_keys());
                 context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
                 context.scale_keys_mut().copy_from_slice(archived.scale_keys());
-                context.translation_cursor = archived.translation_cursor as usize;
-                context.rotation_cursor = archived.rotation_cursor as usize;
-                context.scale_cursor = archived.scale_cursor as usize;
+                context.translation_cursor = archived.translation_cursor;
+                context.rotation_cursor = archived.rotation_cursor;
+                context.scale_cursor = archived.scale_cursor;
                 context
                     .outdated_translations_mut()
                     .copy_from_slice(archived.outdated_translations());
@@ -1132,11 +1132,11 @@ where
                 .last_mut()
                 .map(|x| *x = 0xFF >> last_offset);
 
-            ctx.translation_cursor = animation.num_aligned_tracks() * 2;
+            ctx.translation_cursor = (animation.num_aligned_tracks() as u32) * 2;
         }
 
-        while ctx.translation_cursor < animation.translations().len() {
-            let track = animation.translations()[ctx.translation_cursor].track as usize;
+        while ctx.translation_cursor() < animation.translations().len() {
+            let track = animation.translations()[ctx.translation_cursor()].track as usize;
             let key_idx = ctx.translation_keys()[track * 2 + 1] as usize;
             let ani_ratio = animation.translations()[key_idx].ratio;
             if ani_ratio > ratio {
@@ -1144,7 +1144,7 @@ where
             }
 
             ctx.outdated_translations_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.translations()[ctx.translation_cursor].track as usize) * 2;
+            let base = (animation.translations()[ctx.translation_cursor()].track as usize) * 2;
             ctx.translation_keys_mut()[base] = ctx.translation_keys()[base + 1];
             ctx.translation_keys_mut()[base + 1] = ctx.translation_cursor as i32;
             ctx.translation_cursor = ctx.translation_cursor + 1;
@@ -1202,11 +1202,11 @@ where
                 .last_mut()
                 .map(|x| *x = 0xFF >> last_offset);
 
-            ctx.rotation_cursor = animation.num_aligned_tracks() * 2;
+            ctx.rotation_cursor = (animation.num_aligned_tracks() as u32) * 2;
         }
 
-        while ctx.rotation_cursor < animation.rotations().len() {
-            let track = animation.rotations()[ctx.rotation_cursor].track() as usize;
+        while ctx.rotation_cursor() < animation.rotations().len() {
+            let track = animation.rotations()[ctx.rotation_cursor()].track() as usize;
             let key_idx = ctx.rotation_keys()[track * 2 + 1] as usize;
             let ani_ratio = animation.rotations()[key_idx].ratio;
             if ani_ratio > ratio {
@@ -1214,7 +1214,7 @@ where
             }
 
             ctx.outdated_rotations_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.rotations()[ctx.rotation_cursor].track() as usize) * 2;
+            let base = (animation.rotations()[ctx.rotation_cursor()].track() as usize) * 2;
             ctx.rotation_keys_mut()[base] = ctx.rotation_keys()[base + 1];
             ctx.rotation_keys_mut()[base + 1] = ctx.rotation_cursor as i32;
             ctx.rotation_cursor = ctx.rotation_cursor + 1;
@@ -1270,11 +1270,11 @@ where
             let last_offset = ((animation.num_soa_tracks() + 7) / 8 * 8) - animation.num_soa_tracks();
             ctx.outdated_scales_mut().last_mut().map(|x| *x = 0xFF >> last_offset);
 
-            ctx.scale_cursor = animation.num_aligned_tracks() * 2;
+            ctx.scale_cursor = (animation.num_aligned_tracks() as u32) * 2;
         }
 
-        while ctx.scale_cursor < animation.scales().len() {
-            let track = animation.scales()[ctx.scale_cursor].track as usize;
+        while ctx.scale_cursor() < animation.scales().len() {
+            let track = animation.scales()[ctx.scale_cursor()].track as usize;
             let key_idx = ctx.scale_keys()[track * 2 + 1] as usize;
             let ani_ratio = animation.scales()[key_idx].ratio;
             if ani_ratio > ratio {
@@ -1282,7 +1282,7 @@ where
             }
 
             ctx.outdated_scales_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.scales()[ctx.scale_cursor].track as usize) * 2;
+            let base = (animation.scales()[ctx.scale_cursor()].track as usize) * 2;
             ctx.scale_keys_mut()[base] = ctx.scale_keys()[base + 1];
             ctx.scale_keys_mut()[base + 1] = ctx.scale_cursor as i32;
             ctx.scale_cursor = ctx.scale_cursor + 1;
@@ -1794,9 +1794,9 @@ mod sampling_tests {
         assert_eq!(archived.size as usize, ctx.size());
         assert_eq!(archived.animation_id, ctx.animation_id);
         assert_eq!(archived.ratio, ctx.ratio);
-        assert_eq!(archived.translation_cursor as usize, ctx.translation_cursor);
-        assert_eq!(archived.rotation_cursor as usize, ctx.rotation_cursor);
-        assert_eq!(archived.scale_cursor as usize, ctx.scale_cursor);
+        assert_eq!(archived.translation_cursor, ctx.translation_cursor);
+        assert_eq!(archived.rotation_cursor, ctx.rotation_cursor);
+        assert_eq!(archived.scale_cursor, ctx.scale_cursor);
         unsafe {
             assert_eq!(archived.translations(), ctx.translations());
             assert_eq!(archived.rotations(), ctx.rotations());
