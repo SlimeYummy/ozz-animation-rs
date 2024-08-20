@@ -2,7 +2,7 @@
 //! Ozz-animation-rs is a rust version skeletal animation library with cross-platform deterministic.
 //!
 //! Ozz-animation-rs is based on [ozz-animation](https://github.com/guillaumeblanc/ozz-animation) library,
-//! an open source c++ 3d skeletal animation library and toolset. Ozz-animation-rs only implement ozz-animation's
+//! an open source C++ 3d skeletal animation library and toolset. Ozz-animation-rs only implement ozz-animation's
 //! runtime part. You should use this library with ozz-animation's toolset.
 //!
 //! In order to introduce cross-platform deterministic, ozz-animation-rs does not simply wrap ozz-animation's
@@ -16,8 +16,8 @@
 //! use std::rc::Rc;
 //!
 //! // Load resources
-//! let skeleton = Rc::new(Skeleton::from_path("./resource/skeleton.ozz").unwrap());
-//! let animation = Rc::new(Animation::from_path("./resource/animation.ozz").unwrap());
+//! let skeleton = Rc::new(Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap());
+//! let animation = Rc::new(Animation::from_path("./resource/playback/animation.ozz").unwrap());
 //!
 //! // Init sample job (Rc style)
 //! let mut sample_job: SamplingJobRc = SamplingJob::default();
