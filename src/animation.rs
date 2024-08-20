@@ -4,51 +4,44 @@
 
 use glam::{Quat, Vec3, Vec4};
 use std::io::Read;
-use std::mem;
 use std::simd::prelude::*;
 use std::simd::*;
+use std::{mem, slice};
 
 use crate::archive::{Archive, ArchiveRead};
 use crate::base::OzzError;
-use crate::math::{f16_to_f32, fx4, ix4, simd_f16_to_f32, SoaQuat, SoaVec3};
+use crate::math::{f16_to_f32, fx4, ix4, simd_f16_to_f32, SoaQuat, SoaVec3, ONE, ZERO};
 
 /// Float3 key for `Animation` track.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Float3Key {
-    pub ratio: f32,
-    pub track: u16,
-    pub value: [u16; 3],
-}
+pub struct Float3Key([u16; 3]);
 
 impl Float3Key {
-    pub fn new(ratio: f32, track: u16, value: [u16; 3]) -> Float3Key {
-        return Float3Key { ratio, track, value };
+    pub const fn new(value: [u16; 3]) -> Float3Key {
+        return Float3Key(value);
     }
 
+    #[inline]
     pub fn decompress(&self) -> Vec3 {
-        return Vec3::new(
-            f16_to_f32(self.value[0]),
-            f16_to_f32(self.value[1]),
-            f16_to_f32(self.value[2]),
-        );
+        return Vec3::new(f16_to_f32(self.0[0]), f16_to_f32(self.0[1]), f16_to_f32(self.0[2]));
     }
 
+    #[inline]
     pub fn simd_decompress(k0: &Float3Key, k1: &Float3Key, k2: &Float3Key, k3: &Float3Key, soa: &mut SoaVec3) {
-        soa.x = simd_f16_to_f32([k0.value[0], k1.value[0], k2.value[0], k3.value[0]]);
-        soa.y = simd_f16_to_f32([k0.value[1], k1.value[1], k2.value[1], k3.value[1]]);
-        soa.z = simd_f16_to_f32([k0.value[2], k1.value[2], k2.value[2], k3.value[2]]);
+        soa.x = simd_f16_to_f32([k0.0[0], k1.0[0], k2.0[0], k3.0[0]]);
+        soa.y = simd_f16_to_f32([k0.0[1], k1.0[1], k2.0[1], k3.0[1]]);
+        soa.z = simd_f16_to_f32([k0.0[2], k1.0[2], k2.0[2], k3.0[2]]);
     }
 }
 
 impl ArchiveRead<Float3Key> for Float3Key {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<Float3Key, OzzError> {
-        let ratio: f32 = archive.read()?;
-        let track: u16 = archive.read()?;
         let value: [u16; 3] = [archive.read()?, archive.read()?, archive.read()?];
-        return Ok(Float3Key { ratio, track, value });
+        return Ok(Float3Key(value));
     }
 }
 
@@ -57,66 +50,50 @@ impl ArchiveRead<Float3Key> for Float3Key {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct QuaternionKey {
-    pub ratio: f32,
-    // track: 13 => The track this key frame belongs to.
-    // largest: 2 => The largest component of the quaternion.
-    // sign: 1 => The sign of the largest component. 1 for negative.
-    bit_field: u16,
-    value: [i16; 3], // The quantized value of the 3 smallest components.
-}
+pub struct QuaternionKey([u16; 3]);
 
 impl QuaternionKey {
-    pub fn new(ratio: f32, bit_field: u16, value: [i16; 3]) -> QuaternionKey {
-        return QuaternionKey {
-            ratio,
-            bit_field,
-            value,
-        };
+    pub const fn new(value: [u16; 3]) -> QuaternionKey {
+        return QuaternionKey(value);
     }
 
-    pub fn track(&self) -> u16 {
-        return self.bit_field >> 3;
+    #[inline]
+    fn unpack(&self) -> (u16, u16, [u32; 3]) {
+        let packed: u32 = (self.0[0] as u32) >> 3 | (self.0[1] as u32) << 13 | (self.0[2] as u32) << 29;
+        let bigest = self.0[0] & 0x3;
+        let sign = (self.0[0] >> 2) & 0x1;
+        let value = [packed & 0x7fff, (packed >> 15) & 0x7fff, (self.0[2] as u32) >> 1];
+        return (bigest, sign, value);
     }
 
-    pub fn largest(&self) -> u16 {
-        return (self.bit_field & 0x6) >> 1;
-    }
-
-    pub fn sign(&self) -> u16 {
-        return self.bit_field & 0x1;
-    }
-
+    #[inline]
     pub fn decompress(&self) -> Quat {
         const MAPPING: [[usize; 4]; 4] = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 1, 0, 2], [0, 1, 2, 0]];
+        const SCALE: f32 = core::f32::consts::SQRT_2 / 32767.0;
+        const OFFSET: f32 = -core::f32::consts::SQRT_2 / 2.0;
 
-        let mask = &MAPPING[self.largest() as usize];
-        let mut cmp_keys = [
-            self.value[mask[0]],
-            self.value[mask[1]],
-            self.value[mask[2]],
-            self.value[mask[3]],
-        ];
-        cmp_keys[self.largest() as usize] = 0;
+        let (largest, sign, value) = self.unpack();
+        let mask = &MAPPING[largest as usize];
+        let cmp_keys = [value[mask[0]], value[mask[1]], value[mask[2]], value[mask[3]]];
 
-        const INT_2_FLOAT: f32 = 1.0f32 / (32767.0f32 * core::f32::consts::SQRT_2);
         let mut cpnt = Vec4::new(
-            (cmp_keys[0] as f32) * INT_2_FLOAT,
-            (cmp_keys[1] as f32) * INT_2_FLOAT,
-            (cmp_keys[2] as f32) * INT_2_FLOAT,
-            (cmp_keys[3] as f32) * INT_2_FLOAT,
+            SCALE * (cmp_keys[0] as f32) + OFFSET,
+            SCALE * (cmp_keys[1] as f32) + OFFSET,
+            SCALE * (cmp_keys[2] as f32) + OFFSET,
+            SCALE * (cmp_keys[3] as f32) + OFFSET,
         );
+        cpnt[largest as usize] = 0.0;
 
         let dot = cpnt[0] * cpnt[0] + cpnt[1] * cpnt[1] + cpnt[2] * cpnt[2] + cpnt[3] * cpnt[3];
-        let ww0 = f32::max(1e-16f32, 1f32 - dot);
+        let ww0 = f32::max(0.0, 1f32 - dot);
         let w0 = ww0.sqrt();
-        let restored = if self.sign() == 0 { w0 } else { -w0 };
-
-        cpnt[self.largest() as usize] = restored;
+        let restored = if sign == 0 { w0 } else { -w0 };
+        cpnt[largest as usize] = restored;
         return Quat::from_vec4(cpnt);
     }
 
     #[rustfmt::skip]
+    #[inline]
     pub fn simd_decompress(
         k0: &QuaternionKey,
         k1: &QuaternionKey,
@@ -124,11 +101,6 @@ impl QuaternionKey {
         k3: &QuaternionKey,
         soa: &mut SoaQuat,
     ) {
-        const INT_2_FLOAT: f32x4 = f32x4::from_array([1.0 / (32767.0 * core::f32::consts::SQRT_2); 4]);
-
-        const ONE: f32x4 = f32x4::from_array([1.0; 4]);
-        const SMALL: f32x4 = f32x4::from_array([1e-16; 4]);
-
         const MASK_F000:i32x4 = i32x4::from_array([-1i32, 0, 0, 0]);
         const MASK_0F00:i32x4 = i32x4::from_array([0, -1i32, 0, 0]);
         const MASK_00F0:i32x4 = i32x4::from_array([0, 0, -1i32, 0]);
@@ -136,38 +108,47 @@ impl QuaternionKey {
 
         const MAPPING: [[usize; 4]; 4] = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 1, 0, 2], [0, 1, 2, 0]];
 
-        let m0 = &MAPPING[k0.largest() as usize];
-        let m1 = &MAPPING[k1.largest() as usize];
-        let m2 = &MAPPING[k2.largest() as usize];
-        let m3 = &MAPPING[k3.largest() as usize];
+        const SCALE: f32x4 = f32x4::from_array([core::f32::consts::SQRT_2 / 32767.0; 4]);
+        const OFFSET: f32x4 = f32x4::from_array([-core::f32::consts::SQRT_2 / 2.0; 4]);
 
-        let mut cmp_keys: [f32x4; 4] = [
-            f32x4::from_array([ k0.value[m0[0]] as f32, k1.value[m1[0]] as f32, k2.value[m2[0]] as f32, k3.value[m3[0]] as f32 ]),
-            f32x4::from_array([ k0.value[m0[1]] as f32, k1.value[m1[1]] as f32, k2.value[m2[1]] as f32, k3.value[m3[1]] as f32 ]),
-            f32x4::from_array([ k0.value[m0[2]] as f32, k1.value[m1[2]] as f32, k2.value[m2[2]] as f32, k3.value[m3[2]] as f32 ]),
-            f32x4::from_array([ k0.value[m0[3]] as f32, k1.value[m1[3]] as f32, k2.value[m2[3]] as f32, k3.value[m3[3]] as f32 ]),
+        let (largest0, sign0, value0) = k0.unpack();
+        let (largest1, sign1, value1) = k1.unpack();
+        let (largest2, sign2, value2) = k2.unpack();
+        let (largest3, sign3, value3) = k3.unpack();
+
+        let m0 = &MAPPING[largest0 as usize];
+        let m1 = &MAPPING[largest1 as usize];
+        let m2 = &MAPPING[largest2 as usize];
+        let m3 = &MAPPING[largest3 as usize];
+
+        let cmp_keys: [f32x4; 4] = [
+            f32x4::from_array([ value0[m0[0]] as f32, value1[m1[0]] as f32, value2[m2[0]] as f32, value3[m3[0]] as f32 ]),
+            f32x4::from_array([ value0[m0[1]] as f32, value1[m1[1]] as f32, value2[m2[1]] as f32, value3[m3[1]] as f32 ]),
+            f32x4::from_array([ value0[m0[2]] as f32, value1[m1[2]] as f32, value2[m2[2]] as f32, value3[m3[2]] as f32 ]),
+            f32x4::from_array([ value0[m0[3]] as f32, value1[m1[3]] as f32, value2[m2[3]] as f32, value3[m3[3]] as f32 ]),
         ]; // TODO: simd int to float
-        cmp_keys[k0.largest() as usize][0] = 0.0f32;
-        cmp_keys[k1.largest() as usize][1] = 0.0f32;
-        cmp_keys[k2.largest() as usize][2] = 0.0f32;
-        cmp_keys[k3.largest() as usize][3] = 0.0f32;
 
         let mut cpnt = [
-            INT_2_FLOAT * cmp_keys[0],
-            INT_2_FLOAT * cmp_keys[1],
-            INT_2_FLOAT * cmp_keys[2],
-            INT_2_FLOAT * cmp_keys[3],
+            SCALE * cmp_keys[0] + OFFSET,
+            SCALE * cmp_keys[1] + OFFSET,
+            SCALE * cmp_keys[2] + OFFSET,
+            SCALE * cmp_keys[3] + OFFSET,
         ];
+        cpnt[largest0 as usize] = fx4(ix4(cpnt[largest0 as usize]) & !MASK_F000);
+        cpnt[largest1 as usize] = fx4(ix4(cpnt[largest1 as usize]) & !MASK_0F00);
+        cpnt[largest2 as usize] = fx4(ix4(cpnt[largest2 as usize]) & !MASK_00F0);
+        cpnt[largest3 as usize] = fx4(ix4(cpnt[largest3 as usize]) & !MASK_000F);
+
         let dot = cpnt[0] * cpnt[0] + cpnt[1] * cpnt[1] + cpnt[2] * cpnt[2] + cpnt[3] * cpnt[3];
-        let ww0 = f32x4::simd_max(SMALL, ONE - dot);
+        let ww0 =  f32x4::simd_max(ZERO, ONE - dot); // prevent NaN, different from C++ code
         let w0 = ww0.sqrt();
-        let sign = i32x4::from_array([k0.sign() as i32, k1.sign() as i32, k2.sign() as i32, k3.sign() as i32]) << 31;
+        let sign = i32x4::from_array([sign0 as i32, sign1 as i32, sign2 as i32, sign3 as i32]) << 31;
         let restored = ix4(w0) | sign;
 
-        cpnt[k0.largest() as usize] = fx4(ix4(cpnt[k0.largest() as usize]) | (restored & MASK_F000));
-        cpnt[k1.largest() as usize] = fx4(ix4(cpnt[k1.largest() as usize]) | (restored & MASK_0F00));
-        cpnt[k2.largest() as usize] = fx4(ix4(cpnt[k2.largest() as usize]) | (restored & MASK_00F0));
-        cpnt[k3.largest() as usize] = fx4(ix4(cpnt[k3.largest() as usize]) | (restored & MASK_000F));
+        cpnt[largest0 as usize] = fx4(ix4(cpnt[largest0 as usize]) | (restored & MASK_F000));
+        cpnt[largest1 as usize] = fx4(ix4(cpnt[largest1 as usize]) | (restored & MASK_0F00));
+        cpnt[largest2 as usize] = fx4(ix4(cpnt[largest2 as usize]) | (restored & MASK_00F0));
+        cpnt[largest3 as usize] = fx4(ix4(cpnt[largest3 as usize]) | (restored & MASK_000F));
 
         soa.x = unsafe { mem::transmute(cpnt[0]) };
         soa.y = unsafe { mem::transmute(cpnt[1]) };
@@ -177,18 +158,72 @@ impl QuaternionKey {
 }
 
 impl ArchiveRead<QuaternionKey> for QuaternionKey {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<QuaternionKey, OzzError> {
-        let ratio: f32 = archive.read()?;
-        let track: u16 = archive.read()?;
-        let largest: u8 = archive.read()?;
-        let sign: u8 = archive.read()?;
-        let bit_field: u16 = ((track & 0x1FFF) << 3) | ((largest as u16 & 0x3) << 1) | (sign as u16 & 0x1);
-        let value: [i16; 3] = [archive.read()?, archive.read()?, archive.read()?];
-        return Ok(QuaternionKey {
-            ratio,
-            bit_field,
-            value,
-        });
+        let value: [u16; 3] = [archive.read()?, archive.read()?, archive.read()?];
+        return Ok(QuaternionKey(value));
+    }
+}
+
+/// Animation keyframes control structure.
+#[derive(Debug, Default)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct KeyframesCtrl {
+    ratios: Vec<u8>,
+    previouses: Vec<u16>,
+    iframe_entries: Vec<u8>,
+    iframe_desc: Vec<u32>,
+    iframe_interval: f32,
+}
+
+impl KeyframesCtrl {
+    pub fn new(
+        ratios: Vec<u8>,
+        previouses: Vec<u16>,
+        iframe_entries: Vec<u8>,
+        iframe_desc: Vec<u32>,
+        iframe_interval: f32,
+    ) -> KeyframesCtrl {
+        return KeyframesCtrl {
+            ratios,
+            previouses,
+            iframe_entries,
+            iframe_desc,
+            iframe_interval,
+        };
+    }
+
+    #[inline]
+    pub fn ratios_u8(&self) -> &[u8] {
+        return &self.ratios;
+    }
+
+    #[inline]
+    pub fn ratios_u16(&self) -> &[u16] {
+        let data = self.ratios.as_ptr() as *const u16;
+        let len = self.ratios.len() / 2;
+        return unsafe { slice::from_raw_parts(data, len) };
+    }
+
+    #[inline]
+    pub fn previouses(&self) -> &[u16] {
+        return &self.previouses;
+    }
+
+    #[inline]
+    pub fn iframe_entries(&self) -> &[u8] {
+        return &self.iframe_entries;
+    }
+
+    #[inline]
+    pub fn iframe_desc(&self) -> &[u32] {
+        return &self.iframe_desc;
+    }
+
+    #[inline]
+    pub fn iframe_interval(&self) -> f32 {
+        return self.iframe_interval;
     }
 }
 
@@ -212,6 +247,10 @@ pub struct Animation {
     duration: f32,
     num_tracks: usize,
     name: String,
+    timepoints: Vec<f32>,
+    translations_ctrl: KeyframesCtrl,
+    rotations_ctrl: KeyframesCtrl,
+    scales_ctrl: KeyframesCtrl,
     translations: Vec<Float3Key>,
     rotations: Vec<QuaternionKey>,
     scales: Vec<Float3Key>,
@@ -222,11 +261,18 @@ pub struct Animation {
 pub struct AnimationMeta {
     pub version: u32,
     pub duration: f32,
-    pub num_tracks: i32,
+    pub num_tracks: u32,
     pub name: String,
-    pub translation_count: i32,
-    pub rotation_count: i32,
-    pub scale_count: i32,
+    pub timepoints_count: u32,
+    pub translation_count: u32,
+    pub rotation_count: u32,
+    pub scale_count: u32,
+    pub t_iframe_entries_count: u32,
+    pub t_iframe_desc_count: u32,
+    pub r_iframe_entries_count: u32,
+    pub r_iframe_desc_count: u32,
+    pub s_iframe_entries_count: u32,
+    pub s_iframe_desc_count: u32,
 }
 
 impl Animation {
@@ -239,7 +285,7 @@ impl Animation {
     /// `Animation` resource file version for `Archive`.
     #[inline]
     pub fn version() -> u32 {
-        return 6;
+        return 7;
     }
 
     #[cfg(test)]
@@ -247,6 +293,10 @@ impl Animation {
         duration: f32,
         num_tracks: usize,
         name: String,
+        timepoints: Vec<f32>,
+        translations_ctrl: KeyframesCtrl,
+        rotations_ctrl: KeyframesCtrl,
+        scales_ctrl: KeyframesCtrl,
         translations: Vec<Float3Key>,
         rotations: Vec<QuaternionKey>,
         scales: Vec<Float3Key>,
@@ -255,6 +305,10 @@ impl Animation {
             duration,
             num_tracks,
             name,
+            timepoints,
+            translations_ctrl,
+            rotations_ctrl,
+            scales_ctrl,
             translations,
             rotations,
             scales,
@@ -271,11 +325,18 @@ impl Animation {
         }
 
         let duration: f32 = archive.read()?;
-        let num_tracks: i32 = archive.read()?;
-        let name_len: i32 = archive.read()?;
-        let translation_count: i32 = archive.read()?;
-        let rotation_count: i32 = archive.read()?;
-        let scale_count: i32 = archive.read()?;
+        let num_tracks: u32 = archive.read()?;
+        let name_len: u32 = archive.read()?;
+        let timepoints_count: u32 = archive.read()?;
+        let translation_count: u32 = archive.read()?;
+        let rotation_count: u32 = archive.read()?;
+        let scale_count: u32 = archive.read()?;
+        let t_iframe_entries_count: u32 = archive.read()?;
+        let t_iframe_desc_count: u32 = archive.read()?;
+        let r_iframe_entries_count: u32 = archive.read()?;
+        let r_iframe_desc_count: u32 = archive.read()?;
+        let s_iframe_entries_count: u32 = archive.read()?;
+        let s_iframe_desc_count: u32 = archive.read()?;
 
         let mut name = String::new();
         if name_len != 0 {
@@ -288,9 +349,16 @@ impl Animation {
             duration,
             num_tracks,
             name,
+            timepoints_count,
             translation_count,
             rotation_count,
             scale_count,
+            t_iframe_entries_count,
+            t_iframe_desc_count,
+            r_iframe_entries_count,
+            r_iframe_desc_count,
+            s_iframe_entries_count,
+            s_iframe_desc_count,
         });
     }
 
@@ -298,17 +366,44 @@ impl Animation {
     pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Animation, OzzError> {
         let meta = Animation::read_meta(archive)?;
 
+        let timepoints: Vec<f32> = archive.read_vec(meta.timepoints_count as usize)?;
+        let sizeof_ratio = if timepoints.len() <= u8::MAX as usize { 1 } else { 2 };
+        let translations_ctrl = KeyframesCtrl {
+            ratios: archive.read_vec((meta.translation_count * sizeof_ratio) as usize)?,
+            previouses: archive.read_vec(meta.translation_count as usize)?,
+            iframe_entries: archive.read_vec(meta.t_iframe_entries_count as usize)?,
+            iframe_desc: archive.read_vec(meta.t_iframe_desc_count as usize)?,
+            iframe_interval: archive.read()?,
+        };
         let translations: Vec<Float3Key> = archive.read_vec(meta.translation_count as usize)?;
+        let rotations_ctrl = KeyframesCtrl {
+            ratios: archive.read_vec((meta.rotation_count * sizeof_ratio) as usize)?,
+            previouses: archive.read_vec(meta.rotation_count as usize)?,
+            iframe_entries: archive.read_vec(meta.r_iframe_entries_count as usize)?,
+            iframe_desc: archive.read_vec(meta.r_iframe_desc_count as usize)?,
+            iframe_interval: archive.read()?,
+        };
         let rotations: Vec<QuaternionKey> = archive.read_vec(meta.rotation_count as usize)?;
+        let scales_ctrl = KeyframesCtrl {
+            ratios: archive.read_vec((meta.scale_count * sizeof_ratio) as usize)?,
+            previouses: archive.read_vec(meta.scale_count as usize)?,
+            iframe_entries: archive.read_vec(meta.s_iframe_entries_count as usize)?,
+            iframe_desc: archive.read_vec(meta.s_iframe_desc_count as usize)?,
+            iframe_interval: archive.read()?,
+        };
         let scales: Vec<Float3Key> = archive.read_vec(meta.scale_count as usize)?;
 
         return Ok(Animation {
             duration: meta.duration,
             num_tracks: meta.num_tracks as usize,
             name: meta.name,
+            timepoints,
             translations,
             rotations,
             scales,
+            translations_ctrl,
+            rotations_ctrl,
+            scales_ctrl,
         });
     }
 
@@ -359,7 +454,31 @@ impl Animation {
         return &self.name;
     }
 
-    /// Gets the buffer of translations keys.
+    /// Gets the buffer of time points.
+    #[inline]
+    pub fn timepoints(&self) -> &[f32] {
+        return &self.timepoints;
+    }
+
+    /// Gets the buffer of translation keys.
+    #[inline]
+    pub fn translations_ctrl(&self) -> &KeyframesCtrl {
+        return &self.translations_ctrl;
+    }
+
+    /// Gets the buffer of rotation keys.
+    #[inline]
+    pub fn rotations_ctrl(&self) -> &KeyframesCtrl {
+        return &self.rotations_ctrl;
+    }
+
+    /// Gets the buffer of scale keys.
+    #[inline]
+    pub fn scales_ctrl(&self) -> &KeyframesCtrl {
+        return &self.scales_ctrl;
+    }
+
+    /// Gets the buffer of translation keys.
     #[inline]
     pub fn translations(&self) -> &[Float3Key] {
         return &self.translations;
@@ -387,46 +506,20 @@ mod tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_float3_key_decompress() {
-        let res = Float3Key {
-            ratio: 0.0,
-            track: 0,
-            value: [11405, 34240, 31],
-        }
-        .decompress();
+        let res = Float3Key([11405, 34240, 31]).decompress();
         assert_eq!(res, Vec3::new(0.0711059570, -8.77380371e-05, 1.84774399e-06));
 
-        let res = Float3Key {
-            ratio: 0.0,
-            track: 0,
-            value: [9839, 1, 0],
-        }
-        .decompress();
+        let res = Float3Key([9839, 1, 0]).decompress();
         assert_eq!(res, Vec3::new(0.0251312255859375, 5.960464477539063e-8, 0.0));
     }
 
     #[test]
     #[wasm_bindgen_test]
     fn test_simd_decompress_float3() {
-        let k0 = Float3Key {
-            ratio: 0.0,
-            track: 0,
-            value: [11405, 34240, 31],
-        };
-        let k1 = Float3Key {
-            ratio: 0.0,
-            track: 0,
-            value: [9839, 1, 0],
-        };
-        let k2 = Float3Key {
-            ratio: 0.0,
-            track: 0,
-            value: [11405, 34240, 31],
-        };
-        let k3 = Float3Key {
-            ratio: 0.0,
-            track: 0,
-            value: [9839, 1, 0],
-        };
+        let k0 = Float3Key([11405, 34240, 31]);
+        let k1 = Float3Key([9839, 1, 0]);
+        let k2 = Float3Key([11405, 34240, 31]);
+        let k3 = Float3Key([9839, 1, 0]);
         let mut soa = SoaVec3::default();
         Float3Key::simd_decompress(&k0, &k1, &k2, &k3, &mut soa);
         assert_eq!(
@@ -446,94 +539,52 @@ mod tests {
 
     #[test]
     #[wasm_bindgen_test]
-    fn test_quaternion_key_decompress() {
-        let quat = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (3 << 1) | 0,
-            value: [396, 409, 282],
-        }
-        .decompress();
+    fn test_decompress_quaternion() {
+        let key = QuaternionKey([39974, 18396, 53990]);
+        let quat = key.decompress();
         assert_eq!(
             quat,
-            Quat::from_xyzw(
-                0.008545618438802194,
-                0.008826156417853781,
-                0.006085516160965199,
-                0.9999060145140845,
-            )
+            Quat::from_xyzw(-0.491480947, -0.508615375, -0.538519204, 0.457989037)
         );
 
-        let quat = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (0 << 1) | 0,
-            value: [5256, -14549, 25373],
-        }
-        .decompress();
+        let key = QuaternionKey([38605, 19300, 55990]);
+        let quat = key.decompress();
         assert_eq!(
             quat,
-            Quat::from_xyzw(
-                0.767303715540273,
-                0.11342366291501094,
-                -0.3139651582478109,
-                0.5475453955750709,
-            )
+            Quat::from_xyzw(-0.498861253, -0.501123607, -0.498861253, 0.501148760)
         );
 
-        let quat = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (3 << 1) | 0,
-            value: [0, 0, -195],
-        }
-        .decompress();
+        let key = QuaternionKey([63843, 2329, 31255]);
+        let quat = key.decompress();
         assert_eq!(
             quat,
-            Quat::from_xyzw(0.00000000, 0.00000000, -0.00420806976, 0.999991119)
+            Quat::from_xyzw(-0.00912827253, 0.0251405239, -0.0326502919, 0.999108911)
         );
 
-        let quat = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (2 << 1) | 1,
-            value: [-23255, -23498, 21462],
-        }
-        .decompress();
+        let key = QuaternionKey([1579, 818, 33051]);
+        let quat = key.decompress();
         assert_eq!(
             quat,
-            Quat::from_xyzw(-0.501839280, -0.507083178, -0.525850952, 0.463146627)
+            Quat::from_xyzw(0.00852406025, 0.00882613659, 0.00610709190, 0.999906063)
         );
     }
 
     #[test]
     #[wasm_bindgen_test]
     fn test_simd_decompress_quaternion() {
-        let quat0 = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (3 << 1) | 0,
-            value: [396, 409, 282],
-        };
-        let quat1 = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (0 << 1) | 0,
-            value: [5256, -14549, 25373],
-        };
-        let quat2 = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (3 << 1) | 0,
-            value: [0, 0, -195],
-        };
-        let quat3 = QuaternionKey {
-            ratio: 0.0,
-            bit_field: (2 << 1) | 1,
-            value: [-23255, -23498, 21462],
-        };
+        let key0 = QuaternionKey([39974, 18396, 53990]);
+        let key1 = QuaternionKey([38605, 19300, 55990]);
+        let key2 = QuaternionKey([63843, 2329, 31255]);
+        let key3 = QuaternionKey([1579, 818, 33051]);
         let mut soa = SoaQuat::default();
-        QuaternionKey::simd_decompress(&quat0, &quat1, &quat2, &quat3, &mut soa);
+        QuaternionKey::simd_decompress(&key0, &key1, &key2, &key3, &mut soa);
         assert_eq!(
             soa,
             SoaQuat {
-                x: f32x4::from_array([0.0085456185, 0.7673037, 0.0, -0.5018393]),
-                y: f32x4::from_array([0.008826156, 0.11342366, 0.0, -0.5070832]),
-                z: f32x4::from_array([0.006085516, -0.31396517, -0.0042080698, -0.52585095]),
-                w: f32x4::from_array([0.999906, 0.5475454, 0.9999911, 0.46314663]),
+                x: f32x4::from_array([-0.491480947, -0.498861253, -0.00912827253, 0.00852406025]),
+                y: f32x4::from_array([-0.508615375, -0.501123607, 0.0251405239, 0.00882613659]),
+                z: f32x4::from_array([-0.538519204, -0.498861253, -0.0326502919, 0.00610709190]),
+                w: f32x4::from_array([0.457989037, 0.501148760, 0.999108911, 0.999906063]),
             }
         );
     }
@@ -547,35 +598,50 @@ mod tests {
         assert_eq!(animation.num_tracks(), 67);
         assert_eq!(animation.name(), "crossarms".to_string());
 
-        let last = animation.translations().len() - 1;
+        assert_eq!(animation.timepoints().len(), 252);
+        assert_eq!(animation.timepoints().first().unwrap(), &0.0);
+        assert_eq!(animation.timepoints().last().unwrap(), &1.0);
+
+        assert_eq!(animation.translations_ctrl().ratios_u8().len(), 178);
+        assert_eq!(animation.translations_ctrl().ratios_u8().first().unwrap(), &0);
+        assert_eq!(animation.translations_ctrl().ratios_u8().last().unwrap(), &251);
+        assert_eq!(animation.translations_ctrl().previouses().len(), 178);
+        assert_eq!(animation.translations_ctrl().previouses().first().unwrap(), &0);
+        assert_eq!(animation.translations_ctrl().previouses().last().unwrap(), &1);
+        assert!(animation.translations_ctrl().iframe_entries().is_empty());
+        assert!(animation.translations_ctrl().iframe_desc().is_empty());
+        assert_eq!(animation.translations_ctrl().iframe_interval, 1.0);
+
+        assert_eq!(animation.rotations_ctrl().ratios_u8().len(), 1699);
+        assert_eq!(animation.rotations_ctrl().ratios_u8().first().unwrap(), &0);
+        assert_eq!(animation.rotations_ctrl().ratios_u8().last().unwrap(), &251);
+        assert_eq!(animation.rotations_ctrl().previouses().len(), 1699);
+        assert_eq!(animation.rotations_ctrl().previouses().first().unwrap(), &0);
+        assert_eq!(animation.rotations_ctrl().previouses().last().unwrap(), &6);
+        assert!(animation.rotations_ctrl().iframe_entries().is_empty());
+        assert!(animation.rotations_ctrl().iframe_desc().is_empty());
+        assert_eq!(animation.rotations_ctrl().iframe_interval, 1.0);
+
+        assert_eq!(animation.scales_ctrl().ratios_u8().len(), 136);
+        assert_eq!(animation.scales_ctrl().ratios_u8().first().unwrap(), &0);
+        assert_eq!(animation.scales_ctrl().ratios_u8().last().unwrap(), &251);
+        assert_eq!(animation.scales_ctrl().previouses().len(), 136);
+        assert_eq!(animation.scales_ctrl().previouses().first().unwrap(), &0);
+        assert_eq!(animation.scales_ctrl().previouses().last().unwrap(), &68);
+        assert!(animation.scales_ctrl().iframe_entries().is_empty());
+        assert!(animation.scales_ctrl().iframe_desc().is_empty());
+        assert_eq!(animation.scales_ctrl().iframe_interval, 1.0);
+
         assert_eq!(animation.translations().len(), 178);
-        assert_eq!(animation.translations[0].ratio, 0f32);
-        assert_eq!(animation.translations[0].track, 0);
-        assert_eq!(animation.translations[0].value, [0, 15400, 43950]);
-        assert_eq!(animation.translations[last].ratio, 1f32);
-        assert_eq!(animation.translations[last].track, 0);
-        assert_eq!(animation.translations[last].value, [3659, 15400, 43933]);
+        assert_eq!(animation.translations().first().unwrap().0, [0, 15400, 43950]);
+        assert_eq!(animation.translations().last().unwrap().0, [3659, 15400, 43933]);
 
-        let last = animation.rotations().len() - 1;
-        assert_eq!(animation.rotations().len(), 1678);
-        assert_eq!(animation.rotations[0].ratio, 0f32);
-        assert_eq!(animation.rotations[0].track(), 0);
-        assert_eq!(animation.rotations[0].largest(), 2);
-        assert_eq!(animation.rotations[0].sign(), 1);
-        assert_eq!(animation.rotations[0].value, [-22775, -23568, 21224]);
-        assert_eq!(animation.rotations[last].ratio, 1f32);
-        assert_eq!(animation.rotations[last].track(), 63);
-        assert_eq!(animation.rotations[last].largest(), 3);
-        assert_eq!(animation.rotations[last].sign(), 0);
-        assert_eq!(animation.rotations[last].value, [0, 0, -2311]);
+        assert_eq!(animation.rotations().len(), 1699);
+        assert_eq!(animation.rotations().first().unwrap().0, [39974, 18396, 53990]);
+        assert_eq!(animation.rotations().last().unwrap().0, [65531, 65533, 30456]);
 
-        let last = animation.scales().len() - 1;
         assert_eq!(animation.scales().len(), 136);
-        assert_eq!(animation.scales()[0].ratio, 0f32);
-        assert_eq!(animation.scales()[0].track, 0);
-        assert_eq!(animation.scales()[0].value, [15360, 15360, 15360]);
-        assert_eq!(animation.scales()[last].ratio, 1f32);
-        assert_eq!(animation.scales()[last].track, 67);
-        assert_eq!(animation.scales()[last].value, [15360, 15360, 15360]);
+        assert_eq!(animation.scales().first().unwrap().0, [15360, 15360, 15360]);
+        assert_eq!(animation.scales().last().unwrap().0, [15360, 15360, 15360]);
     }
 }
