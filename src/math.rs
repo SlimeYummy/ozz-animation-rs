@@ -113,15 +113,6 @@ impl SoaVec3 {
     }
 
     #[inline]
-    pub fn component_mul(&self, other: &SoaVec3) -> SoaVec3 {
-        return SoaVec3 {
-            x: self.x * other.x,
-            y: self.y * other.y,
-            z: self.z * other.z,
-        };
-    }
-
-    #[inline]
     pub fn mul_num(&self, f: f32x4) -> SoaVec3 {
         return SoaVec3 {
             x: self.x * f,
@@ -482,6 +473,7 @@ pub struct SoaTransform {
 }
 
 impl ArchiveRead<SoaTransform> for SoaTransform {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<SoaTransform, OzzError> {
         const COUNT: usize = mem::size_of::<SoaTransform>() / mem::size_of::<f32>();
         let mut buffer = [0f32; COUNT];
@@ -493,6 +485,7 @@ impl ArchiveRead<SoaTransform> for SoaTransform {
 }
 
 impl SoaTransform {
+    #[inline]
     pub fn new(translation: SoaVec3, rotation: SoaQuat, scale: SoaVec3) -> SoaTransform {
         return SoaTransform {
             translation,
@@ -849,6 +842,7 @@ impl SoaMat4 {
 // functions
 //
 
+#[inline]
 pub(crate) fn f16_to_f32(n: u16) -> f32 {
     let sign = (n & 0x8000) as u32;
     let expo = (n & 0x7C00) as u32;
@@ -872,6 +866,7 @@ pub(crate) fn f16_to_f32(n: u16) -> f32 {
     };
 }
 
+#[inline]
 pub(crate) fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
     const MASK_NO_SIGN: i32x4 = i32x4::from_array([0x7FFF; 4]);
     const MAGIC: f32x4 = fx4(i32x4::from_array([(254 - 15) << 23; 4]));
@@ -1528,7 +1523,7 @@ mod tests {
         let json = serde_json::to_string(&vec3).unwrap();
         let vec3_de: SoaVec3 = serde_json::from_str(&json).unwrap();
         assert_eq!(vec3_de, vec3);
-        
+
         let quat = SoaQuat::splat_col([2.0, 3.0, 4.0, 5.0]);
         let json = serde_json::to_string(&quat).unwrap();
         let quat_de: SoaQuat = serde_json::from_str(&json).unwrap();
