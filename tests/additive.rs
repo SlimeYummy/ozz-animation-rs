@@ -30,7 +30,7 @@ struct TestDataInit {
 #[wasm_bindgen_test]
 fn test_additive() {
     run_additive(
-        5..=5,
+        7..=7,
         |_| {},
         |_, data| common::compare_with_cpp("additive", "additive", &data.l2m_out, 1e-6).unwrap(),
     );
