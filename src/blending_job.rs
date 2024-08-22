@@ -457,14 +457,12 @@ where
                     for idx in 0..joint_rest_poses.len() {
                         let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
                         let one_minus_weight = ONE - weight;
-                        let soa_one_minus_weight = SoaVec3::splat_row(one_minus_weight);
-                        Self::blend_add_pass(&transform[idx], weight, &soa_one_minus_weight, &mut output[idx]);
+                        Self::blend_add_pass(&transform[idx], weight, one_minus_weight, &mut output[idx]);
                     }
                 } else {
                     let one_minus_weight = ONE - layer_weight;
-                    let soa_one_minus_weight = SoaVec3::splat_row(one_minus_weight);
                     for idx in 0..joint_rest_poses.len() {
-                        Self::blend_add_pass(&transform[idx], layer_weight, &soa_one_minus_weight, &mut output[idx]);
+                        Self::blend_add_pass(&transform[idx], layer_weight, one_minus_weight, &mut output[idx]);
                     }
                 }
             } else if layer.weight < 0.0 {
@@ -505,7 +503,7 @@ where
     }
 
     #[inline(always)]
-    fn blend_add_pass(input: &SoaTransform, weight: f32x4, soa_one_minus_weight: &SoaVec3, output: &mut SoaTransform) {
+    fn blend_add_pass(input: &SoaTransform, weight: f32x4, soa_one_minus_weight: f32x4, output: &mut SoaTransform) {
         output.translation = output.translation.add(&input.translation.mul_num(weight));
 
         let rotation = input.rotation.positive_w();
@@ -515,10 +513,13 @@ where
             z: rotation.z * weight,
             w: (rotation.w - ONE) * weight + ONE,
         };
-        output.rotation = interp_quat.normalize().mul(&output.rotation);
+        output.rotation = output.rotation.mul(&interp_quat.normalize());
 
-        let tmp_weight = soa_one_minus_weight.add(&input.scale.mul_num(weight));
-        output.scale = output.scale.component_mul(&tmp_weight);
+        output.scale = SoaVec3 {
+            x: output.scale.x * (soa_one_minus_weight + input.scale.x * weight),
+            y: output.scale.y * (soa_one_minus_weight + input.scale.y * weight),
+            z: output.scale.z * (soa_one_minus_weight + input.scale.z * weight),
+        }
     }
 
     #[inline(always)]
@@ -532,14 +533,13 @@ where
             z: rotation.z * weight,
             w: (rotation.w - ONE) * weight + ONE,
         };
-        output.rotation = interp_quat.normalize().conjugate().mul(&output.rotation);
+        output.rotation = output.rotation.mul(&interp_quat.normalize().conjugate());
 
-        let rcp_scale = SoaVec3 {
-            x: (input.scale.x * weight + one_minus_weight).recip(),
-            y: (input.scale.y * weight + one_minus_weight).recip(),
-            z: (input.scale.z * weight + one_minus_weight).recip(),
+        output.scale = SoaVec3 {
+            x: output.scale.x * (input.scale.x * weight + one_minus_weight).recip(),
+            y: output.scale.y * (input.scale.y * weight + one_minus_weight).recip(),
+            z: output.scale.z * (input.scale.z * weight + one_minus_weight).recip(),
         };
-        output.scale = output.scale.component_mul(&rcp_scale);
     }
 }
 
