@@ -137,6 +137,18 @@ ozz_index!(usize);
 ozz_index!(i32);
 ozz_index!(i16);
 
+#[inline(always)]
+pub(crate) fn align_usize(size: usize, align: usize) -> usize {
+    assert!(align.is_power_of_two());
+    return (size + align - 1) & !(align - 1);
+}
+
+#[inline(always)]
+pub(crate) fn align_ptr(ptr: *mut u8, align: usize) -> *mut u8 {
+    assert!(align.is_power_of_two());
+    return align_usize(ptr as usize, align) as *mut u8;
+}
+
 /// Represents a reference to the ozz resource object.
 /// `T` usually is `Skeleton` or `Animation`.
 ///
@@ -407,7 +419,7 @@ impl<'t, T> DerefMut for ObRwLockWriteGuard<'t, T> {
     }
 }
 
-/// Shortcuts for Rc<RefCell<T>>.
+/// Shortcuts for `Rc<RefCell<T>>`.
 pub type OzzRcBuf<T> = Rc<RefCell<Vec<T>>>;
 
 /// Creates a new `Rc<RefCell<Vec<T>>>`.
@@ -416,7 +428,7 @@ pub fn ozz_rc_buf<T>(v: Vec<T>) -> OzzRcBuf<T> {
     return Rc::new(RefCell::new(v));
 }
 
-/// Shortcuts for Arc<RwLock<T>>.
+/// Shortcuts for `Arc<RwLock<T>>`.
 pub type OzzArcBuf<T> = Arc<RwLock<Vec<T>>>;
 
 /// Creates a new `Arc<RwLock<Vec<T>>>`.

@@ -120,6 +120,7 @@ pub trait ArchiveRead<T> {
 
     /// Reads `Vec<T>` from the archive.
     /// * `count` - The number of elements to read.
+    #[inline]
     fn read_vec<R: Read>(archive: &mut Archive<R>, count: usize) -> Result<Vec<T>, OzzError> {
         let mut buffer = Vec::with_capacity(count);
         for _ in 0..count {
@@ -132,10 +133,11 @@ pub trait ArchiveRead<T> {
 macro_rules! primitive_reader {
     ($type:ty) => {
         impl ArchiveRead<$type> for $type {
+            #[inline]
             fn read<R: Read>(archive: &mut Archive<R>) -> Result<$type, OzzError> {
-                let val = Default::default();
+                let mut val = Default::default();
                 archive.read.read_exact(unsafe {
-                    slice::from_raw_parts_mut(&val as *const $type as *mut u8, mem::size_of::<$type>())
+                    slice::from_raw_parts_mut(&mut val as *const $type as *mut u8, mem::size_of::<$type>())
                 })?;
                 if !archive.endian_swap {
                     return Ok(val);
@@ -160,6 +162,7 @@ primitive_reader!(f32);
 primitive_reader!(f64);
 
 impl ArchiveRead<Vec2> for Vec2 {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<Vec2, OzzError> {
         let x = f32::read(archive)?;
         let y = f32::read(archive)?;
@@ -168,6 +171,7 @@ impl ArchiveRead<Vec2> for Vec2 {
 }
 
 impl ArchiveRead<Vec3> for Vec3 {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<Vec3, OzzError> {
         let x = f32::read(archive)?;
         let y = f32::read(archive)?;
@@ -177,6 +181,7 @@ impl ArchiveRead<Vec3> for Vec3 {
 }
 
 impl ArchiveRead<Vec4> for Vec4 {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<Vec4, OzzError> {
         let x = f32::read(archive)?;
         let y = f32::read(archive)?;
@@ -187,6 +192,7 @@ impl ArchiveRead<Vec4> for Vec4 {
 }
 
 impl ArchiveRead<Quat> for Quat {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<Quat, OzzError> {
         let x = f32::read(archive)?;
         let y = f32::read(archive)?;
@@ -197,6 +203,7 @@ impl ArchiveRead<Quat> for Quat {
 }
 
 impl ArchiveRead<String> for String {
+    #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<String, OzzError> {
         let mut buffer = Vec::new();
         loop {
@@ -223,5 +230,7 @@ mod tests {
     fn test_archive_new() {
         let archive = Archive::from_path("./resource/playback/animation.ozz").unwrap();
         assert_eq!(archive.endian_swap, false);
+        assert_eq!(archive.tag, "ozz-animation");
+        assert_eq!(archive.version, 7);
     }
 }
