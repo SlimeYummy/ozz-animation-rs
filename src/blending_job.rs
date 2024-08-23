@@ -550,7 +550,7 @@ mod blending_tests {
 
     use super::*;
     use crate::base::DeterministicState;
-    use crate::skeleton::JointHashMap;
+    use crate::skeleton::{JointHashMap, SkeletonRaw};
 
     const IDENTITY: SoaTransform = SoaTransform {
         translation: SoaVec3::splat_col([0.0; 3]),
@@ -565,7 +565,7 @@ mod blending_tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_validity() {
-        let skeleton = Rc::new(Skeleton::from_path("./resource/skeleton-blending.ozz").unwrap());
+        let skeleton = Rc::new(Skeleton::from_path("./resource/blend/skeleton.ozz").unwrap());
         let num_bind_pose = skeleton.num_soa_joints();
         let default_layer = BlendingLayer {
             transform: make_buf(vec![SoaTransform::default(); num_bind_pose]),
@@ -801,11 +801,11 @@ mod blending_tests {
         joint_rest_poses[1].rotation = SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]);
         joint_rest_poses[1].scale = joint_rest_poses[0].scale.mul_num(f32x4::splat(2.0));
 
-        let skeleton = Rc::new(Skeleton::from_raw(
+        let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
             joint_rest_poses,
-            vec![0; 8],
-            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
-        ));
+            joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
+            joint_parents: vec![0; 8],
+        }));
 
         execute_test(
             &skeleton,
@@ -847,7 +847,7 @@ mod blending_tests {
         input2[1].translation = input1[1].translation.neg();
         let mut layers = new_layers(input1, vec![], input2, vec![]);
 
-        let rest_poses = vec![
+        let joint_rest_poses = vec![
             SoaTransform {
                 translation: SoaVec3::splat_col([0.0, 0.0, 0.0]),
                 rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
@@ -863,11 +863,11 @@ mod blending_tests {
                 ),
             },
         ];
-        let skeleton = Rc::new(Skeleton::from_raw(
-            rest_poses,
-            vec![0; 8],
-            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
-        ));
+        let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
+            joint_rest_poses,
+            joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
+            joint_parents: vec![0; 8],
+        }));
 
         {
             layers[0].weight = -0.07;
@@ -947,7 +947,7 @@ mod blending_tests {
         let weights2 = vec![Vec4::new(1.0, 1.0, 1.0, 0.0), Vec4::new(0.0, 1.0, 1.0, 1.0)];
         let mut layers = new_layers(input1, weights1, input2, weights2);
 
-        let rest_poses = vec![
+        let joint_rest_poses = vec![
             SoaTransform {
                 translation: SoaVec3::new(
                     [10.0, 11.0, 12.0, 13.0],
@@ -963,11 +963,11 @@ mod blending_tests {
                 scale: SoaVec3::new([0.0, 2.0, 4.0, 6.0], [8.0, 10.0, 12.0, 14.0], [16.0, 18.0, 20.0, 22.0]),
             },
         ];
-        let skeleton = Rc::new(Skeleton::from_raw(
-            rest_poses,
-            vec![0; 8],
-            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
-        ));
+        let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
+            joint_rest_poses,
+            joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
+            joint_parents: vec![0; 8],
+        }));
 
         {
             layers[0].weight = 0.5;
@@ -1026,11 +1026,11 @@ mod blending_tests {
         let mut joint_rest_poses = vec![IDENTITY];
         joint_rest_poses[0].scale = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
 
-        return Rc::new(Skeleton::from_raw(
+        return Rc::new(Skeleton::from_raw(&SkeletonRaw {
             joint_rest_poses,
-            vec![0; 4],
-            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
-        ));
+            joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
+            joint_parents: vec![0; 4],
+        }));
     }
     #[test]
     #[wasm_bindgen_test]
@@ -1246,11 +1246,11 @@ mod blending_tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_additive_weight() {
-        let skeleton = Rc::new(Skeleton::from_raw(
-            vec![IDENTITY; 1],
-            vec![0; 4],
-            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
-        ));
+        let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
+            joint_rest_poses: vec![IDENTITY; 1],
+            joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
+            joint_parents: vec![0; 4],
+        }));
 
         let mut input1 = vec![IDENTITY; 1];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
@@ -1417,11 +1417,11 @@ mod blending_tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_additive_joint_weight() {
-        let skeleton = Rc::new(Skeleton::from_raw(
-            vec![IDENTITY; 1],
-            vec![0; 4],
-            JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
-        ));
+        let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
+            joint_rest_poses: vec![IDENTITY; 1],
+            joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
+            joint_parents: vec![0; 4],
+        }));
 
         let mut input1 = vec![IDENTITY; 1];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
