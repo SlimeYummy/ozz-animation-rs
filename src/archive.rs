@@ -58,6 +58,12 @@ impl<R: Read> Archive<R> {
         return T::read_vec(self, count);
     }
 
+    /// Reads `[T]` from the archive into slice.
+    /// * `buffer` - The buffer to read into.
+    pub fn read_slice<T: ArchiveRead<T>>(&mut self, buffer: &mut [T]) -> Result<(), OzzError> {
+        return T::read_slice(self, buffer);
+    }
+
     /// Does the endian need to be swapped.
     pub fn endian_swap(&self) -> bool {
         return self.endian_swap;
@@ -127,6 +133,16 @@ pub trait ArchiveRead<T> {
             buffer.push(Self::read(archive)?);
         }
         return Ok(buffer);
+    }
+
+    /// Reads `[T]` from the archive into slice.
+    /// * `buffer` - The buffer to read into.
+    #[inline]
+    fn read_slice<R: Read>(archive: &mut Archive<R>, buffer: &mut [T]) -> Result<(), OzzError> {
+        for i in 0..buffer.len() {
+            buffer[i] = Self::read(archive)?;
+        }
+        return Ok(());
     }
 }
 
