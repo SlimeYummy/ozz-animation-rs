@@ -11,7 +11,7 @@ use std::sync::{Arc, RwLock};
 use std::{mem, ptr, slice};
 
 use crate::animation::{Animation, Float3Key, KeyframesCtrl, QuaternionKey};
-use crate::base::{align_usize, align_ptr, OzzError, OzzMutBuf, OzzObj};
+use crate::base::{align_ptr, align_usize, OzzError, OzzMutBuf, OzzObj};
 use crate::math::{f32_clamp_or_max, SoaQuat, SoaTransform, SoaVec3};
 
 /// Soa hot `SoaVec3` data to interpolate.
@@ -293,19 +293,19 @@ impl SamplingContext {
         let max_soa_tracks = (max_tracks + 3) / 4;
         let max_tracks = max_soa_tracks * 4;
         let max_outdated = (max_soa_tracks + 7) / 8;
-        let translation_size = mem::size_of::<InterpSoaFloat3>() * max_soa_tracks +
-            mem::size_of::<i32>() * max_tracks +
-            mem::size_of::<u8>() * max_outdated;
-        let rotation_size = mem::size_of::<InterpSoaQuaternion>() * max_soa_tracks +
-            mem::size_of::<i32>() * max_tracks +
-            mem::size_of::<u8>() * max_outdated;
-        let scale_size = mem::size_of::<InterpSoaFloat3>() * max_soa_tracks +
-            mem::size_of::<i32>() * max_tracks +
-            mem::size_of::<u8>() * max_outdated;
-        let size = align_usize(mem::size_of::<SamplingContextInner>(), ALIGN) +
-            align_usize(translation_size, ALIGN) +
-            align_usize(rotation_size, ALIGN) +
-            align_usize(scale_size, ALIGN);
+        let translation_size = mem::size_of::<InterpSoaFloat3>() * max_soa_tracks
+            + mem::size_of::<i32>() * max_tracks
+            + mem::size_of::<u8>() * max_outdated;
+        let rotation_size = mem::size_of::<InterpSoaQuaternion>() * max_soa_tracks
+            + mem::size_of::<i32>() * max_tracks
+            + mem::size_of::<u8>() * max_outdated;
+        let scale_size = mem::size_of::<InterpSoaFloat3>() * max_soa_tracks
+            + mem::size_of::<i32>() * max_tracks
+            + mem::size_of::<u8>() * max_outdated;
+        let size = align_usize(mem::size_of::<SamplingContextInner>(), ALIGN)
+            + align_usize(translation_size, ALIGN)
+            + align_usize(rotation_size, ALIGN)
+            + align_usize(scale_size, ALIGN);
 
         unsafe {
             let layout = Layout::from_size_align_unchecked(size, mem::size_of::<f32x4>());
@@ -641,34 +641,34 @@ impl SamplingContext {
 }
 
 #[cfg(feature = "rkyv")]
+pub struct ArchivedSamplingContext {
+    pub max_tracks: u32,
+    pub animation_id: u64,
+    pub ratio: f32,
+
+    pub translations: rkyv::vec::ArchivedVec<InterpSoaFloat3>,
+    pub translation_entries: rkyv::vec::ArchivedVec<u32>,
+    pub translation_outdated: rkyv::vec::ArchivedVec<u8>,
+    pub translation_next: u32,
+
+    pub rotations: rkyv::vec::ArchivedVec<InterpSoaQuaternion>,
+    pub rotation_entries: rkyv::vec::ArchivedVec<u32>,
+    pub rotation_outdated: rkyv::vec::ArchivedVec<u8>,
+    pub rotation_next: u32,
+
+    pub scales: rkyv::vec::ArchivedVec<InterpSoaFloat3>,
+    pub scale_entries: rkyv::vec::ArchivedVec<u32>,
+    pub scale_outdated: rkyv::vec::ArchivedVec<u8>,
+    pub scale_next: u32,
+}
+
+#[cfg(feature = "rkyv")]
 const _: () = {
     use bytecheck::CheckBytes;
     use rkyv::ser::{ScratchSpace, Serializer};
     use rkyv::vec::{ArchivedVec, VecResolver};
     use rkyv::{from_archived, out_field, Archive, Deserialize, Fallible, Serialize};
     use std::io::{Error, ErrorKind};
-
-    #[cfg(feature = "rkyv")]
-    pub struct ArchivedSamplingContext {
-        pub max_tracks: u32,
-        pub animation_id: u64,
-        pub ratio: f32,
-
-        pub translations: ArchivedVec<InterpSoaFloat3>,
-        pub translation_entries: ArchivedVec<u32>,
-        pub translation_outdated: ArchivedVec<u8>,
-        pub translation_next: u32,
-
-        pub rotations: ArchivedVec<InterpSoaQuaternion>,
-        pub rotation_entries: ArchivedVec<u32>,
-        pub rotation_outdated: ArchivedVec<u8>,
-        pub rotation_next: u32,
-
-        pub scales: ArchivedVec<InterpSoaFloat3>,
-        pub scale_entries: ArchivedVec<u32>,
-        pub scale_outdated: ArchivedVec<u8>,
-        pub scale_next: u32,
-    }
 
     pub struct SamplingContextResolver {
         translations: VecResolver,
@@ -1118,17 +1118,17 @@ where
         let args = ctx.as_mut().translation_update_args(anim);
         Self::update_cache(args, anim, &anim.translations_ctrl(), self.ratio, prev_ratio);
         let args = ctx.as_mut().translation_decompress_args();
-        Self::decompress_float3(args, anim.timepoints(), anim.translations_ctrl(), anim.translations());
+        Self::decompress_float3(args, anim.timepoints(), &anim.translations_ctrl(), anim.translations());
 
         let args = ctx.as_mut().rotation_update_args(anim);
         Self::update_cache(args, anim, &anim.rotations_ctrl(), self.ratio, prev_ratio);
         let args = ctx.as_mut().rotation_decompress_args();
-        Self::decompress_quat(args, anim.timepoints(), anim.rotations_ctrl(), anim.rotations());
+        Self::decompress_quat(args, anim.timepoints(), &anim.rotations_ctrl(), anim.rotations());
 
         let args = ctx.as_mut().scale_update_args(anim);
         Self::update_cache(args, anim, &anim.scales_ctrl(), self.ratio, prev_ratio);
         let args = ctx.as_mut().scale_decompress_args();
-        Self::decompress_float3(args, anim.timepoints(), anim.scales_ctrl(), anim.scales());
+        Self::decompress_float3(args, anim.timepoints(), &anim.scales_ctrl(), anim.scales());
 
         Self::interpolates(anim, ctx.as_mut(), self.ratio, &mut output)?;
         return Ok(());
@@ -1148,19 +1148,25 @@ where
         return prev_ratio;
     }
 
-    fn update_cache(args: UpdateArgs<'_>, animation: &Animation, ctrl: &KeyframesCtrl, ratio: f32, prev_ratio: f32) {
-        assert!(ctrl.previouses().len() >= args.num_tracks * 2);
-        let num_keys = ctrl.previouses().len();
+    fn update_cache(
+        args: UpdateArgs<'_>,
+        animation: &Animation,
+        ctrl: &KeyframesCtrl<'_>,
+        ratio: f32,
+        prev_ratio: f32,
+    ) {
+        assert!(ctrl.previouses.len() >= args.num_tracks * 2);
+        let num_keys = ctrl.previouses.len();
 
         let mut next = *args.next;
         assert!(next == 0 || (next >= args.num_tracks * 2 && next <= num_keys));
 
         // Initialize
         let delta = ratio - prev_ratio;
-        if next == 0 || (delta.abs() > ctrl.iframe_interval() / 2.0) {
+        if next == 0 || (delta.abs() > ctrl.iframe_interval / 2.0) {
             let mut iframe = -1;
-            if !ctrl.iframe_desc().is_empty() {
-                iframe = (0.5 + ratio / ctrl.iframe_interval()) as i32;
+            if !ctrl.iframe_desc.is_empty() {
+                iframe = (0.5 + ratio / ctrl.iframe_interval) as i32;
             } else if next == 0 || delta < 0.0 {
                 iframe = 0;
             }
@@ -1175,10 +1181,10 @@ where
         // Forward
         let mut track = 0;
         while next < num_keys
-            && Self::key_ratio(ctrl, &animation.timepoints(), next - ctrl.previouses()[next] as usize) <= ratio
+            && Self::key_ratio(ctrl, &animation.timepoints(), next - ctrl.previouses[next] as usize) <= ratio
         {
-            track = Self::track_forward(args.entries, ctrl.previouses(), next, track, args.num_tracks);
-            assert!((args.entries[track] as usize) == next - (ctrl.previouses()[next] as usize));
+            track = Self::track_forward(args.entries, ctrl.previouses, next, track, args.num_tracks);
+            assert!((args.entries[track] as usize) == next - (ctrl.previouses[next] as usize));
             args.outdated[track / 32] |= 1 << ((track & 0x1F) / 4);
             args.entries[track] = next as u32;
             next += 1;
@@ -1188,14 +1194,14 @@ where
         while Self::key_ratio(
             ctrl,
             &animation.timepoints(),
-            next - 1 - ctrl.previouses()[next - 1] as usize,
+            next - 1 - ctrl.previouses[next - 1] as usize,
         ) > ratio
         {
             assert!(next - 1 >= args.num_tracks * 2);
             track = Self::track_backward(args.entries, next - 1, track, args.num_tracks);
             args.outdated[track / 32] |= 1 << ((track & 0x1F) / 4);
             assert!((args.entries[track] as usize) == next - 1);
-            let previous = ctrl.previouses()[args.entries[track] as usize];
+            let previous = ctrl.previouses[args.entries[track] as usize];
             assert!((args.entries[track] as usize) >= (previous as usize) + args.num_tracks);
             args.entries[track] -= previous as u32;
             next -= 1;
@@ -1206,12 +1212,12 @@ where
     }
 
     #[inline]
-    fn initialize_cache(ctrl: &KeyframesCtrl, iframe: usize, entries: &mut [u32]) -> usize {
+    fn initialize_cache(ctrl: &KeyframesCtrl<'_>, iframe: usize, entries: &mut [u32]) -> usize {
         if iframe > 0 {
             let iframe = (iframe - 1) * 2;
-            let offset = ctrl.iframe_desc()[iframe] as usize;
-            decode_gv4_stream(&ctrl.iframe_entries()[offset..], entries);
-            return (ctrl.iframe_desc()[iframe + 1] + 1) as usize;
+            let offset = ctrl.iframe_desc[iframe] as usize;
+            decode_gv4_stream(&ctrl.iframe_entries[offset..], entries);
+            return (ctrl.iframe_desc[iframe + 1] + 1) as usize;
         } else {
             let num_tracks = entries.len() as u32;
             for i in 0..num_tracks {
@@ -1270,45 +1276,25 @@ where
         return 0;
     }
 
-    #[inline]
-    fn key_ratio(ctrl: &KeyframesCtrl, timepoints: &[f32], at: usize) -> f32 {
-        let timepoint;
-        if timepoints.len() <= u8::MAX as usize {
-            timepoint = timepoints[ctrl.ratios_u8()[at] as usize];
-        } else {
-            timepoint = timepoints[ctrl.ratios_u16()[at] as usize];
-        }
-        return timepoint;
+    #[inline(always)]
+    fn key_ratio(ctrl: &KeyframesCtrl<'_>, timepoints: &[f32], at: usize) -> f32 {
+        return timepoints[ctrl.ratios[at] as usize];
     }
 
-    #[inline]
-    fn key_ratio_simd(ctrl: &KeyframesCtrl, timepoints: &[f32], ats: &[u32]) -> f32x4 {
-        let mut index = [0u16; 4];
-        if timepoints.len() <= u8::MAX as usize {
-            let ratios = ctrl.ratios_u8();
-            index[0] = ratios[ats[0] as usize] as u16;
-            index[1] = ratios[ats[1] as usize] as u16;
-            index[2] = ratios[ats[2] as usize] as u16;
-            index[3] = ratios[ats[3] as usize] as u16;
-        } else {
-            let ratios = ctrl.ratios_u16();
-            index[0] = ratios[ats[0] as usize];
-            index[1] = ratios[ats[1] as usize];
-            index[2] = ratios[ats[2] as usize];
-            index[3] = ratios[ats[3] as usize];
-        };
+    #[inline(always)]
+    fn key_ratio_simd(ctrl: &KeyframesCtrl<'_>, timepoints: &[f32], ats: &[u32]) -> f32x4 {
         return f32x4::from_array([
-            timepoints[index[0] as usize],
-            timepoints[index[1] as usize],
-            timepoints[index[2] as usize],
-            timepoints[index[3] as usize],
+            timepoints[ctrl.ratios[ats[0] as usize] as usize],
+            timepoints[ctrl.ratios[ats[1] as usize] as usize],
+            timepoints[ctrl.ratios[ats[2] as usize] as usize],
+            timepoints[ctrl.ratios[ats[3] as usize] as usize],
         ]);
     }
 
     fn decompress_float3(
         args: DecompressArgs<'_, InterpSoaFloat3>,
         timepoints: &[f32],
-        ctrl: &KeyframesCtrl,
+        ctrl: &KeyframesCtrl<'_>,
         compressed: &[Float3Key],
     ) {
         for j in 0..args.outdated.len() {
@@ -1320,10 +1306,10 @@ where
 
                 let rights = &args.entries[i * 4..i * 4 + 4];
                 let lefts = [
-                    rights[0] - (ctrl.previouses()[rights[0] as usize] as u32),
-                    rights[1] - (ctrl.previouses()[rights[1] as usize] as u32),
-                    rights[2] - (ctrl.previouses()[rights[2] as usize] as u32),
-                    rights[3] - (ctrl.previouses()[rights[3] as usize] as u32),
+                    rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
+                    rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
+                    rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
+                    rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
                 ];
 
                 let k00 = compressed[lefts[0] as usize];
@@ -1348,7 +1334,7 @@ where
     fn decompress_quat(
         args: DecompressArgs<'_, InterpSoaQuaternion>,
         timepoints: &[f32],
-        ctrl: &KeyframesCtrl,
+        ctrl: &KeyframesCtrl<'_>,
         compressed: &[QuaternionKey],
     ) {
         for j in 0..args.outdated.len() {
@@ -1360,10 +1346,10 @@ where
 
                 let rights = &args.entries[i * 4..i * 4 + 4];
                 let lefts = [
-                    rights[0] - (ctrl.previouses()[rights[0] as usize] as u32),
-                    rights[1] - (ctrl.previouses()[rights[1] as usize] as u32),
-                    rights[2] - (ctrl.previouses()[rights[2] as usize] as u32),
-                    rights[3] - (ctrl.previouses()[rights[3] as usize] as u32),
+                    rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
+                    rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
+                    rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
+                    rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
                 ];
 
                 let k00 = compressed[lefts[0] as usize];
@@ -1459,6 +1445,7 @@ mod sampling_tests {
     use wasm_bindgen_test::*;
 
     use super::*;
+    use crate::animation::AnimationRaw;
     use crate::base::OzzBuf;
 
     fn make_buf<T>(v: Vec<T>) -> Rc<RefCell<Vec<T>>> {
@@ -1533,12 +1520,30 @@ mod sampling_tests {
         return vec![Float3Key::new([f16(1.0); 3]); 8];
     }
 
-    fn empty_ctrl_ratios(n: u8) -> Vec<u8> {
+    fn empty_ratios(n: u16) -> Vec<u16> {
         return vec![0, 0, 0, 0, n, n, n, n];
     }
 
-    fn empty_ctrl_previouses() -> Vec<u16> {
+    fn empty_previouses() -> Vec<u16> {
         return vec![0, 0, 0, 0, 4, 4, 4, 4];
+    }
+
+    fn empty_animation_raw<const S: usize>(duration: f32) -> AnimationRaw {
+        return AnimationRaw {
+            duration,
+            num_tracks: S as u32,
+            timepoints: vec![],
+            translations: empty_translations(),
+            t_ratios: empty_ratios(S as u16),
+            t_previouses: empty_previouses(),
+            rotations: empty_rotations(),
+            r_ratios: empty_ratios(S as u16),
+            r_previouses: empty_previouses(),
+            scales: empty_scales(),
+            s_ratios: empty_ratios(S as u16),
+            s_previouses: empty_previouses(),
+            ..Default::default()
+        };
     }
 
     #[derive(Debug, Clone)]
@@ -1547,63 +1552,14 @@ mod sampling_tests {
         transform: [(Vec3, Quat, Vec3); S],
     }
 
-    struct TestArgs<const S: usize> {
-        duration: f32,
-        timepoints: Vec<f32>,
-        translations: Vec<Float3Key>,
-        translations_ctrl_ratios: Vec<u8>,
-        translations_ctrl_previouses: Vec<u16>,
-        rotations: Vec<QuaternionKey>,
-        rotations_ctrl_ratios: Vec<u8>,
-        rotations_ctrl_previouses: Vec<u16>,
-        scales: Vec<Float3Key>,
-        scales_ctrl_ratios: Vec<u8>,
-        scales_ctrl_previouses: Vec<u16>,
-        frames: Vec<Frame<S>>,
-    }
-
-    impl<const S: usize> Default for TestArgs<S> {
-        fn default() -> TestArgs<S> {
-            return TestArgs {
-                duration: 1.0,
-                timepoints: vec![],
-                translations: empty_translations(),
-                translations_ctrl_ratios: empty_ctrl_ratios(S as u8),
-                translations_ctrl_previouses: empty_ctrl_previouses(),
-                rotations: empty_rotations(),
-                rotations_ctrl_ratios: empty_ctrl_ratios(S as u8),
-                rotations_ctrl_previouses: empty_ctrl_previouses(),
-                scales: empty_scales(),
-                scales_ctrl_ratios: empty_ctrl_ratios(S as u8),
-                scales_ctrl_previouses: empty_ctrl_previouses(),
-                frames: vec![],
-            };
-        }
-    }
-
-    fn new_keyframes_ctrl(ratios: Vec<u8>, previouses: Vec<u16>) -> KeyframesCtrl {
-        return KeyframesCtrl::new(ratios, previouses, vec![], vec![], 1.0);
-    }
-
-    fn execute_test<const S: usize>(args: TestArgs<S>) {
-        let animation = Rc::new(Animation::from_raw(
-            args.duration,
-            S,
-            String::new(),
-            args.timepoints,
-            new_keyframes_ctrl(args.translations_ctrl_ratios, args.translations_ctrl_previouses),
-            new_keyframes_ctrl(args.rotations_ctrl_ratios, args.rotations_ctrl_previouses),
-            new_keyframes_ctrl(args.scales_ctrl_ratios, args.scales_ctrl_previouses),
-            args.translations,
-            args.rotations,
-            args.scales,
-        ));
+    fn execute_test<const S: usize>(animation: AnimationRaw, frames: Vec<Frame<S>>) {
+        let animation = Rc::new(Animation::from_raw(&animation));
         let mut job = SamplingJob::default();
         job.set_animation(animation);
         job.set_context(SamplingContext::new(S));
         let output = make_buf(vec![TX; S + 1]);
 
-        for frame in &args.frames {
+        for frame in frames.iter() {
             job.set_output(output.clone());
             job.set_ratio(frame.ratio);
             job.run().unwrap();
@@ -1658,27 +1614,28 @@ mod sampling_tests {
             };
         }
 
-        execute_test::<4>(TestArgs {
-            duration: 1.0,
-            timepoints: vec![0.0, 0.2, 0.4, 0.6, 1.0],
-            translations: vec![
-                Float3Key::new([f16(-1.000000), 0, 0]),
-                Float3Key::new([f16(0.000000), 0, 0]),
-                Float3Key::new([f16(2.000000), 0, 0]),
-                Float3Key::new([f16(7.000000), 0, 0]),
-                Float3Key::new([f16(-1.000000), 0, 0]),
-                Float3Key::new([f16(0.000000), 0, 0]),
-                Float3Key::new([f16(6.000000), 0, 0]),
-                Float3Key::new([f16(7.000000), 0, 0]),
-                Float3Key::new([f16(8.000000), 0, 0]),
-                Float3Key::new([f16(9.000000), 0, 0]),
-                Float3Key::new([f16(10.000000), 0, 0]),
-                Float3Key::new([f16(11.000000), 0, 0]),
-                Float3Key::new([f16(9.000000), 0, 0]),
-            ],
-            translations_ctrl_ratios: vec![0, 0, 0, 0, 4, 4, 1, 1, 2, 3, 3, 4, 4],
-            translations_ctrl_previouses: vec![0, 0, 0, 0, 4, 4, 4, 4, 2, 2, 2, 1, 3],
-            frames: vec![
+        let mut ar = empty_animation_raw::<4>(1.0);
+        ar.timepoints = vec![0.0, 0.2, 0.4, 0.6, 1.0];
+        ar.translations = vec![
+            Float3Key::new([f16(-1.000000), 0, 0]),
+            Float3Key::new([f16(0.000000), 0, 0]),
+            Float3Key::new([f16(2.000000), 0, 0]),
+            Float3Key::new([f16(7.000000), 0, 0]),
+            Float3Key::new([f16(-1.000000), 0, 0]),
+            Float3Key::new([f16(0.000000), 0, 0]),
+            Float3Key::new([f16(6.000000), 0, 0]),
+            Float3Key::new([f16(7.000000), 0, 0]),
+            Float3Key::new([f16(8.000000), 0, 0]),
+            Float3Key::new([f16(9.000000), 0, 0]),
+            Float3Key::new([f16(10.000000), 0, 0]),
+            Float3Key::new([f16(11.000000), 0, 0]),
+            Float3Key::new([f16(9.000000), 0, 0]),
+        ];
+        ar.t_ratios = vec![0, 0, 0, 0, 4, 4, 1, 1, 2, 3, 3, 4, 4];
+        ar.t_previouses = vec![0, 0, 0, 0, 4, 4, 4, 4, 2, 2, 2, 1, 3];
+        execute_test::<4>(
+            ar,
+            vec![
                 frame(-0.2, -1.0, 0.0, 2.0, 7.0),
                 frame(0.0, -1.0, 0.0, 2.0, 7.0),
                 frame(0.0000001, -1.0, 0.0, 2.000002, 7.0),
@@ -1697,54 +1654,49 @@ mod sampling_tests {
                 frame(0.9999999, -1.0, 0.0, 11.0, 9.0),
                 frame(0.0000001, -1.0, 0.0, 2.000002, 7.0),
             ],
-            ..Default::default()
-        });
+        );
     }
 
     #[test]
     #[wasm_bindgen_test]
     fn test_sampling_no_track() {
-        execute_test::<0>(TestArgs {
-            duration: 46.0,
-            ..Default::default()
-        });
+        execute_test::<0>(empty_animation_raw::<0>(46.0), vec![]);
     }
 
     #[test]
     #[wasm_bindgen_test]
     fn test_sampling_1_track_0_key() {
-        execute_test::<1>(TestArgs {
-            duration: 46.0,
-            timepoints: vec![0.0, 1.0],
-            frames: (-2..12)
+        let mut ar = empty_animation_raw::<1>(46.0);
+        ar.timepoints = vec![0.0, 1.0];
+        execute_test::<1>(
+            ar,
+            (-2..12)
                 .map(|x| Frame {
                     ratio: x as f32 / 10.0,
                     transform: [(V0, QU, V1)],
                 })
                 .collect::<Vec<_>>(),
-            ..Default::default()
-        });
+        );
     }
 
     #[test]
     #[wasm_bindgen_test]
     fn test_sampling_1_track_1_key() {
-        let mut translations = empty_translations();
-        translations[0] = Float3Key::new([f16(1.0), f16(-1.0), f16(5.0)]);
-        translations[4] = Float3Key::new([f16(1.0), f16(-1.0), f16(5.0)]);
+        let mut ar = empty_animation_raw::<1>(46.0);
+        ar.timepoints = vec![0.0, 1.0];
+        ar.translations = empty_translations();
+        ar.translations[0] = Float3Key::new([f16(1.0), f16(-1.0), f16(5.0)]);
+        ar.translations[4] = Float3Key::new([f16(1.0), f16(-1.0), f16(5.0)]);
 
-        execute_test::<1>(TestArgs {
-            duration: 46.0,
-            timepoints: vec![0.0, 1.0],
-            translations,
-            frames: (-2..12)
+        execute_test::<1>(
+            ar,
+            (-2..12)
                 .map(|x| Frame {
                     ratio: x as f32 / 10.0,
                     transform: [(Vec3::new(1.0, -1.0, 5.0), QU, V1)],
                 })
                 .collect::<Vec<_>>(),
-            ..Default::default()
-        });
+        );
     }
 
     #[test]
@@ -1757,7 +1709,13 @@ mod sampling_tests {
             };
         }
 
-        let translations = vec![
+        let mut ar = empty_animation_raw::<2>(46.0);
+        ar.timepoints = vec![0.0, 0.5 / 46.0, 0.8 / 46.0, 1.0];
+        ar.t_ratios = vec![0, 0, 0, 0, 1, 3, 3, 3, 2, 3];
+        ar.t_previouses = vec![0, 0, 0, 0, 4, 4, 4, 4, 4, 1];
+        ar.r_ratios = empty_ratios(3);
+        ar.s_ratios = empty_ratios(3);
+        ar.translations = vec![
             Float3Key::new([f16(1.0), f16(2.0), f16(4.0)]),
             Float3Key::new([f16(0.0); 3]),
             Float3Key::new([f16(0.0); 3]),
@@ -1770,15 +1728,9 @@ mod sampling_tests {
             Float3Key::new([f16(2.0), f16(4.0), f16(8.0)]),
         ];
 
-        execute_test::<2>(TestArgs {
-            duration: 46.0,
-            timepoints: vec![0.0, 0.5 / 46.0, 0.8 / 46.0, 1.0],
-            translations,
-            translations_ctrl_ratios: vec![0, 0, 0, 0, 1, 3, 3, 3, 2, 3],
-            translations_ctrl_previouses: vec![0, 0, 0, 0, 4, 4, 4, 4, 4, 1],
-            rotations_ctrl_ratios: empty_ctrl_ratios(3),
-            scales_ctrl_ratios: empty_ctrl_ratios(3),
-            frames: vec![
+        execute_test::<2>(
+            ar,
+            vec![
                 // forward
                 frame(0.0, Vec3::new(1.0, 2.0, 4.0)),
                 frame(0.5 / 46.0, Vec3::new(1.0, 2.0, 4.0)),
@@ -1791,15 +1743,23 @@ mod sampling_tests {
                 frame(0.5 / 46.0, Vec3::new(1.0, 2.0, 4.0)),
                 frame(0.0, Vec3::new(1.0, 2.0, 4.0)),
             ],
-            ..Default::default()
-        });
+        );
     }
 
     #[test]
     #[wasm_bindgen_test]
     #[rustfmt::skip]
     fn test_sampling_4_track_2_key() {
-        let translations = vec![
+        let mut ar = empty_animation_raw::<4>(1.0);
+        ar.timepoints=vec![0.0, 0.5, 0.8, 1.0];
+        ar.t_ratios=vec![0, 0, 0, 0, 1, 3, 3, 3, 2, 3];
+        ar.t_previouses=vec![0, 0, 0, 0, 4, 4, 4, 4, 4, 1];
+        ar.r_ratios=empty_ratios(3);
+        ar.r_previouses=empty_previouses();
+        ar.s_ratios=vec![0, 0, 0, 0, 3, 3, 1, 3, 2, 3];
+        ar.s_previouses=vec![0, 0, 0, 0, 4, 4, 4, 4, 2, 1];
+
+        ar.translations = vec![
             Float3Key::new([f16(1.0), f16(2.0), f16(4.0)]),
             Float3Key::new([f16(0.0); 3]),
             Float3Key::new([f16(0.0); 3]),
@@ -1812,10 +1772,10 @@ mod sampling_tests {
             Float3Key::new([f16(2.0), f16(4.0), f16(8.0)]),
         ];
 
-        let mut rotations = empty_rotations();
-        rotations[5] = QuaternionKey::new([65529, 65533, 32766]);
+        ar.rotations = empty_rotations();
+        ar.rotations[5] = QuaternionKey::new([65529, 65533, 32766]);
 
-        let scales = vec![
+        ar.scales = vec![
             Float3Key::new([f16(1.0); 3]),
             Float3Key::new([f16(1.0); 3]),
             Float3Key::new([f16(0.0); 3]),
@@ -1852,21 +1812,9 @@ mod sampling_tests {
         frames_raw.reverse();
         frames.append(&mut frames_raw);
 
-        execute_test::<4>(TestArgs {
-            duration: 1.0,
-            timepoints: vec![0.0, 0.5, 0.8, 1.0],
-            translations,
-            translations_ctrl_ratios: vec![0, 0, 0, 0, 1, 3, 3, 3, 2, 3],
-            translations_ctrl_previouses: vec![0, 0, 0, 0, 4, 4, 4, 4, 4, 1],
-            rotations,
-            rotations_ctrl_ratios: empty_ctrl_ratios(3),
-            rotations_ctrl_previouses: empty_ctrl_previouses(),
-            scales,
-            scales_ctrl_ratios: vec![0, 0, 0, 0, 3, 3, 1, 3, 2, 3],
-            scales_ctrl_previouses: vec![0, 0, 0, 0, 4, 4, 4, 4, 2, 1],
+        execute_test::<4>(ar,
             frames,
-            ..Default::default()
-        });
+        );
     }
 
     #[test]
@@ -1876,31 +1824,23 @@ mod sampling_tests {
         translations[0] = Float3Key::new([f16(1.0), f16(-1.0), f16(5.0)]);
         translations[4] = Float3Key::new([f16(1.0), f16(-1.0), f16(5.0)]);
 
-        let animation1 = Rc::new(Animation::from_raw(
-            46.0,
-            1,
-            String::new(),
-            vec![0.0, 1.0],
-            new_keyframes_ctrl(empty_ctrl_ratios(1), empty_ctrl_previouses()),
-            new_keyframes_ctrl(empty_ctrl_ratios(1), empty_ctrl_previouses()),
-            new_keyframes_ctrl(empty_ctrl_ratios(1), empty_ctrl_previouses()),
-            translations.clone(),
-            empty_rotations(),
-            empty_scales(),
-        ));
-
-        let animation2 = Rc::new(Animation::from_raw(
-            46.0,
-            1,
-            String::new(),
-            vec![0.0, 1.0],
-            new_keyframes_ctrl(empty_ctrl_ratios(1), empty_ctrl_previouses()),
-            new_keyframes_ctrl(empty_ctrl_ratios(1), empty_ctrl_previouses()),
-            new_keyframes_ctrl(empty_ctrl_ratios(1), empty_ctrl_previouses()),
+        let animation_raw = AnimationRaw {
+            duration: 46.0,
+            num_tracks: 1,
+            timepoints: vec![0.0, 1.0],
             translations,
-            empty_rotations(),
-            empty_scales(),
-        ));
+            t_ratios: empty_ratios(1),
+            t_previouses: empty_previouses(),
+            rotations: empty_rotations(),
+            r_ratios: empty_ratios(1),
+            r_previouses: empty_previouses(),
+            scales: empty_scales(),
+            s_ratios: empty_ratios(1),
+            s_previouses: empty_previouses(),
+            ..Default::default()
+        };
+        let animation1 = Rc::new(Animation::from_raw(&animation_raw));
+        let animation2 = Rc::new(Animation::from_raw(&animation_raw));
 
         let mut job = SamplingJob::default();
         job.set_animation(animation1.clone());
