@@ -19,6 +19,9 @@ pub struct OzzTwoBoneIK {
     spine_trans: Vec<OzzTransform>,
 }
 
+unsafe impl Send for OzzTwoBoneIK {}
+unsafe impl Sync for OzzTwoBoneIK {}
+
 impl OzzTwoBoneIK {
     pub async fn new() -> Box<dyn OzzExample> {
         let mut ar_skeleton = load_archive("/two_bone_ik/skeleton.ozz").await.unwrap();
@@ -61,7 +64,7 @@ impl OzzTwoBoneIK {
 
         oc.bone_trans.reserve(bone_count);
         oc.spine_trans.reserve(spine_count);
-        return Box::new(oc);
+        Box::new(oc)
     }
 }
 
@@ -71,11 +74,11 @@ impl OzzExample for OzzTwoBoneIK {
     }
 
     fn bone_trans(&self) -> &[OzzTransform] {
-        return &self.bone_trans;
+        &self.bone_trans
     }
 
     fn spine_trans(&self) -> &[OzzTransform] {
-        return &self.spine_trans;
+        &self.spine_trans
     }
 
     fn update(&mut self, time: Time) {
@@ -108,11 +111,11 @@ impl OzzExample for OzzTwoBoneIK {
         self.ik_job.set_twist_angle(0.0);
         self.ik_job.set_pole_vector(Vec3::new(0.0, 1.0, 0.0).into());
         self.ik_job
-            .set_start_joint(self.models1.buf().unwrap()[start_joint as usize].into());
+            .set_start_joint(self.models1.buf().unwrap()[start_joint as usize]);
         self.ik_job
-            .set_mid_joint(self.models1.buf().unwrap()[mid_joint as usize].into());
+            .set_mid_joint(self.models1.buf().unwrap()[mid_joint as usize]);
         self.ik_job
-            .set_end_joint(self.models1.buf().unwrap()[end_joint as usize].into());
+            .set_end_joint(self.models1.buf().unwrap()[end_joint as usize]);
 
         self.ik_job.run().unwrap();
 

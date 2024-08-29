@@ -17,3 +17,4 @@ Cargo.lock
 .vscode/
 
 output/
+.DS_Store

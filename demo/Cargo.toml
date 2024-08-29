@@ -6,6 +6,6 @@ edition = "2021"
 resolver = "2"
 
 [dependencies]
-bevy = "0.13"
+bevy = "0.14"
 ozz-animation-rs = { path = "../" }
 reqwest = "0.11"

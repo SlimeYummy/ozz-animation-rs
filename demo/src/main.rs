@@ -43,7 +43,7 @@ enum OzzType {
     TwoBoneIK,
 }
 
-const OZZ_TYPES: [(OzzType, &'static str); 3] = [
+const OZZ_TYPES: [(OzzType, &str); 3] = [
     (OzzType::Playback, "Playback"),
     (OzzType::Blend, "Blend"),
     (OzzType::TwoBoneIK, "TwoBoneIK"),
@@ -87,7 +87,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     // ground
     commands.spawn(PbrBundle {
         mesh: meshes.add(Rectangle::new(20.0, 30.0)),
-        material: materials.add(Color::rgb(1.0, 0.96, 0.95)),
+        material: materials.add(Color::srgb(1.0, 0.96, 0.95)),
         transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
             .with_translation(Vec3::new(-2.0, 0.0, -5.0)),
         ..default()
@@ -95,7 +95,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
 
     // bones
     let bone_mesh = meshes.add(build_bone_mesh());
-    let bone_material = materials.add(Color::rgb(0.68, 0.68, 0.8));
+    let bone_material = materials.add(Color::srgb(0.68, 0.68, 0.8));
     for i in 0..BONE_COUNT {
         commands.spawn((
             PbrBundle {
@@ -120,7 +120,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
         PbrBundle {
             mesh: meshes.add(Cuboid::new(2.0, 1.0, 1.0)),
             material: materials.add(StandardMaterial {
-                base_color: Color::rgb(0.4, 0.61, 0.98),
+                base_color: Color::srgb(0.4, 0.61, 0.98),
                 unlit: true,
                 cull_mode: None,
                 ..default()
@@ -139,7 +139,6 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
             shadows_enabled: true,
             shadow_depth_bias: 0.05,
             shadow_normal_bias: 0.9,
-            ..default()
         },
         transform: Transform::from_xyz(-3.0, 1.6, -4.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
         ..default()
@@ -196,7 +195,7 @@ fn update_bones(mut query: Query<(&mut Transform, &mut Visibility, &BoneIndex)>,
     if let Some(example) = &oc.iter().last().unwrap().example {
         // only one OzzComponent
         let bone_trans = example.bone_trans();
-        if bone_trans.len() > 0 {
+        if !bone_trans.is_empty() {
             for (mut transform, mut visibility, idx) in query.iter_mut() {
                 if idx.0 < bone_trans.len() {
                     *visibility = Visibility::Visible;
@@ -215,7 +214,7 @@ fn draw_spines(mut gizmos: Gizmos, oc: Query<&OzzComponent>) {
     if let Some(example) = &oc.iter().last().unwrap().example {
         // only one OzzComponent
         let spine_trans = example.spine_trans();
-        if spine_trans.len() > 0 {
+        if !spine_trans.is_empty() {
             for trans in spine_trans {
                 draw_gizmos(&mut gizmos, trans);
             }
@@ -226,26 +225,23 @@ fn draw_spines(mut gizmos: Gizmos, oc: Query<&OzzComponent>) {
 
 #[rustfmt::skip]
 fn build_bone_mesh() -> Mesh {
-    let c = vec![
-        Vec3::new(1.0, 0.0, 0.0),
+    let c = [Vec3::new(1.0, 0.0, 0.0),
         Vec3::new(0.2, 0.1, 0.1),
         Vec3::new(0.2, 0.1, -0.1),
         Vec3::new(0.2, -0.1, -0.1),
         Vec3::new(0.2, -0.1, 0.1),
-        Vec3::new(0.0, 0.0, 0.0),
-    ];
-    let n = vec![
-        Vec3::cross(c[2] - c[1], c[2] - c[0]).normalize(),
+        Vec3::new(0.0, 0.0, 0.0)];
+    let n = [Vec3::cross(c[2] - c[1], c[2] - c[0]).normalize(),
         Vec3::cross(c[1] - c[2], c[1] - c[5]).normalize(),
         Vec3::cross(c[3] - c[2], c[3] - c[0]).normalize(),
         Vec3::cross(c[2] - c[3], c[2] - c[5]).normalize(),
         Vec3::cross(c[4] - c[3], c[4] - c[0]).normalize(),
         Vec3::cross(c[3] - c[4], c[3] - c[5]).normalize(),
         Vec3::cross(c[1] - c[4], c[1] - c[0]).normalize(),
-        Vec3::cross(c[4] - c[1], c[4] - c[5]).normalize(),
-    ];
+        Vec3::cross(c[4] - c[1], c[4] - c[5]).normalize()];
     
-    let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+    
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![
         c[0], c[2], c[1],
         c[5], c[1], c[2],
@@ -265,8 +261,7 @@ fn build_bone_mesh() -> Mesh {
         n[5], n[5], n[5],
         n[6], n[6], n[6],
         n[7], n[7], n[7],
-    ]);
-    return mesh;
+    ])
 }
 
 fn draw_ground(gizmos: &mut Gizmos) {
@@ -274,14 +269,14 @@ fn draw_ground(gizmos: &mut Gizmos) {
         gizmos.line(
             Vec3::new(i as f32, 0.0, -20.0),
             Vec3::new(i as f32, 0.0, 10.0),
-            Color::rgba(0.25, 0.25, 0.25, 0.4),
+            Color::srgba(0.25, 0.25, 0.25, 0.4),
         );
     }
     for i in -20..=10 {
         gizmos.line(
             Vec3::new(-12.0, 0.0, i as f32),
             Vec3::new(8.0, 0.0, i as f32),
-            Color::rgba(0.25, 0.25, 0.25, 0.4),
+            Color::srgba(0.25, 0.25, 0.25, 0.4),
         );
     }
 }
@@ -292,21 +287,22 @@ fn draw_gizmos(gizmos: &mut Gizmos, trans: &OzzTransform) {
     let normal_z = trans.rotation.mul_vec3(Vec3::Z).normalize();
     gizmos.circle(
         trans.position,
-        Direction3d::new_unchecked(normal_x),
+        Dir3::new_unchecked(normal_x),
         trans.scale * 0.25,
-        Color::rgba(1.0, 0.1, 0.1, 0.5),
+        Color::srgba(1.0, 0.1, 0.1, 0.5),
+    );
+
+    gizmos.circle(
+        trans.position,
+        Dir3::new_unchecked(normal_y),
+        trans.scale * 0.25,
+        Color::srgba(0.1, 1.0, 0.1, 0.5),
     );
     gizmos.circle(
         trans.position,
-        Direction3d::new_unchecked(normal_y),
+        Dir3::new_unchecked(normal_z),
         trans.scale * 0.25,
-        Color::rgba(0.1, 1.0, 0.1, 0.5),
-    );
-    gizmos.circle(
-        trans.position,
-        Direction3d::new_unchecked(normal_z),
-        trans.scale * 0.25,
-        Color::rgba(0.1, 0.1, 1.0, 0.5),
+        Color::srgba(0.1, 0.1, 1.0, 0.5),
     );
 }
 
