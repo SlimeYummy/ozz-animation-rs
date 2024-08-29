@@ -487,7 +487,7 @@ impl IKTwoBoneJob {
 #[cfg(test)]
 mod ik_two_bone_tests {
     use core::f32::consts;
-    use glam::Vec3;
+    use glam::{Vec3, Vec4};
     use wasm_bindgen_test::*;
 
     use super::*;
@@ -504,6 +504,11 @@ mod ik_two_bone_tests {
         assert!(job.validate());
     }
 
+    #[inline(always)]
+    fn vec4_to_vec3a(v: Vec4) -> Vec3A {
+        Vec3A::new(v[0], v[1], v[2])
+    }
+
     #[test]
     #[wasm_bindgen_test]
     fn test_start_joint_correction() {
@@ -512,8 +517,8 @@ mod ik_two_bone_tests {
             Mat4::from_rotation_translation(Quat::from_axis_angle(Vec3::Z, core::f32::consts::FRAC_PI_2), Vec3::Y);
         let base_end = Mat4::from_translation(Vec3::X + Vec3::Y);
         let mid_axis = Vec3A::cross(
-            Vec3A::from_vec4(base_start.col(3)) - Vec3A::from_vec4(base_mid.col(3)),
-            Vec3A::from_vec4(base_end.col(3)) - Vec3A::from_vec4(base_mid.col(3)),
+            vec4_to_vec3a(base_start.col(3)) - vec4_to_vec3a(base_mid.col(3)),
+            vec4_to_vec3a(base_end.col(3)) - vec4_to_vec3a(base_mid.col(3)),
         );
 
         let parents = [
@@ -586,8 +591,8 @@ mod ik_two_bone_tests {
         let mid = Mat4::from_rotation_translation(Quat::from_axis_angle(Vec3::Z, consts::FRAC_PI_2), Vec3::Y);
         let end = Mat4::from_translation(Vec3::X + Vec3::Y);
         let mid_axis = Vec3A::cross(
-            Vec3A::from_vec4(start.col(3)) - Vec3A::from_vec4(mid.col(3)),
-            Vec3A::from_vec4(end.col(3)) - Vec3A::from_vec4(mid.col(3)),
+            vec4_to_vec3a(start.col(3)) - vec4_to_vec3a(mid.col(3)),
+            vec4_to_vec3a(end.col(3)) - vec4_to_vec3a(mid.col(3)),
         );
 
         let mut job = IKTwoBoneJob::default();
@@ -975,7 +980,7 @@ mod ik_two_bone_tests {
         let end = Mat4::from_translation(Vec3::X + Vec3::Y);
 
         let mut job = IKTwoBoneJob::default();
-        job.set_target(Vec3A::from_vec4(start.col(3)));
+        job.set_target(vec4_to_vec3a(start.col(3)));
         job.set_start_joint(start);
         job.set_mid_joint(mid);
         job.set_end_joint(end);

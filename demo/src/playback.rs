@@ -113,14 +113,14 @@ impl OzzExample for OzzPlayback {
             let bone_rot = Quat::from_mat3(&Mat3::from_cols(bone_dir, bone_rot_y, bone_rot_z));
 
             self.bone_trans.push(OzzTransform {
-                scale: scale,
+                scale,
                 rotation: bone_rot,
                 position: parent_pos,
             });
 
             let parent_rot = Quat::from_mat4(parent);
             self.spine_trans.push(OzzTransform {
-                scale: scale,
+                scale,
                 rotation: parent_rot,
                 position: parent_pos,
             });
@@ -128,7 +128,7 @@ impl OzzExample for OzzPlayback {
             if self.skeleton.is_leaf(i as i16) {
                 let current_rot = Quat::from_mat4(current);
                 self.spine_trans.push(OzzTransform {
-                    scale: scale,
+                    scale,
                     rotation: current_rot,
                     position: current_pos,
                 });
