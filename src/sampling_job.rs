@@ -184,9 +184,10 @@ impl Default for SamplingContextInner {
             rotation_outdated: ptr::null_mut(),
             rotation_next: 0,
 
-            outdated_translations_ptr: std::ptr::null_mut(),
-            outdated_rotations_ptr: std::ptr::null_mut(),
-            outdated_scales_ptr: std::ptr::null_mut(),
+            scales: ptr::null_mut(),
+            scale_entries: ptr::null_mut(),
+            scale_outdated: ptr::null_mut(),
+            scale_next: 0,
         }
     }
 }
@@ -276,7 +277,12 @@ impl Drop for SamplingContext {
 impl SamplingContext {
     #[inline(always)]
     fn inner(&self) -> &SamplingContextInner {
-        unsafe { &*self.inner }
+        unsafe { &*self.0 }
+    }
+
+    #[inline(always)]
+    fn inner_mut(&mut self) -> &mut SamplingContextInner {
+        unsafe { &mut *self.0 }
     }
 
     /// Create a new `SamplingContext`
@@ -321,28 +327,27 @@ impl SamplingContext {
             ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * inner.max_soa_tracks);
             inner.translation_entries = ptr as *mut u32;
             ptr = ptr.add(mem::size_of::<u32>() * inner.max_tracks);
-            inner.translation_outdated = ptr as *mut u8;
-            ptr = ptr.add(mem::size_of::<u8>() * inner.max_outdated);
+            inner.translation_outdated = ptr;
+            ptr = ptr.add(inner.max_outdated);
             ptr = align_ptr(ptr, ALIGN);
 
             inner.rotations = ptr as *mut InterpSoaQuaternion;
             ptr = ptr.add(mem::size_of::<InterpSoaQuaternion>() * inner.max_soa_tracks);
-            inner.scales_ptr = ptr as *mut InterpSoaFloat3;
-            ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * inner.max_soa_tracks);
-            inner.translation_keys_ptr = ptr as *mut i32;
-            ptr = ptr.add(mem::size_of::<i32>() * max_tracks * 2);
-            inner.rotation_keys_ptr = ptr as *mut i32;
-            ptr = ptr.add(mem::size_of::<i32>() * max_tracks * 2);
-            inner.scale_keys_ptr = ptr as *mut i32;
-            ptr = ptr.add(mem::size_of::<i32>() * max_tracks * 2);
-            inner.outdated_translations_ptr = ptr;
-            ptr = ptr.add(inner.num_outdated);
-            inner.outdated_rotations_ptr = ptr;
-            ptr = ptr.add(inner.num_outdated);
-            inner.outdated_scales_ptr = ptr;
-            ptr = ptr.add(inner.num_outdated);
-            assert_eq!(ptr, (ctx.inner as *mut u8).add(size));
+            inner.rotation_entries = ptr as *mut u32;
+            ptr = ptr.add(mem::size_of::<u32>() * inner.max_tracks);
+            inner.rotation_outdated = ptr;
+            ptr = ptr.add(inner.max_outdated);
+            ptr = align_ptr(ptr, ALIGN);
 
+            inner.scales = ptr as *mut InterpSoaFloat3;
+            ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * inner.max_soa_tracks);
+            inner.scale_entries = ptr as *mut u32;
+            ptr = ptr.add(mem::size_of::<u32>() * inner.max_tracks);
+            inner.scale_outdated = ptr;
+            ptr = ptr.add(inner.max_outdated);
+            ptr = align_ptr(ptr, ALIGN);
+
+            assert_eq!(ptr, (ctx.0 as *mut u8).add(size));
             ctx
         }
     }
@@ -352,7 +357,7 @@ impl SamplingContext {
     /// * `animation` - The animation to sample. Use `animation.num_tracks()` as max_tracks.
     pub fn from_animation(animation: &Animation) -> SamplingContext {
         let mut ctx = SamplingContext::new(animation.num_tracks());
-        ctx.animation_id = animation as *const _ as u64;
+        ctx.inner_mut().animation_id = animation as *const _ as u64;
         ctx
     }
 
@@ -370,7 +375,7 @@ impl SamplingContext {
     #[inline]
     pub fn clone_without_animation_id(&self) -> SamplingContext {
         let mut ctx = self.clone();
-        ctx.animation_id = 0;
+        ctx.set_animation_id(0);
         ctx
     }
 
@@ -581,7 +586,7 @@ impl SamplingContext {
     }
 
     #[inline]
-    fn translation_decompress_args<'t>(&'t self) -> DecompressArgs<'t, InterpSoaFloat3> {
+    fn translation_decompress_args(&self) -> DecompressArgs<'_, InterpSoaFloat3> {
         let inner = self.inner();
         return DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.translation_entries, inner.max_tracks) },
@@ -603,7 +608,7 @@ impl SamplingContext {
     }
 
     #[inline]
-    fn rotation_decompress_args<'t>(&'t self) -> DecompressArgs<'t, InterpSoaQuaternion> {
+    fn rotation_decompress_args(&self) -> DecompressArgs<'_, InterpSoaQuaternion> {
         let inner = self.inner();
         return DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.rotation_entries, inner.max_tracks) },
@@ -625,7 +630,7 @@ impl SamplingContext {
     }
 
     #[inline]
-    fn scale_decompress_args<'t>(&'t self) -> DecompressArgs<'t, InterpSoaFloat3> {
+    fn scale_decompress_args(&self) -> DecompressArgs<'_, InterpSoaFloat3> {
         let inner = self.inner();
         return DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.scale_entries, inner.max_tracks) },
@@ -641,35 +646,20 @@ pub struct ArchivedSamplingContext {
     pub animation_id: u64,
     pub ratio: f32,
 
-    /// The unique identifier of the animation that the context is sampling.
-    #[inline]
-    pub fn animation_id(&self) -> u64 {
-        self.animation_id
-    }
+    pub translations: rkyv::vec::ArchivedVec<InterpSoaFloat3>,
+    pub translation_entries: rkyv::vec::ArchivedVec<u32>,
+    pub translation_outdated: rkyv::vec::ArchivedVec<u8>,
+    pub translation_next: u32,
 
-    /// The current time ratio in the animation.
-    #[inline]
-    pub fn ratio(&self) -> f32 {
-        self.ratio
-    }
+    pub rotations: rkyv::vec::ArchivedVec<InterpSoaQuaternion>,
+    pub rotation_entries: rkyv::vec::ArchivedVec<u32>,
+    pub rotation_outdated: rkyv::vec::ArchivedVec<u8>,
+    pub rotation_next: u32,
 
-    /// Current cursors in the animation. 0 means that the context is invalid.
-    #[inline]
-    pub fn translation_cursor(&self) -> usize {
-        self.translation_cursor
-    }
-
-    /// Current cursors in the animation. 0 means that the context is invalid.
-    #[inline]
-    pub fn rotation_cursor(&self) -> usize {
-        self.rotation_cursor
-    }
-
-    /// Current cursors in the animation. 0 means that the context is invalid.
-    #[inline]
-    pub fn scale_cursor(&self) -> usize {
-        self.scale_cursor
-    }
+    pub scales: rkyv::vec::ArchivedVec<InterpSoaFloat3>,
+    pub scale_entries: rkyv::vec::ArchivedVec<u32>,
+    pub scale_outdated: rkyv::vec::ArchivedVec<u8>,
+    pub scale_next: u32,
 }
 
 #[cfg(feature = "rkyv")]
@@ -743,62 +733,18 @@ const _: () = {
 
     impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for SamplingContext {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-            let mut resolver = SamplingContextResolver {
-                translations_pos: serializer.align_for::<InterpSoaFloat3>()?,
-                ..Default::default()
-            };
-
-            serializer.write(unsafe {
-                slice::from_raw_parts(
-                    self.translations().as_ptr() as *const u8,
-                    std::mem::size_of_val(self.translations()),
-                )
-            })?;
-            resolver.rotations_pos = serializer.align_for::<InterpSoaQuaternion>()?;
-            serializer.write(unsafe {
-                slice::from_raw_parts(
-                    self.rotations().as_ptr() as *const u8,
-                    std::mem::size_of_val(self.rotations()),
-                )
-            })?;
-            resolver.scales_pos = serializer.align_for::<InterpSoaFloat3>()?;
-            serializer.write(unsafe {
-                slice::from_raw_parts(
-                    self.scales().as_ptr() as *const u8,
-                    std::mem::size_of_val(self.scales()),
-                )
-            })?;
-
-            resolver.translation_keys_pos = serializer.align_for::<i32>()?;
-            serializer.write(unsafe {
-                slice::from_raw_parts(
-                    self.translation_keys().as_ptr() as *const u8,
-                    std::mem::size_of_val(self.translation_keys()),
-                )
-            })?;
-            resolver.rotation_keys_pos = serializer.align_for::<i32>()?;
-            serializer.write(unsafe {
-                slice::from_raw_parts(
-                    self.rotation_keys().as_ptr() as *const u8,
-                    std::mem::size_of_val(self.rotation_keys()),
-                )
-            })?;
-            resolver.scale_keys_pos = serializer.align_for::<i32>()?;
-            serializer.write(unsafe {
-                slice::from_raw_parts(
-                    self.scale_keys().as_ptr() as *const u8,
-                    std::mem::size_of_val(self.scale_keys()),
-                )
-            })?;
-
-            resolver.outdated_translations_pos = serializer.align_for::<u8>()?;
-            serializer.write(self.outdated_translations())?;
-            resolver.outdated_rotations_pos = serializer.align_for::<u8>()?;
-            serializer.write(self.outdated_rotations())?;
-            resolver.outdated_scales_pos = serializer.align_for::<u8>()?;
-            serializer.write(self.outdated_scales())?;
-
-            Ok(resolver)
+            serializer.align_for::<InterpSoaFloat3>()?;
+            Ok(SamplingContextResolver {
+                translations: ArchivedVec::serialize_from_slice(self.translations(), serializer)?,
+                rotations: ArchivedVec::serialize_from_slice(self.rotations(), serializer)?,
+                scales: ArchivedVec::serialize_from_slice(self.scales(), serializer)?,
+                translation_entries: ArchivedVec::serialize_from_slice(self.translation_entries(), serializer)?,
+                rotation_entries: ArchivedVec::serialize_from_slice(self.rotation_entries(), serializer)?,
+                scale_entries: ArchivedVec::serialize_from_slice(self.scale_entries(), serializer)?,
+                translation_outdateds: ArchivedVec::serialize_from_slice(self.translation_outdated(), serializer)?,
+                rotation_outdateds: ArchivedVec::serialize_from_slice(self.rotation_outdated(), serializer)?,
+                scale_outdateds: ArchivedVec::serialize_from_slice(self.scale_outdated(), serializer)?,
+            })
         }
     }
 
@@ -807,30 +753,28 @@ const _: () = {
         fn deserialize(&self, _: &mut D) -> Result<SamplingContext, D::Error> {
             let archived = from_archived!(self);
             let mut context = SamplingContext::new(archived.max_tracks as usize);
-            context.animation_id = archived.animation_id;
-            context.ratio = archived.ratio;
-            unsafe {
-                context.translations_mut().copy_from_slice(archived.translations());
-                context.rotations_mut().copy_from_slice(archived.rotations());
-                context.scales_mut().copy_from_slice(archived.scales());
-                context
-                    .translation_keys_mut()
-                    .copy_from_slice(archived.translation_keys());
-                context.rotation_keys_mut().copy_from_slice(archived.rotation_keys());
-                context.scale_keys_mut().copy_from_slice(archived.scale_keys());
-                context.translation_cursor = archived.translation_cursor as usize;
-                context.rotation_cursor = archived.rotation_cursor as usize;
-                context.scale_cursor = archived.scale_cursor as usize;
-                context
-                    .outdated_translations_mut()
-                    .copy_from_slice(archived.outdated_translations());
-                context
-                    .outdated_rotations_mut()
-                    .copy_from_slice(archived.outdated_rotations());
-                context
-                    .outdated_scales_mut()
-                    .copy_from_slice(archived.outdated_scales());
-            }
+            context.set_animation_id(archived.animation_id);
+            context.set_ratio(archived.ratio);
+            context.translations_mut().copy_from_slice(&archived.translations);
+            context.rotations_mut().copy_from_slice(&archived.rotations);
+            context.scales_mut().copy_from_slice(&archived.scales);
+            context
+                .translation_entries_mut()
+                .copy_from_slice(&archived.translation_entries);
+            context
+                .rotation_entries_mut()
+                .copy_from_slice(&archived.rotation_entries);
+            context.scale_entries_mut().copy_from_slice(&archived.scale_entries);
+            context
+                .translation_outdated_mut()
+                .copy_from_slice(&archived.translation_outdated);
+            context
+                .rotation_outdated_mut()
+                .copy_from_slice(&archived.rotation_outdated);
+            context.scale_outdated_mut().copy_from_slice(&archived.scale_outdated);
+            context.set_translation_next(archived.translation_next as usize);
+            context.set_rotation_next(archived.rotation_next as usize);
+            context.set_scale_next(archived.scale_next as usize);
             Ok(context)
         }
     }
@@ -866,15 +810,15 @@ const _: () = {
             map.serialize_entry("translations", self.translations())?;
             map.serialize_entry("rotations", self.rotations())?;
             map.serialize_entry("scales", self.scales())?;
-            map.serialize_entry("translations_keys", self.translation_keys())?;
-            map.serialize_entry("rotations_keys", self.rotation_keys())?;
-            map.serialize_entry("scales_keys", self.scale_keys())?;
-            map.serialize_entry("translation_cursor", &self.translation_cursor())?;
-            map.serialize_entry("rotation_cursor", &self.rotation_cursor())?;
-            map.serialize_entry("scale_cursor", &self.scale_cursor())?;
-            map.serialize_entry("outdated_translations", self.outdated_translations())?;
-            map.serialize_entry("outdated_rotations", self.outdated_rotations())?;
-            map.serialize_entry("outdated_scales", self.outdated_scales())?;
+            map.serialize_entry("translation_entries", self.translation_entries())?;
+            map.serialize_entry("translation_outdated", self.translation_outdated())?;
+            map.serialize_entry("translation_next", &self.translation_next())?;
+            map.serialize_entry("rotation_entries", self.rotation_entries())?;
+            map.serialize_entry("rotation_outdated", self.rotation_outdated())?;
+            map.serialize_entry("rotation_next", &self.rotation_next())?;
+            map.serialize_entry("scale_entries", self.scale_entries())?;
+            map.serialize_entry("scale_outdated", self.scale_outdated())?;
+            map.serialize_entry("scale_next", &self.scale_next())?;
             map.end()
         }
     }
@@ -1186,6 +1130,7 @@ where
         let args = ctx.as_mut().scale_decompress_args();
         Self::decompress_float3(args, anim.timepoints(), &anim.scales_ctrl(), anim.scales());
 
+        Self::interpolates(anim, ctx.as_mut(), self.ratio, &mut output)?;
         Ok(())
     }
 
@@ -1200,38 +1145,43 @@ where
         }
         let prev_ratio = ctx.ratio();
         ctx.set_ratio(ratio);
-        return prev_ratio;
+        prev_ratio
     }
 
-    fn update_translation_cursor(animation: &Animation, ctx: &mut SamplingContext, ratio: f32) {
-        if ctx.translation_cursor == 0 {
-            for i in 0..animation.num_soa_tracks() {
-                let in_idx0 = i * 4;
-                let in_idx1 = in_idx0 + animation.num_aligned_tracks();
-                let out_idx = i * 4 * 2;
-                ctx.translation_keys_mut()[out_idx] = in_idx0 as i32;
-                ctx.translation_keys_mut()[out_idx + 1] = in_idx1 as i32;
-                ctx.translation_keys_mut()[out_idx + 2] = (in_idx0 + 1) as i32;
-                ctx.translation_keys_mut()[out_idx + 3] = (in_idx1 + 1) as i32;
-                ctx.translation_keys_mut()[out_idx + 4] = (in_idx0 + 2) as i32;
-                ctx.translation_keys_mut()[out_idx + 5] = (in_idx1 + 2) as i32;
-                ctx.translation_keys_mut()[out_idx + 6] = (in_idx0 + 3) as i32;
-                ctx.translation_keys_mut()[out_idx + 7] = (in_idx1 + 3) as i32;
+    fn update_cache(
+        args: UpdateArgs<'_>,
+        animation: &Animation,
+        ctrl: &KeyframesCtrl<'_>,
+        ratio: f32,
+        prev_ratio: f32,
+    ) {
+        assert!(ctrl.previouses.len() >= args.num_tracks * 2);
+        let num_keys = ctrl.previouses.len();
+
+        let mut next = *args.next;
+        assert!(next == 0 || (next >= args.num_tracks * 2 && next <= num_keys));
+
+        // Initialize
+        let delta = ratio - prev_ratio;
+        if next == 0 || (delta.abs() > ctrl.iframe_interval / 2.0) {
+            let mut iframe = -1;
+            if !ctrl.iframe_desc.is_empty() {
+                iframe = (0.5 + ratio / ctrl.iframe_interval) as i32;
+            } else if next == 0 || delta < 0.0 {
+                iframe = 0;
             }
 
-            ctx.outdated_translations_mut().iter_mut().for_each(|x| *x = 0xFF);
-            let last_offset = ((animation.num_soa_tracks() + 7) / 8 * 8) - animation.num_soa_tracks();
-            if let Some(x) = ctx.outdated_translations_mut().last_mut() {
-                *x = 0xFF >> last_offset;
+            if iframe >= 0 {
+                next = Self::initialize_cache(ctrl, iframe as usize, args.entries);
+                assert!(next >= args.num_tracks * 2 && next <= num_keys);
+                Self::outdate_cache(args.outdated, args.num_soa_tracks);
             }
-
-            ctx.translation_cursor = animation.num_aligned_tracks() * 2;
         }
 
         // Forward
         let mut track = 0;
         while next < num_keys
-            && Self::key_ratio(ctrl, &animation.timepoints(), next - ctrl.previouses[next] as usize) <= ratio
+            && Self::key_ratio(ctrl, animation.timepoints(), next - ctrl.previouses[next] as usize) <= ratio
         {
             track = Self::track_forward(args.entries, ctrl.previouses, next, track, args.num_tracks);
             assert!((args.entries[track] as usize) == next - (ctrl.previouses[next] as usize));
@@ -1240,11 +1190,40 @@ where
             next += 1;
         }
 
-            ctx.outdated_translations_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.translations()[ctx.translation_cursor].track as usize) * 2;
-            ctx.translation_keys_mut()[base] = ctx.translation_keys()[base + 1];
-            ctx.translation_keys_mut()[base + 1] = ctx.translation_cursor as i32;
-            ctx.translation_cursor += 1;
+        // Rewinds
+        while Self::key_ratio(
+            ctrl,
+            animation.timepoints(),
+            next - 1 - ctrl.previouses[next - 1] as usize,
+        ) > ratio
+        {
+            assert!(next > args.num_tracks * 2);
+            track = Self::track_backward(args.entries, next - 1, track, args.num_tracks);
+            args.outdated[track / 32] |= 1 << ((track & 0x1F) / 4);
+            assert!((args.entries[track] as usize) == next - 1);
+            let previous = ctrl.previouses[args.entries[track] as usize];
+            assert!((args.entries[track] as usize) >= (previous as usize) + args.num_tracks);
+            args.entries[track] -= previous as u32;
+            next -= 1;
+        }
+
+        assert!(next >= args.num_tracks * 2 && next <= num_keys);
+        *args.next = next;
+    }
+
+    #[inline]
+    fn initialize_cache(ctrl: &KeyframesCtrl<'_>, iframe: usize, entries: &mut [u32]) -> usize {
+        if iframe > 0 {
+            let iframe = (iframe - 1) * 2;
+            let offset = ctrl.iframe_desc[iframe] as usize;
+            decode_gv4_stream(&ctrl.iframe_entries[offset..], entries);
+            (ctrl.iframe_desc[iframe + 1] + 1) as usize
+        } else {
+            let num_tracks = entries.len() as u32;
+            for i in 0..num_tracks {
+                entries[i as usize] = i + num_tracks;
+            }
+            (num_tracks * 2) as usize
         }
     }
 
@@ -1261,22 +1240,24 @@ where
 
     #[inline]
     fn track_forward(cache: &[u32], previouses: &[u16], key: usize, last_track: usize, num_tracks: usize) -> usize {
-        assert!(key < previouses.len());
-        assert!(last_track < num_tracks);
+        let target = key.saturating_sub(previouses[key] as usize);
 
-        let target = key - previouses[key] as usize;
-        for entry in last_track..num_tracks {
-            if (cache[entry] as usize) == target {
-                return entry;
-            }
+        if let Some((entry, _)) = cache
+            .iter()
+            .enumerate()
+            .skip(last_track)
+            .take(num_tracks - last_track)
+            .find(|&(_, &value)| value as usize == target)
+        {
+            return entry;
         }
-        for entry in 0..num_tracks {
-            if (cache[entry] as usize) == target {
-                return entry;
-            }
-            assert!(entry < last_track);
-        }
-        return 0;
+
+        cache
+            .iter()
+            .enumerate()
+            .take(last_track)
+            .find(|&(_, &value)| value as usize == target)
+            .map_or(0, |(entry, _)| entry)
     }
 
     #[inline]
@@ -1294,22 +1275,22 @@ where
             }
             assert!(entry > last_track);
         }
-        return 0;
+        0
     }
 
     #[inline(always)]
     fn key_ratio(ctrl: &KeyframesCtrl<'_>, timepoints: &[f32], at: usize) -> f32 {
-        return timepoints[ctrl.ratios[at] as usize];
+        timepoints[ctrl.ratios[at] as usize]
     }
 
     #[inline(always)]
     fn key_ratio_simd(ctrl: &KeyframesCtrl<'_>, timepoints: &[f32], ats: &[u32]) -> f32x4 {
-        return f32x4::from_array([
+        f32x4::from_array([
             timepoints[ctrl.ratios[ats[0] as usize] as usize],
             timepoints[ctrl.ratios[ats[1] as usize] as usize],
             timepoints[ctrl.ratios[ats[2] as usize] as usize],
             timepoints[ctrl.ratios[ats[3] as usize] as usize],
-        ]);
+        ])
     }
 
     fn decompress_float3(
@@ -1325,12 +1306,13 @@ where
                     continue;
                 }
 
-                let k00 = animation.translations()[ctx.translation_keys()[base] as usize];
-                let k10 = animation.translations()[ctx.translation_keys()[base + 2] as usize];
-                let k20 = animation.translations()[ctx.translation_keys()[base + 4] as usize];
-                let k30 = animation.translations()[ctx.translation_keys()[base + 6] as usize];
-                ctx.translations_mut()[i].ratio[0] = f32x4::from_array([k00.ratio, k10.ratio, k20.ratio, k30.ratio]);
-                Float3Key::simd_decompress(&k00, &k10, &k20, &k30, &mut ctx.translations_mut()[i].value[0]);
+                let rights = &args.entries[i * 4..i * 4 + 4];
+                let lefts = [
+                    rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
+                    rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
+                    rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
+                    rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
+                ];
 
                 let k00 = compressed[lefts[0] as usize];
                 let k10 = compressed[lefts[1] as usize];
@@ -1343,7 +1325,7 @@ where
                 let k11 = compressed[rights[1] as usize];
                 let k21 = compressed[rights[2] as usize];
                 let k31 = compressed[rights[3] as usize];
-                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, &rights);
+                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
                 Float3Key::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
 
                 outdated >>= 1;
@@ -1351,62 +1333,26 @@ where
         }
     }
 
-    fn update_rotation_cursor(animation: &Animation, ctx: &mut SamplingContext, ratio: f32) {
-        if ctx.rotation_cursor == 0 {
-            for i in 0..animation.num_soa_tracks() {
-                let in_idx0 = i * 4;
-                let in_idx1 = in_idx0 + animation.num_aligned_tracks();
-                let out_idx = i * 4 * 2;
-                ctx.rotation_keys_mut()[out_idx] = in_idx0 as i32;
-                ctx.rotation_keys_mut()[out_idx + 1] = in_idx1 as i32;
-                ctx.rotation_keys_mut()[out_idx + 2] = (in_idx0 + 1) as i32;
-                ctx.rotation_keys_mut()[out_idx + 3] = (in_idx1 + 1) as i32;
-                ctx.rotation_keys_mut()[out_idx + 4] = (in_idx0 + 2) as i32;
-                ctx.rotation_keys_mut()[out_idx + 5] = (in_idx1 + 2) as i32;
-                ctx.rotation_keys_mut()[out_idx + 6] = (in_idx0 + 3) as i32;
-                ctx.rotation_keys_mut()[out_idx + 7] = (in_idx1 + 3) as i32;
-            }
-
-            ctx.outdated_rotations_mut().iter_mut().for_each(|x| *x = 0xFF);
-            let last_offset = ((animation.num_soa_tracks() + 7) / 8 * 8) - animation.num_soa_tracks();
-            if let Some(x) = ctx.outdated_rotations_mut().last_mut() {
-                *x = 0xFF >> last_offset;
-            }
-
-            ctx.rotation_cursor = animation.num_aligned_tracks() * 2;
-        }
-
-        while ctx.rotation_cursor < animation.rotations().len() {
-            let track = animation.rotations()[ctx.rotation_cursor].track() as usize;
-            let key_idx = ctx.rotation_keys()[track * 2 + 1] as usize;
-            let ani_ratio = animation.rotations()[key_idx].ratio;
-            if ani_ratio > ratio {
-                break;
-            }
-
-            ctx.outdated_rotations_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.rotations()[ctx.rotation_cursor].track() as usize) * 2;
-            ctx.rotation_keys_mut()[base] = ctx.rotation_keys()[base + 1];
-            ctx.rotation_keys_mut()[base + 1] = ctx.rotation_cursor as i32;
-            ctx.rotation_cursor += 1;
-        }
-    }
-
-    fn update_rotation_key_frames(animation: &Animation, ctx: &mut SamplingContext) {
-        let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
-        for j in 0..num_outdated_flags {
-            let mut outdated = ctx.outdated_rotations()[j];
+    fn decompress_quat(
+        args: DecompressArgs<'_, InterpSoaQuaternion>,
+        timepoints: &[f32],
+        ctrl: &KeyframesCtrl<'_>,
+        compressed: &[QuaternionKey],
+    ) {
+        for j in 0..args.outdated.len() {
+            let mut outdated = args.outdated[j];
             for i in (8 * j)..(8 * j + 8) {
                 if outdated & 1 == 0 {
                     continue;
                 }
 
-                let k00 = animation.rotations()[ctx.rotation_keys()[base] as usize];
-                let k10 = animation.rotations()[ctx.rotation_keys()[base + 2] as usize];
-                let k20 = animation.rotations()[ctx.rotation_keys()[base + 4] as usize];
-                let k30 = animation.rotations()[ctx.rotation_keys()[base + 6] as usize];
-                ctx.rotations_mut()[i].ratio[0] = f32x4::from_array([k00.ratio, k10.ratio, k20.ratio, k30.ratio]);
-                QuaternionKey::simd_decompress(&k00, &k10, &k20, &k30, &mut ctx.rotations_mut()[i].value[0]);
+                let rights = &args.entries[i * 4..i * 4 + 4];
+                let lefts = [
+                    rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
+                    rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
+                    rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
+                    rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
+                ];
 
                 let k00 = compressed[lefts[0] as usize];
                 let k10 = compressed[lefts[1] as usize];
@@ -1415,75 +1361,12 @@ where
                 args.values[i].ratio[0] = Self::key_ratio_simd(ctrl, timepoints, &lefts);
                 QuaternionKey::simd_decompress(&k00, &k10, &k20, &k30, &mut args.values[i].value[0]);
 
-                outdated >>= 1;
-            }
-        }
-    }
-
-    fn update_scale_cursor(animation: &Animation, ctx: &mut SamplingContext, ratio: f32) {
-        if ctx.scale_cursor == 0 {
-            for i in 0..animation.num_soa_tracks() {
-                let in_idx0 = i * 4;
-                let in_idx1 = in_idx0 + animation.num_aligned_tracks();
-                let out_idx = i * 4 * 2;
-                ctx.scale_keys_mut()[out_idx] = (in_idx0) as i32;
-                ctx.scale_keys_mut()[out_idx + 1] = (in_idx1) as i32;
-                ctx.scale_keys_mut()[out_idx + 2] = (in_idx0 + 1) as i32;
-                ctx.scale_keys_mut()[out_idx + 3] = (in_idx1 + 1) as i32;
-                ctx.scale_keys_mut()[out_idx + 4] = (in_idx0 + 2) as i32;
-                ctx.scale_keys_mut()[out_idx + 5] = (in_idx1 + 2) as i32;
-                ctx.scale_keys_mut()[out_idx + 6] = (in_idx0 + 3) as i32;
-                ctx.scale_keys_mut()[out_idx + 7] = (in_idx1 + 3) as i32;
-            }
-
-            ctx.outdated_scales_mut().iter_mut().for_each(|x| *x = 0xFF);
-            let last_offset = ((animation.num_soa_tracks() + 7) / 8 * 8) - animation.num_soa_tracks();
-            if let Some(x) = ctx.outdated_scales_mut().last_mut() {
-                *x = 0xFF >> last_offset;
-            }
-
-            ctx.scale_cursor = animation.num_aligned_tracks() * 2;
-        }
-
-        while ctx.scale_cursor < animation.scales().len() {
-            let track = animation.scales()[ctx.scale_cursor].track as usize;
-            let key_idx = ctx.scale_keys()[track * 2 + 1] as usize;
-            let ani_ratio = animation.scales()[key_idx].ratio;
-            if ani_ratio > ratio {
-                break;
-            }
-
-            ctx.outdated_scales_mut()[track / 32] |= 1 << ((track & 0x1F) / 4);
-            let base = (animation.scales()[ctx.scale_cursor].track as usize) * 2;
-            ctx.scale_keys_mut()[base] = ctx.scale_keys()[base + 1];
-            ctx.scale_keys_mut()[base + 1] = ctx.scale_cursor as i32;
-            ctx.scale_cursor += 1;
-        }
-    }
-
-    fn update_scale_key_frames(animation: &Animation, ctx: &mut SamplingContext) {
-        let num_outdated_flags = (animation.num_soa_tracks() + 7) / 8;
-        for j in 0..num_outdated_flags {
-            let mut outdated = ctx.outdated_scales()[j];
-            for i in (8 * j)..(8 * j + 8) {
-                if outdated & 1 == 0 {
-                    continue;
-                }
-                let base = i * 4 * 2;
-
-                let k00 = animation.scales()[ctx.scale_keys()[base] as usize];
-                let k10 = animation.scales()[ctx.scale_keys()[base + 2] as usize];
-                let k20 = animation.scales()[ctx.scale_keys()[base + 4] as usize];
-                let k30 = animation.scales()[ctx.scale_keys()[base + 6] as usize];
-                ctx.scales_mut()[i].ratio[0] = f32x4::from_array([k00.ratio, k10.ratio, k20.ratio, k30.ratio]);
-                Float3Key::simd_decompress(&k00, &k10, &k20, &k30, &mut ctx.scales_mut()[i].value[0]);
-
-                let k01 = animation.scales()[ctx.scale_keys()[base + 1] as usize];
-                let k11 = animation.scales()[ctx.scale_keys()[base + 3] as usize];
-                let k21 = animation.scales()[ctx.scale_keys()[base + 5] as usize];
-                let k31 = animation.scales()[ctx.scale_keys()[base + 7] as usize];
-                ctx.scales_mut()[i].ratio[1] = f32x4::from_array([k01.ratio, k11.ratio, k21.ratio, k31.ratio]);
-                Float3Key::simd_decompress(&k01, &k11, &k21, &k31, &mut ctx.scales_mut()[i].value[1]);
+                let k01 = compressed[rights[0] as usize];
+                let k11 = compressed[rights[1] as usize];
+                let k21 = compressed[rights[2] as usize];
+                let k31 = compressed[rights[3] as usize];
+                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
+                QuaternionKey::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
 
                 outdated >>= 1;
             }
@@ -1522,7 +1405,7 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
 
     #[inline]
     fn load(input: &[u8]) -> u32 {
-        return input[0] as u32 | (input[1] as u32) << 8 | (input[2] as u32) << 16 | (input[3] as u32) << 24;
+        input[0] as u32 | (input[1] as u32) << 8 | (input[2] as u32) << 16 | (input[3] as u32) << 24
     }
 
     let mut in_buf = &buffer[1..];
@@ -1542,7 +1425,7 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
     output[3] = load(in_buf) & MASK[k3];
     in_buf = &in_buf[k3 + 1..];
 
-    return in_buf;
+    in_buf
 }
 
 fn decode_gv4_stream<'t>(buffer: &'t [u8], stream: &mut [u32]) -> &'t [u8] {
@@ -1554,9 +1437,9 @@ fn decode_gv4_stream<'t>(buffer: &'t [u8], stream: &mut [u32]) -> &'t [u8] {
 
     let mut in_buf = buffer;
     for chunk in stream.chunks_mut(4) {
-        in_buf = decode_gv4(in_buf, chunk.try_into().unwrap());
+        in_buf = decode_gv4(in_buf, chunk);
     }
-    return in_buf;
+    in_buf
 }
 
 #[cfg(test)]
@@ -1619,45 +1502,6 @@ mod sampling_tests {
         assert!(job.run().is_ok());
     }
 
-    fn new_translations() -> Vec<Float3Key> {
-        vec![
-            Float3Key::new(0.0, 0, [f16(0.0); 3]),
-            Float3Key::new(0.0, 1, [f16(0.0); 3]),
-            Float3Key::new(0.0, 2, [f16(0.0); 3]),
-            Float3Key::new(0.0, 3, [f16(0.0); 3]),
-            Float3Key::new(1.0, 0, [f16(0.0); 3]),
-            Float3Key::new(1.0, 1, [f16(0.0); 3]),
-            Float3Key::new(1.0, 2, [f16(0.0); 3]),
-            Float3Key::new(1.0, 3, [f16(0.0); 3]),
-        ]
-    }
-
-    fn new_rotations() -> Vec<QuaternionKey> {
-        vec![
-            QuaternionKey::new(0.0, 3 << 1, [0, 0, 0]),
-            QuaternionKey::new(0.0, (1 << 3) + (3 << 1), [0, 0, 0]),
-            QuaternionKey::new(0.0, (2 << 3) + (3 << 1), [0, 0, 0]),
-            QuaternionKey::new(0.0, (3 << 3) + (3 << 1), [0, 0, 0]),
-            QuaternionKey::new(1.0, 3 << 1, [0, 0, 0]),
-            QuaternionKey::new(1.0, (1 << 3) + (3 << 1), [0, 0, 0]),
-            QuaternionKey::new(1.0, (2 << 3) + (3 << 1), [0, 0, 0]),
-            QuaternionKey::new(1.0, (3 << 3) + (3 << 1), [0, 0, 0]),
-        ]
-    }
-
-    fn new_scales() -> Vec<Float3Key> {
-        vec![
-            Float3Key::new(0.0, 0, [f16(1.0); 3]),
-            Float3Key::new(0.0, 1, [f16(1.0); 3]),
-            Float3Key::new(0.0, 2, [f16(1.0); 3]),
-            Float3Key::new(0.0, 3, [f16(1.0); 3]),
-            Float3Key::new(1.0, 0, [f16(1.0); 3]),
-            Float3Key::new(1.0, 1, [f16(1.0); 3]),
-            Float3Key::new(1.0, 2, [f16(1.0); 3]),
-            Float3Key::new(1.0, 3, [f16(1.0); 3]),
-        ]
-    }
-
     const V0: Vec3 = Vec3::new(0.0, 0.0, 0.0);
     const V1: Vec3 = Vec3::new(1.0, 1.0, 1.0);
     const QU: Quat = Quat::from_xyzw(0.0, 0.0, 0.0, 1.0);
@@ -1668,27 +1512,27 @@ mod sampling_tests {
     };
 
     fn empty_translations() -> Vec<Float3Key> {
-        return vec![Float3Key::new([f16(0.0); 3]); 8];
+        vec![Float3Key::new([f16(0.0); 3]); 8]
     }
 
     fn empty_rotations() -> Vec<QuaternionKey> {
-        return vec![QuaternionKey::new([65531, 65533, 32766]); 8];
+        vec![QuaternionKey::new([65531, 65533, 32766]); 8]
     }
 
     fn empty_scales() -> Vec<Float3Key> {
-        return vec![Float3Key::new([f16(1.0); 3]); 8];
+        vec![Float3Key::new([f16(1.0); 3]); 8]
     }
 
     fn empty_ratios(n: u16) -> Vec<u16> {
-        return vec![0, 0, 0, 0, n, n, n, n];
+        vec![0, 0, 0, 0, n, n, n, n]
     }
 
     fn empty_previouses() -> Vec<u16> {
-        return vec![0, 0, 0, 0, 4, 4, 4, 4];
+        vec![0, 0, 0, 0, 4, 4, 4, 4]
     }
 
     fn empty_animation_raw<const S: usize>(duration: f32) -> AnimationRaw {
-        return AnimationRaw {
+        AnimationRaw {
             duration,
             num_tracks: S as u32,
             timepoints: vec![],
@@ -1702,7 +1546,7 @@ mod sampling_tests {
             s_ratios: empty_ratios(S as u16),
             s_previouses: empty_previouses(),
             ..Default::default()
-        };
+        }
     }
 
     #[derive(Debug, Clone)]
@@ -1773,7 +1617,25 @@ mod sampling_tests {
             }
         }
 
-        #[allow(clippy::excessive_precision)]
+        let mut ar = empty_animation_raw::<4>(1.0);
+        ar.timepoints = vec![0.0, 0.2, 0.4, 0.6, 1.0];
+        ar.translations = vec![
+            Float3Key::new([f16(-1.000000), 0, 0]),
+            Float3Key::new([f16(0.000000), 0, 0]),
+            Float3Key::new([f16(2.000000), 0, 0]),
+            Float3Key::new([f16(7.000000), 0, 0]),
+            Float3Key::new([f16(-1.000000), 0, 0]),
+            Float3Key::new([f16(0.000000), 0, 0]),
+            Float3Key::new([f16(6.000000), 0, 0]),
+            Float3Key::new([f16(7.000000), 0, 0]),
+            Float3Key::new([f16(8.000000), 0, 0]),
+            Float3Key::new([f16(9.000000), 0, 0]),
+            Float3Key::new([f16(10.000000), 0, 0]),
+            Float3Key::new([f16(11.000000), 0, 0]),
+            Float3Key::new([f16(9.000000), 0, 0]),
+        ];
+        ar.t_ratios = vec![0, 0, 0, 0, 4, 4, 1, 1, 2, 3, 3, 4, 4];
+        ar.t_previouses = vec![0, 0, 0, 0, 4, 4, 4, 4, 2, 2, 2, 1, 3];
         execute_test::<4>(
             ar,
             vec![
@@ -1891,62 +1753,70 @@ mod sampling_tests {
     #[wasm_bindgen_test]
     #[rustfmt::skip]
     fn test_sampling_4_track_2_key() {
-        execute_test::<4>(
-            1.0,
-            vec![
-                Float3Key::new(0.0, 0, [f16(1.0), f16(2.0), f16(4.0)]),
-                Float3Key::new(0.0, 1, [f16(0.0); 3]),
-                Float3Key::new(0.0, 2, [f16(0.0); 3]),
-                Float3Key::new(0.0, 3, [f16(-1.0), f16(-2.0), f16(-4.0)]),
-                Float3Key::new(0.5, 0, [f16(1.0), f16(2.0), f16(4.0)]),
-                Float3Key::new(1.0, 1, [f16(0.0); 3]),
-                Float3Key::new(1.0, 2, [f16(0.0); 3]),
-                Float3Key::new(1.0, 3, [f16(-2.0), f16(-4.0), f16(-8.0)]),
-                Float3Key::new(0.8, 0, [f16(2.0), f16(4.0), f16(8.0)]),
-                Float3Key::new(1.0, 0, [f16(2.0), f16(4.0), f16(8.0)]),
-            ],
-            vec![
-                QuaternionKey::new(0.0, 3 << 1, [0, 0, 0]),
-                QuaternionKey::new(0.0, (1 << 3) + (3 << 1), [0, 0, 0]),
-                QuaternionKey::new(0.0, (2 << 3) + (3 << 1), [0, 0, 0]),
-                QuaternionKey::new(0.0, (3 << 3) + (3 << 1), [0, 0, 0]),
-                QuaternionKey::new(1.0, 3 << 1, [0, 0, 0]),
-                QuaternionKey::new(1.0, (1 << 3) + (1 << 1), [0, 0, 0]),
-                QuaternionKey::new(1.0, (2 << 3) + (3 << 1), [0, 0, 0]),
-                QuaternionKey::new(1.0, (3 << 3) + (3 << 1), [0, 0, 0]),
-            ],
-            vec![
-                Float3Key::new(0.0, 0, [f16(1.0); 3]),
-                Float3Key::new(0.0, 1, [f16(1.0); 3]),
-                Float3Key::new(0.0, 2, [f16(0.0); 3]),
-                Float3Key::new(0.0, 3, [f16(1.0); 3]),
-                Float3Key::new(1.0, 0, [f16(1.0); 3]),
-                Float3Key::new(1.0, 1, [f16(1.0); 3]),
-                Float3Key::new(0.5, 2, [f16(0.0); 3]),
-                Float3Key::new(1.0, 3, [f16(1.0); 3]),
-                Float3Key::new(0.8, 2, [f16(-1.0); 3]),
-                Float3Key::new(1.0, 2, [f16(-1.0); 3]),
-            ],
-            vec![
-                Frame {ratio: 0.0, transform: [
-                    (Vec3::new(1.0, 2.0, 4.0), QU, V1),
-                    (V0, QU, V1),
-                    (V0, QU, V0),
-                    (Vec3::new(-1.0, -2.0, -4.0), QU, V1),
-                ]},
-                Frame {ratio: 0.5, transform: [
-                    (Vec3::new(1.0, 2.0, 4.0), QU, V1),
-                    (V0, Quat::from_xyzw(0.0, 0.70710677, 0.0, 0.70710677), V1),
-                    (V0, QU, V0),
-                    (Vec3::new(-1.5, -3.0, -6.0), QU, V1),
-                ]},
-                Frame {ratio: 1.0, transform: [
-                    (Vec3::new(2.0, 4.0, 8.0), QU, V1),
-                    (V0, Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), V1),
-                    (V0, QU, -V1),
-                    (Vec3::new(-2.0, -4.0, -8.0), QU, V1),
-                ]},
-            ],
+        let mut ar = empty_animation_raw::<4>(1.0);
+        ar.timepoints=vec![0.0, 0.5, 0.8, 1.0];
+        ar.t_ratios=vec![0, 0, 0, 0, 1, 3, 3, 3, 2, 3];
+        ar.t_previouses=vec![0, 0, 0, 0, 4, 4, 4, 4, 4, 1];
+        ar.r_ratios=empty_ratios(3);
+        ar.r_previouses=empty_previouses();
+        ar.s_ratios=vec![0, 0, 0, 0, 3, 3, 1, 3, 2, 3];
+        ar.s_previouses=vec![0, 0, 0, 0, 4, 4, 4, 4, 2, 1];
+
+        ar.translations = vec![
+            Float3Key::new([f16(1.0), f16(2.0), f16(4.0)]),
+            Float3Key::new([f16(0.0); 3]),
+            Float3Key::new([f16(0.0); 3]),
+            Float3Key::new([f16(-1.0), f16(-2.0), f16(-4.0)]),
+            Float3Key::new([f16(1.0), f16(2.0), f16(4.0)]),
+            Float3Key::new([f16(0.0); 3]),
+            Float3Key::new([f16(0.0); 3]),
+            Float3Key::new([f16(-2.0), f16(-4.0), f16(-8.0)]),
+            Float3Key::new([f16(2.0), f16(4.0), f16(8.0)]),
+            Float3Key::new([f16(2.0), f16(4.0), f16(8.0)]),
+        ];
+
+        ar.rotations = empty_rotations();
+        ar.rotations[5] = QuaternionKey::new([65529, 65533, 32766]);
+
+        ar.scales = vec![
+            Float3Key::new([f16(1.0); 3]),
+            Float3Key::new([f16(1.0); 3]),
+            Float3Key::new([f16(0.0); 3]),
+            Float3Key::new([f16(1.0); 3]),
+            Float3Key::new([f16(1.0); 3]),
+            Float3Key::new([f16(1.0); 3]),
+            Float3Key::new([f16(0.0); 3]),
+            Float3Key::new([f16(1.0); 3]),
+            Float3Key::new([f16(-1.0); 3]),
+            Float3Key::new([f16(-1.0); 3]),
+        ];
+
+        let mut frames_raw = vec![
+            Frame {ratio: 0.0, transform: [
+                (Vec3::new(1.0, 2.0, 4.0), QU, V1),
+                (V0, QU, V1),
+                (V0, QU, V0),
+                (Vec3::new(-1.0, -2.0, -4.0), QU, V1),
+            ]},
+            Frame {ratio: 0.5, transform: [
+                (Vec3::new(1.0, 2.0, 4.0), QU, V1),
+                (V0, Quat::from_xyzw(0.0, 0.70710677, 0.0, 0.70710677), V1),
+                (V0, QU, V0),
+                (Vec3::new(-1.5, -3.0, -6.0), QU, V1),
+            ]},
+            Frame {ratio: 1.0, transform: [
+                (Vec3::new(2.0, 4.0, 8.0), QU, V1),
+                (V0, Quat::from_xyzw(0.0, 1.0, 0.0, 0.0), V1),
+                (V0, QU, -V1),
+                (Vec3::new(-2.0, -4.0, -8.0), QU, V1),
+            ]},
+        ];
+        let mut frames = frames_raw.clone();
+        frames_raw.reverse();
+        frames.append(&mut frames_raw);
+
+        execute_test::<4>(ar,
+            frames,
         );
     }
 

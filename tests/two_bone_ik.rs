@@ -87,9 +87,9 @@ where
         ik_job.set_soften(0.97);
         ik_job.set_twist_angle(0.0);
         ik_job.set_pole_vector(Vec3A::new(0.0, 1.0, 0.0));
-        ik_job.set_start_joint(models1.borrow()[start_joint as usize].into());
-        ik_job.set_mid_joint(models1.borrow()[mid_joint as usize].into());
-        ik_job.set_end_joint(models1.borrow()[end_joint as usize].into());
+        ik_job.set_start_joint(models1.borrow()[start_joint as usize]);
+        ik_job.set_mid_joint(models1.borrow()[mid_joint as usize]);
+        ik_job.set_end_joint(models1.borrow()[end_joint as usize]);
 
         ik_job.run().unwrap();
 

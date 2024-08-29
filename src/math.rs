@@ -16,6 +16,7 @@ use std::simd::*;
 
 use crate::archive::{Archive, ArchiveRead};
 use crate::base::OzzError;
+use crate::math;
 
 pub(crate) const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
 pub(crate) const ONE: f32x4 = f32x4::from_array([1.0; 4]);
@@ -486,10 +487,10 @@ impl ArchiveRead<SoaTransform> for SoaTransform {
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<SoaTransform, OzzError> {
         const COUNT: usize = mem::size_of::<SoaTransform>() / mem::size_of::<f32>();
         let mut buffer = [0f32; COUNT];
-        for idx in 0..COUNT {
-            buffer[idx] = archive.read()?;
+        for value in buffer.iter_mut() {
+            *value = archive.read()?;
         }
-        Ok(unsafe { mem::transmute(buffer) })
+        Ok(unsafe { mem::transmute::<[f32; 40], math::SoaTransform>(buffer) })
     }
 }
 
@@ -565,13 +566,14 @@ impl From<Mat4> for AosMat4 {
     }
 }
 
-impl Into<Mat4> for AosMat4 {
-    fn into(self) -> Mat4 {
-        unsafe { mem::transmute(self) }
+impl From<AosMat4> for Mat4 {
+    fn from(val: AosMat4) -> Self {
+        unsafe { mem::transmute(val) }
     }
 }
 
 impl AosMat4 {
+    #[allow(clippy::too_many_arguments)]
     #[rustfmt::skip]
     #[inline]
     pub(crate) fn new(
@@ -854,8 +856,8 @@ impl SoaMat4 {
 pub(crate) fn f16_to_f32(n: u16) -> f32 {
     let sign = (n & 0x8000) as u32;
     let expo = (n & 0x7C00) as u32;
-    let base = (n & 0x03FF) as u32;
     if expo == 0x7C00 {
+        let base = (n & 0x03FF) as u32;
         if base != 0 {
             return f32::NAN;
         }
@@ -866,12 +868,10 @@ pub(crate) fn f16_to_f32(n: u16) -> f32 {
         }
     }
     let expmant = (n & 0x7FFF) as u32;
-    unsafe {
-        let magic = mem::transmute::<u32, f32>((254 - 15) << 23);
-        let shifted = mem::transmute::<u32, f32>(expmant << 13);
-        let scaled = mem::transmute::<f32, u32>(shifted * magic);
-        return mem::transmute::<u32, f32>((sign << 16) | scaled);
-    };
+    let magic = f32::from_bits((254 - 15) << 23);
+    let shifted = f32::from_bits(expmant << 13);
+    let scaled = (shifted * magic).to_bits();
+    f32::from_bits((sign << 16) | scaled)
 }
 
 #[inline]
@@ -1041,6 +1041,7 @@ pub(crate) fn f32_clamp_or_min(v: f32, min: f32, max: f32) -> f32 {
     v.max(min).min(max)
 }
 
+#[allow(clippy::excessive_precision)]
 pub(crate) fn fx4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
@@ -1134,6 +1135,7 @@ pub fn f32_cos(x: f32) -> f32 {
     cos[0]
 }
 
+#[allow(clippy::excessive_precision)]
 pub(crate) fn fx4_asin(v: f32x4) -> f32x4 {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
@@ -1296,6 +1298,7 @@ pub(crate) fn quat_positive_w(q: f32x4) -> f32x4 {
     fx4_xor(q, s)
 }
 
+#[allow(clippy::excessive_precision)]
 #[cfg(test)]
 mod tests {
     use wasm_bindgen_test::*;

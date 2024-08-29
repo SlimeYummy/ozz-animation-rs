@@ -134,7 +134,7 @@ where
     /// Gets joint matrices of `SkinningJob`.
     #[inline]
     pub fn joint_matrices(&self) -> Option<&JM> {
-        self.joint_matrices.as_ref()
+        return self.joint_matrices.as_ref();
     }
 
     /// Sets joint matrices of `SkinningJob`.
@@ -464,31 +464,27 @@ macro_rules! skinning_impl {
         );
 
         for i in 0..$self.vertex_count {
+            let weight_offset = i * ($n - 1);
             let index_offset = i * $n;
-            let mut transform = Mat4::IDENTITY;
-            it!($it, let mut transform_it = Mat4::IDENTITY);
 
-            if $n == 1 {
-                let joint_index = indices[index_offset] as usize;
-                transform = *matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?;
-                it!($it, transform_it = *it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?);
-            } else {
-                let weight_offset = i * ($n - 1);
-                let mut weight_sum = Vec4::ZERO;
+            let weight = Vec4::splat(weights[weight_offset]);
+            let mut weight_sum = weight;
+            let joint_index = indices[index_offset] as usize;
+            let mut transform = mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
+            it!($it, let mut transform_it = mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
 
-                for j in 0..($n - 1) {
-                    let weight = Vec4::splat(weights[weight_offset + j]);
-                    weight_sum += weight;
-                    let joint_index = indices[index_offset + j] as usize;
-                    transform += mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
-                    it!($it, transform_it += mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
-                }
-
-                let weight = Vec4::ONE - weight_sum;
-                let joint_index = indices[index_offset + $n - 1] as usize;
+            for j in 1..($n - 1) {
+                let weight = Vec4::splat(weights[weight_offset + j]);
+                weight_sum += weight;
+                let joint_index = indices[index_offset + j] as usize;
                 transform += mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
                 it!($it, transform_it += mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
             }
+
+            let weight = Vec4::ONE - weight_sum;
+            let joint_index = indices[index_offset + $n - 1] as usize;
+            transform += mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
+            it!($it, transform_it += mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
 
             pnt!($pnt,
                 out_positions[i] = transform.transform_point3(in_positions[i]);
@@ -533,7 +529,7 @@ where
     /// Runs skinning job's task.
     /// The validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
-        if self.influences_count == 0 {
+        if self.influences_count <= 0 {
             return Err(OzzError::InvalidJob);
         }
 

@@ -60,7 +60,7 @@ fn test_track_triggering_deterministic() {
         job.set_to(to);
         job.set_threshold(0.5);
 
-        let results: Vec<_> = job.run().unwrap().map(|x| x).collect();
+        let results: Vec<_> = job.run().unwrap().collect();
         all_data.push(TestTriggeringData { from, to, results });
     }
 

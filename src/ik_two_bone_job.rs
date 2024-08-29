@@ -25,17 +25,17 @@ impl IKConstantSetup {
         let inv_start_joint = job.start_joint.invert();
         let inv_mid_joint = job.mid_joint.invert();
 
-        let start_ms: f32x4 = inv_mid_joint.transform_point(job.start_joint.cols[3].into());
-        let end_ms: f32x4 = inv_mid_joint.transform_point(job.end_joint.cols[3].into());
+        let start_ms: f32x4 = inv_mid_joint.transform_point(job.start_joint.cols[3]);
+        let end_ms: f32x4 = inv_mid_joint.transform_point(job.end_joint.cols[3]);
 
-        let mid_ss: f32x4 = inv_start_joint.transform_point(job.mid_joint.cols[3].into());
-        let end_ss: f32x4 = inv_start_joint.transform_point(job.end_joint.cols[3].into());
+        let mid_ss: f32x4 = inv_start_joint.transform_point(job.mid_joint.cols[3]);
+        let end_ss: f32x4 = inv_start_joint.transform_point(job.end_joint.cols[3]);
 
         let mid_end_ss = end_ss - mid_ss;
         let start_end_ss = end_ss;
         let start_mid_ss = mid_ss;
 
-        return IKConstantSetup {
+        IKConstantSetup {
             inv_start_joint,
             start_mid_ms: -start_ms,
             mid_end_ms: end_ms,
@@ -43,7 +43,7 @@ impl IKConstantSetup {
             start_mid_ss_len2: vec3_length2_s(start_mid_ss), // [x]
             mid_end_ss_len2: vec3_length2_s(mid_end_ss),     // [x]
             start_end_ss_len2: vec3_length2_s(start_end_ss), // [x]
-        };
+        }
     }
 }
 
@@ -98,7 +98,7 @@ impl IKTwoBoneJob {
     /// Gets target of `IKTwoBoneJob`.
     #[inline]
     pub fn target(&self) -> Vec3A {
-        return fx4_to_vec3a(self.target);
+        fx4_to_vec3a(self.target)
     }
 
     /// Sets target of `IKTwoBoneJob`.
@@ -112,7 +112,7 @@ impl IKTwoBoneJob {
     /// Gets mid axis of `IKTwoBoneJob`
     #[inline]
     pub fn mid_axis(&self) -> Vec3A {
-        return fx4_to_vec3a(self.mid_axis);
+        fx4_to_vec3a(self.mid_axis)
     }
 
     /// Sets mid axis of `IKTwoBoneJob`.
@@ -132,7 +132,7 @@ impl IKTwoBoneJob {
     /// Gets pole vector of `IKTwoBoneJob`.
     #[inline]
     pub fn pole_vector(&self) -> Vec3A {
-        return fx4_to_vec3a(self.pole_vector);
+        fx4_to_vec3a(self.pole_vector)
     }
 
     /// Sets pole vector of `IKTwoBoneJob`.
@@ -151,7 +151,7 @@ impl IKTwoBoneJob {
     /// Gets twist angle of `IKTwoBoneJob`.
     #[inline]
     pub fn twist_angle(&self) -> f32 {
-        return self.twist_angle;
+        self.twist_angle
     }
 
     /// Sets twist angle of `IKTwoBoneJob`.
@@ -165,7 +165,7 @@ impl IKTwoBoneJob {
     /// Gets soften of `IKTwoBoneJob`.
     #[inline]
     pub fn soften(&self) -> f32 {
-        return self.soften;
+        self.soften
     }
 
     /// Sets soften of `IKTwoBoneJob`.
@@ -182,7 +182,7 @@ impl IKTwoBoneJob {
     /// Gets weight of `IKTwoBoneJob`.
     #[inline]
     pub fn weight(&self) -> f32 {
-        return self.weight;
+        self.weight
     }
 
     /// Sets weight of `IKTwoBoneJob`.
@@ -197,7 +197,7 @@ impl IKTwoBoneJob {
     /// Gets start joint of `IKTwoBoneJob`
     #[inline]
     pub fn start_joint(&self) -> Mat4 {
-        return self.start_joint.into();
+        self.start_joint.into()
     }
 
     /// Sets start joint of `IKTwoBoneJob`.
@@ -212,7 +212,7 @@ impl IKTwoBoneJob {
     /// Gets mid joint of `IKTwoBoneJob`.
     #[inline]
     pub fn mid_joint(&self) -> Mat4 {
-        return self.mid_joint.into();
+        self.mid_joint.into()
     }
 
     /// Sets mid joint of `IKTwoBoneJob`.
@@ -227,7 +227,7 @@ impl IKTwoBoneJob {
     /// Gets end joint of `IKTwoBoneJob`.
     #[inline]
     pub fn end_joint(&self) -> Mat4 {
-        return self.end_joint.into();
+        self.end_joint.into()
     }
 
     /// Sets end joint of `IKTwoBoneJob`
@@ -246,7 +246,7 @@ impl IKTwoBoneJob {
     /// These quaternions must be multiplied to the local-space quaternion of their respective joints.
     #[inline]
     pub fn start_joint_correction(&self) -> Quat {
-        return fx4_to_quat(self.start_joint_correction);
+        fx4_to_quat(self.start_joint_correction)
     }
 
     /// Clears start joint correction of `IKTwoBoneJob`.
@@ -262,7 +262,7 @@ impl IKTwoBoneJob {
     /// These quaternions must be multiplied to the local-space quaternion of their respective joints.
     #[inline]
     pub fn mid_joint_correction(&self) -> Quat {
-        return fx4_to_quat(self.mid_joint_correction);
+        fx4_to_quat(self.mid_joint_correction)
     }
 
     /// Clears mid joint correction of `IKTwoBoneJob`.
@@ -279,7 +279,7 @@ impl IKTwoBoneJob {
     /// Target is considered unreached if weight is less than 1.
     #[inline]
     pub fn reached(&self) -> bool {
-        return self.reached;
+        self.reached
     }
 
     /// Clears reached of `IKTwoBoneJob`.
@@ -299,7 +299,7 @@ impl IKTwoBoneJob {
     /// Validates `IKTwoBoneJob` parameters.
     #[inline]
     fn validate(&self) -> bool {
-        return vec3_is_normalized(self.mid_axis);
+        vec3_is_normalized(self.mid_axis)
     }
 
     /// Runs two bone IK job's task.
@@ -324,7 +324,7 @@ impl IKTwoBoneJob {
         let start_rot_ss = self.compute_start_joint(&setup, mid_rot_ms, start_target_ss, start_target_ss_len2);
         self.weight_output(start_rot_ss, mid_rot_ms);
 
-        return Ok(());
+        Ok(())
     }
 
     fn soften_target(&self, setup: &IKConstantSetup) -> (bool, f32x4, f32x4) {
@@ -369,7 +369,7 @@ impl IKTwoBoneJob {
             start_target_ss_len2 = start_target_original_ss_len2; // [x]
         }
 
-        return ((comp_mask & 0x5) == 0x4, start_target_ss, start_target_ss_len2);
+        ((comp_mask & 0x5) == 0x4, start_target_ss, start_target_ss_len2)
     }
 
     fn compute_mid_joint(&self, setup: &IKConstantSetup, start_target_ss_len2: f32x4) -> f32x4 {
@@ -390,7 +390,7 @@ impl IKTwoBoneJob {
 
         let mid_angles_diff = mid_corrected_angle - mid_initial_angle; // [x]
 
-        return quat_from_axis_angle(self.mid_axis, mid_angles_diff);
+        quat_from_axis_angle(self.mid_axis, mid_angles_diff)
     }
 
     fn compute_start_joint(
@@ -452,7 +452,7 @@ impl IKTwoBoneJob {
             }
         }
 
-        return start_rot_ss;
+        start_rot_ss
     }
 
     fn weight_output(&mut self, start_rot: f32x4, mid_rot: f32x4) {
@@ -483,6 +483,7 @@ impl IKTwoBoneJob {
     }
 }
 
+#[allow(clippy::excessive_precision)]
 #[cfg(test)]
 mod ik_two_bone_tests {
     use core::f32::consts;
@@ -540,7 +541,7 @@ mod ik_two_bone_tests {
                 // 0 degree
                 job.set_target(parent.transform_point3a(Vec3A::new(1.0, 1.0, 0.0)));
                 job.run().unwrap();
-                assert_eq!(job.reached, true);
+                assert!(job.reached);
                 assert!(job.start_joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
                 assert!(job.mid_joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
             }
@@ -549,7 +550,7 @@ mod ik_two_bone_tests {
                 // 90 degree
                 job.set_target(parent.transform_point3a(Vec3A::new(0.0, 1.0, 1.0)));
                 job.run().unwrap();
-                assert_eq!(job.reached, true);
+                assert!(job.reached);
                 assert!(job
                     .start_joint_correction()
                     .abs_diff_eq(Quat::from_axis_angle(Vec3::Y, -consts::FRAC_PI_2), 2e-3));
@@ -560,7 +561,7 @@ mod ik_two_bone_tests {
                 // 180 degree
                 job.set_target(parent.transform_point3a(Vec3A::new(-1.0, 1.0, 0.0)));
                 job.run().unwrap();
-                assert_eq!(job.reached, true);
+                assert!(job.reached);
                 assert!(job
                     .start_joint_correction()
                     .abs_diff_eq(Quat::from_axis_angle(Vec3::Y, consts::PI), 2e-3));
@@ -571,7 +572,7 @@ mod ik_two_bone_tests {
                 // 270 degree
                 job.set_target(parent.transform_point3a(Vec3A::new(0.0, 1.0, -1.0)));
                 job.run().unwrap();
-                assert_eq!(job.reached, true);
+                assert!(job.reached);
                 assert!(job
                     .start_joint_correction()
                     .abs_diff_eq(Quat::from_axis_angle(Vec3::Y, consts::FRAC_PI_2), 2e-3));
@@ -594,7 +595,7 @@ mod ik_two_bone_tests {
         job.set_mid_joint(mid);
         job.set_end_joint(end);
         job.set_mid_axis(mid_axis);
-        return job;
+        job
     }
 
     #[test]

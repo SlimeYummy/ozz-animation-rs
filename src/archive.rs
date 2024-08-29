@@ -61,7 +61,7 @@ impl<R: Read> Archive<R> {
     /// Reads `[T]` from the archive into slice.
     /// * `buffer` - The buffer to read into.
     pub fn read_slice<T: ArchiveRead<T>>(&mut self, buffer: &mut [T]) -> Result<(), OzzError> {
-        return T::read_slice(self, buffer);
+        T::read_slice(self, buffer)
     }
 
     /// Does the endian need to be swapped.
@@ -139,10 +139,10 @@ pub trait ArchiveRead<T> {
     /// * `buffer` - The buffer to read into.
     #[inline]
     fn read_slice<R: Read>(archive: &mut Archive<R>, buffer: &mut [T]) -> Result<(), OzzError> {
-        for i in 0..buffer.len() {
-            buffer[i] = Self::read(archive)?;
+        for item in buffer.iter_mut() {
+            *item = Self::read(archive)?;
         }
-        return Ok(());
+        Ok(())
     }
 }
 

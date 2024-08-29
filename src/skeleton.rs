@@ -14,59 +14,6 @@ use crate::math::SoaTransform;
 /// Rexported `BiHashMap` in bimap crate.
 pub type JointHashMap = BiHashMap<String, i16, DeterministicState, DeterministicState>;
 
-struct JointHashMapWrapper;
-
-#[cfg(feature = "rkyv")]
-const _: () = {
-    use rkyv::collections::util::Entry;
-    use rkyv::ser::{ScratchSpace, Serializer};
-    use rkyv::string::ArchivedString;
-    use rkyv::vec::{ArchivedVec, VecResolver};
-    use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
-    use rkyv::{Deserialize, Fallible};
-
-    impl ArchiveWith<JointHashMap> for JointHashMapWrapper {
-        type Archived = ArchivedVec<Entry<ArchivedString, i16>>;
-        type Resolver = VecResolver;
-
-        unsafe fn resolve_with(field: &JointHashMap, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
-            ArchivedVec::resolve_from_len(field.len(), pos, resolver, out);
-        }
-    }
-
-    impl<S> SerializeWith<JointHashMap, S> for JointHashMapWrapper
-    where
-        S: ScratchSpace + Serializer + ?Sized,
-    {
-        fn serialize_with(field: &JointHashMap, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-            return ArchivedVec::serialize_from_iter(field.iter().map(|(key, value)| Entry { key, value }), serializer);
-        }
-    }
-
-    impl<D> DeserializeWith<ArchivedVec<Entry<ArchivedString, i16>>, JointHashMap, D> for JointHashMapWrapper
-    where
-        D: Fallible + ?Sized,
-    {
-        fn deserialize_with(
-            field: &ArchivedVec<Entry<ArchivedString, i16>>,
-            deserializer: &mut D,
-        ) -> Result<JointHashMap, D::Error> {
-            let mut result = JointHashMap::with_capacity_and_hashers(
-                field.len(),
-                DeterministicState::new(),
-                DeterministicState::new(),
-            );
-            for entry in field.iter() {
-                result.insert(
-                    entry.key.deserialize(deserializer)?,
-                    entry.value.deserialize(deserializer)?,
-                );
-            }
-            Ok(result)
-        }
-    }
-};
-
 ///
 /// This runtime skeleton data structure provides a const-only access to joint
 /// hierarchy, joint names and rest-pose.
@@ -131,19 +78,6 @@ impl Skeleton {
         2
     }
 
-    #[cfg(test)]
-    pub(crate) fn from_raw(
-        joint_rest_poses: Vec<SoaTransform>,
-        joint_parents: Vec<i16>,
-        joint_names: JointHashMap,
-    ) -> Skeleton {
-        Skeleton {
-            joint_rest_poses,
-            joint_parents,
-            joint_names,
-        }
-    }
-
     /// Reads a `SkeletonMeta` from a reader.
     pub fn read_meta(archive: &mut Archive<impl Read>, with_joints: bool) -> Result<SkeletonMeta, OzzError> {
         if archive.tag() != Self::tag() {
@@ -193,11 +127,9 @@ impl Skeleton {
             skeleton.joint_names.insert(archive.read::<String>()?, idx as i16);
         }
 
-        Ok(Skeleton {
-            joint_rest_poses,
-            joint_parents: meta.joint_parents,
-            joint_names: meta.joint_names,
-        })
+        archive.read_slice(skeleton.joint_parents_mut())?;
+        archive.read_slice(skeleton.joint_rest_poses_mut())?;
+        Ok(skeleton)
     }
 
     /// Reads a `Skeleton` from a file.
@@ -224,15 +156,15 @@ impl Skeleton {
         skeleton.joint_rest_poses_mut().copy_from_slice(&raw.joint_rest_poses);
         skeleton.joint_parents_mut().copy_from_slice(&raw.joint_parents);
         skeleton.joint_names = raw.joint_names.clone();
-        return skeleton;
+        skeleton
     }
 
     pub(crate) fn to_raw(&self) -> SkeletonRaw {
-        return SkeletonRaw {
+        SkeletonRaw {
             joint_rest_poses: self.joint_rest_poses().to_vec(),
             joint_parents: self.joint_parents().to_vec(),
             joint_names: self.joint_names().clone(),
-        };
+        }
     }
 
     fn new(meta: SkeletonMeta) -> Skeleton {
@@ -264,7 +196,7 @@ impl Skeleton {
 
             assert_eq!(ptr, (skeleton.joint_rest_poses as *mut u8).add(skeleton.size));
         }
-        return skeleton;
+        skeleton
     }
 }
 
@@ -272,7 +204,7 @@ impl Skeleton {
     /// Gets the number of joints of `Skeleton`.
     #[inline]
     pub fn num_joints(&self) -> usize {
-        self.joint_parents.len()
+        self.num_joints as usize
     }
 
     /// Gets the number of joints of `Skeleton` (aligned to 4 * SoA).
@@ -285,24 +217,18 @@ impl Skeleton {
     /// This value is useful to allocate SoA runtime data structures.
     #[inline]
     pub fn num_soa_joints(&self) -> usize {
-        (self.joint_parents.len() + 3) / 4
+        self.num_soa_joints as usize
     }
 
     /// Gets joint's rest poses. Rest poses are stored in soa format.
     #[inline]
     pub fn joint_rest_poses(&self) -> &[SoaTransform] {
-        &self.joint_rest_poses
+        return unsafe { slice::from_raw_parts(self.joint_rest_poses, self.num_soa_joints()) };
     }
 
     #[inline]
-    pub fn joint_parents(&self) -> &[i16] {
-        &self.joint_parents
-    }
-
-    /// Gets joint's parent by index.
-    #[inline]
-    pub fn joint_parent(&self, idx: impl OzzIndex) -> i16 {
-        self.joint_parents[idx.usize()]
+    fn joint_rest_poses_mut(&mut self) -> &mut [SoaTransform] {
+        return unsafe { slice::from_raw_parts_mut(self.joint_rest_poses, self.num_soa_joints()) };
     }
 
     /// Gets joint's name map.
@@ -420,14 +346,14 @@ const _: () = {
     impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for Skeleton {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
             serializer.align_for::<SoaTransform>()?;
-            return Ok(SkeletonResolver {
+            Ok(SkeletonResolver {
                 joint_rest_poses: ArchivedVec::serialize_from_slice(self.joint_rest_poses(), serializer)?,
                 joint_names: ArchivedVec::serialize_from_iter(
                     self.joint_names().iter().map(|(key, value)| Entry { key, value }),
                     serializer,
                 )?,
                 joint_parents: ArchivedVec::serialize_from_slice(self.joint_parents(), serializer)?,
-            });
+            })
         }
     }
 
@@ -446,7 +372,7 @@ const _: () = {
                 .copy_from_slice(archived.joint_rest_poses.as_slice());
 
             skeleton.joint_names = JointHashMap::with_capacity_and_hashers(
-                archived.joint_names.len() as usize,
+                archived.joint_names.len(),
                 DeterministicState::new(),
                 DeterministicState::new(),
             );
@@ -457,7 +383,7 @@ const _: () = {
             skeleton
                 .joint_parents_mut()
                 .copy_from_slice(archived.joint_parents.as_slice());
-            return Ok(skeleton);
+            Ok(skeleton)
         }
     }
 };
@@ -469,14 +395,14 @@ const _: () = {
     impl Serialize for Skeleton {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             let raw = self.to_raw();
-            return raw.serialize(serializer);
+            raw.serialize(serializer)
         }
     }
 
     impl<'de> Deserialize<'de> for Skeleton {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Skeleton, D::Error> {
             let raw = SkeletonRaw::deserialize(deserializer)?;
-            return Ok(Skeleton::from_raw(&raw));
+            Ok(Skeleton::from_raw(&raw))
         }
     }
 };

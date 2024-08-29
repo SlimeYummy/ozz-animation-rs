@@ -18,7 +18,7 @@ pub fn compare_with_cpp(folder: &str, name: &str, data: &[Mat4], diff: f32) -> R
 
     let path = format!("./output/{0}/{1}_rust_{2}_{3}.bin", folder, name, OS, ARCH);
     let mut file = File::create(path)?;
-    let data_size = data.len() * mem::size_of::<Mat4>();
+    let data_size = std::mem::size_of_val(data);
     file.write_all(unsafe { slice::from_raw_parts(data.as_ptr() as *mut _, data_size) })?;
 
     let path = format!("./expected/{0}/{1}_cpp.bin", folder, name);
@@ -28,7 +28,7 @@ pub fn compare_with_cpp(folder: &str, name: &str, data: &[Mat4], diff: f32) -> R
     }
 
     let mut expected: Vec<Mat4> = vec![Mat4::default(); data.len()];
-    file.read(unsafe { slice::from_raw_parts_mut(expected.as_mut_ptr() as *mut _, data_size) })?;
+    file.read_exact(unsafe { slice::from_raw_parts_mut(expected.as_mut_ptr() as *mut _, data_size) })?;
     for i in 0..expected.len() {
         if !Mat4::abs_diff_eq(&data[i], expected[i], diff) {
             println!("actual: {:?}", data[i]);
@@ -36,7 +36,7 @@ pub fn compare_with_cpp(folder: &str, name: &str, data: &[Mat4], diff: f32) -> R
             return Err(format!("compare_with_cpp() idx:{}", i).into());
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 #[cfg(all(feature = "wasm", feature = "nodejs"))]
@@ -59,7 +59,7 @@ pub fn compare_with_cpp(folder: &str, name: &str, data: &[Mat4], diff: f32) -> R
             return Err(format!("compare_with_cpp() idx:{}", i).into());
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 #[cfg(feature = "rkyv")]
@@ -102,13 +102,13 @@ where
         expected_buf.extend_from_slice(&unaligned_buf);
 
         let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
-        let mut deserializer = rkyv::Infallible::default();
+        let mut deserializer = rkyv::Infallible;
         let expected = archived.deserialize(&mut deserializer)?;
         if data != &expected {
             return Err(format!("compare_with_rkyv({})", path).into());
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 #[cfg(feature = "rkyv")]
@@ -133,12 +133,12 @@ where
     if data != &expected {
         return Err(format!("compare_with_rkyv({})", path).into());
     }
-    return Ok(());
+    Ok(())
 }
 
 #[cfg(not(feature = "rkyv"))]
 pub fn compare_with_rkyv<T>(_folder: &str, _name: &str, _data: &T) -> Result<(), Box<dyn Error>> {
-    return Ok(());
+    Ok(())
 }
 
 #[cfg(feature = "rkyv")]
@@ -165,12 +165,12 @@ where
     };
     let mut file = File::create(path)?;
     file.write_all(&wbuf)?;
-    return Ok(());
+    Ok(())
 }
 
 #[cfg(any(not(feature = "rkyv"), feature = "wasm"))]
 pub fn save_rkyv<T>(_folder: &str, _name: &str, _data: &T, _to_expected: bool) -> Result<(), Box<dyn Error>> {
-    return Ok(());
+    Ok(())
 }
 
 #[cfg(feature = "rkyv")]
@@ -193,9 +193,9 @@ where
     expected_buf.extend_from_slice(&unaligned_buf);
 
     let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
-    let mut deserializer = rkyv::Infallible::default();
+    let mut deserializer = rkyv::Infallible;
     let data = archived.deserialize(&mut deserializer)?;
-    return Ok(data);
+    Ok(data)
 }
 
 #[cfg(feature = "rkyv")]
@@ -217,7 +217,7 @@ where
     let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
     let mut deserializer = rkyv::Infallible::default();
     let data = archived.deserialize(&mut deserializer)?;
-    return Ok(data);
+    Ok(data)
 }
 
 #[cfg(not(feature = "rkyv"))]
