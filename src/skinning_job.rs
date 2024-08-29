@@ -473,7 +473,7 @@ macro_rules! skinning_impl {
             let mut transform = mat4_col_mul(matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight);
             it!($it, let mut transform_it = mat4_col_mul(it_matrices.get(joint_index).ok_or(OzzError::InvalidIndex)?, weight));
 
-            for j in 1..($n - 1) {
+            for j in 1..($n - 1).max(1) {
                 let weight = Vec4::splat(weights[weight_offset + j]);
                 weight_sum += weight;
                 let joint_index = indices[index_offset + j] as usize;
@@ -529,7 +529,7 @@ where
     /// Runs skinning job's task.
     /// The validate job before any operation is performed.
     pub fn run(&mut self) -> Result<(), OzzError> {
-        if self.influences_count <= 0 {
+        if self.influences_count == 0 {
             return Err(OzzError::InvalidJob);
         }
 
