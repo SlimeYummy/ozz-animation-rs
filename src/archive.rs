@@ -151,25 +151,15 @@ macro_rules! primitive_reader {
         impl ArchiveRead<$type> for $type {
             #[inline]
             fn read<R: Read>(archive: &mut Archive<R>) -> Result<$type, OzzError> {
-                let mut val = Default::default();
+                let mut val: $type = Default::default();
                 let size = mem::size_of::<$type>();
                 let ptr = &mut val as *mut $type as *mut u8;
-
-                if size == 1 {
-                    // Special case for u8 and i8
-                    archive
-                        .read
-                        .read_exact(unsafe { slice::from_raw_parts_mut(ptr, 1) })?;
-                } else {
-                    archive
-                        .read
-                        .read_exact(unsafe { slice::from_raw_parts_mut(ptr, size) })?;
-                }
-
-                if !archive.endian_swap {
-                    Ok(val)
-                } else {
-                    Ok(val.swap_endian())
+                archive
+                    .read
+                    .read_exact(unsafe { slice::from_raw_parts_mut(ptr, size) })?;
+                match archive.endian_swap {
+                    true => Ok(val.swap_endian()),
+                    false => Ok(val),
                 }
             }
         }
@@ -257,5 +247,7 @@ mod tests {
     fn test_archive_new() {
         let archive = Archive::from_path("./resource/playback/animation.ozz").unwrap();
         assert!(!archive.endian_swap);
+        assert_eq!(archive.tag, "ozz-animation");
+        assert_eq!(archive.version, 7);
     }
 }

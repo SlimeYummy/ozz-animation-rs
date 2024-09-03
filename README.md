@@ -24,6 +24,7 @@ The library supports almost all runtime features supported by C++ version ozz, i
 - Multi-threading
 - SIMD (SSE2 + NEON)
 - WASM
+- Serialization (rkyv & serde)
 
 The following functions are not supported yet:
 - Baked physic simulation (no plan)
@@ -50,8 +51,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 // Load resources
-let skeleton = Rc::new(Skeleton::from_path("./resource/skeleton.ozz").unwrap());
-let animation = Rc::new(Animation::from_path("./resource/animation.ozz").unwrap());
+let skeleton = Rc::new(Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap());
+let animation = Rc::new(Animation::from_path("./resource/playback/animation.ozz").unwrap());
 
 // Init sample job (Rc style)
 let mut sample_job: SamplingJobRc = SamplingJob::default();
@@ -89,6 +90,15 @@ In theory, ozz-animation-rs supports all platforms supported by rust. But I only
 - X64/Arm64 docker ([CircleCI](https://dl.circleci.com/status-badge/redirect/gh/SlimeYummy/ozz-animation-rs/tree/master))
 
 Maybe you can run cross-platform deterministic test cases under [./tests](https://github.com/SlimeYummy/ozz-animation-rs/tree/master/tests) on your target platform.
+
+### Compatibility
+
+With the release of ozz-animation versions, .ozz files and some APIs will also be upgraded. Therefore ozz-animation-rs remains compatible with the corresponding version of ozz-animation, as shown in the following table:
+
+|ozz-animation-rs|ozz-animation(C++)|
+|--|--|
+|0.10.x|0.15.x|
+|0.9.x|0.14.x|
 
 ### Why not fixed-point?
 
