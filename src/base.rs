@@ -46,35 +46,35 @@ pub enum OzzError {
 
 impl OzzError {
     pub fn custom<S: ToString>(s: S) -> OzzError {
-        return OzzError::Custom(Box::new(s.to_string()));
+        OzzError::Custom(Box::new(s.to_string()))
     }
 
     pub fn is_lock_poison(&self) -> bool {
-        return matches!(self, OzzError::LockPoison);
+        matches!(self, OzzError::LockPoison)
     }
 
     pub fn is_invalid_job(&self) -> bool {
-        return matches!(self, OzzError::InvalidJob);
+        matches!(self, OzzError::InvalidJob)
     }
 
     pub fn is_io(&self) -> bool {
-        return matches!(self, OzzError::IO(_));
+        matches!(self, OzzError::IO(_))
     }
 
     pub fn is_utf8(&self) -> bool {
-        return matches!(self, OzzError::Utf8(_));
+        matches!(self, OzzError::Utf8(_))
     }
 
     pub fn is_invalid_tag(&self) -> bool {
-        return matches!(self, OzzError::InvalidTag);
+        matches!(self, OzzError::InvalidTag)
     }
 
     pub fn is_invalid_version(&self) -> bool {
-        return matches!(self, OzzError::InvalidVersion);
+        matches!(self, OzzError::InvalidVersion)
     }
 
     pub fn is_custom(&self) -> bool {
-        return matches!(self, OzzError::Custom(_));
+        matches!(self, OzzError::Custom(_))
     }
 }
 
@@ -99,7 +99,7 @@ pub struct DeterministicState;
 impl DeterministicState {
     /// Creates a new `DeterministicState` that builds `DefaultHasher` with default keys.
     pub const fn new() -> DeterministicState {
-        return DeterministicState;
+        DeterministicState
     }
 }
 
@@ -107,7 +107,7 @@ impl BuildHasher for DeterministicState {
     type Hasher = DefaultHasher;
 
     fn build_hasher(&self) -> DefaultHasher {
-        return DefaultHasher::default();
+        DefaultHasher::default()
     }
 }
 
@@ -140,13 +140,13 @@ ozz_index!(i16);
 #[inline(always)]
 pub(crate) fn align_usize(size: usize, align: usize) -> usize {
     assert!(align.is_power_of_two());
-    return (size + align - 1) & !(align - 1);
+    (size + align - 1) & !(align - 1)
 }
 
 #[inline(always)]
 pub(crate) fn align_ptr(ptr: *mut u8, align: usize) -> *mut u8 {
     assert!(align.is_power_of_two());
-    return align_usize(ptr as usize, align) as *mut u8;
+    align_usize(ptr as usize, align) as *mut u8
 }
 
 /// Represents a reference to the ozz resource object.
@@ -161,14 +161,14 @@ pub trait OzzObj<T: Debug> {
 impl<T: Debug> OzzObj<T> for T {
     #[inline(always)]
     fn obj(&self) -> &T {
-        return self;
+        self
     }
 }
 
 impl<'t, T: Debug> OzzObj<T> for &'t T {
     #[inline(always)]
     fn obj(&self) -> &T {
-        return self;
+        self
     }
 }
 
@@ -241,7 +241,7 @@ impl<'t, T> Deref for ObSliceRef<'t, T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        return self.0;
+        self.0
     }
 }
 
@@ -278,14 +278,14 @@ impl<'t, T> Deref for ObSliceRefMut<'t, T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        return self.0;
+        self.0
     }
 }
 
 impl<'t, T> DerefMut for ObSliceRefMut<'t, T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        return self.0;
+        self.0
     }
 }
 
@@ -425,7 +425,7 @@ pub type OzzRcBuf<T> = Rc<RefCell<Vec<T>>>;
 /// Creates a new `Rc<RefCell<Vec<T>>>`.
 #[inline]
 pub fn ozz_rc_buf<T>(v: Vec<T>) -> OzzRcBuf<T> {
-    return Rc::new(RefCell::new(v));
+    Rc::new(RefCell::new(v))
 }
 
 /// Shortcuts for `Arc<RwLock<T>>`.
@@ -434,5 +434,5 @@ pub type OzzArcBuf<T> = Arc<RwLock<Vec<T>>>;
 /// Creates a new `Arc<RwLock<Vec<T>>>`.
 #[inline]
 pub fn ozz_arc_buf<T>(v: Vec<T>) -> OzzArcBuf<T> {
-    return Arc::new(RwLock::new(v));
+    Arc::new(RwLock::new(v))
 }

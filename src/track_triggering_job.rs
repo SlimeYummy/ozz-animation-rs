@@ -24,10 +24,10 @@ pub struct Edge {
 impl Edge {
     /// Creates a new `Edge`.
     pub fn new(ratio: f32, rising: bool) -> Edge {
-        return Edge {
-            ratio: ratio,
-            rising: rising,
-        };
+        Edge {
+            ratio,
+            rising,
+        }
     }
 }
 
@@ -62,12 +62,12 @@ where
     T: OzzObj<Track<f32>>,
 {
     fn default() -> TrackTriggeringJob<T> {
-        return TrackTriggeringJob {
+        TrackTriggeringJob {
             track: None,
             from: 0.0,
             to: 0.0,
             threshold: 0.0,
-        };
+        }
     }
 }
 
@@ -98,7 +98,7 @@ where
     /// Gets from of `TrackTriggeringJob`.
     #[inline]
     pub fn from(&self) -> f32 {
-        return self.from;
+        self.from
     }
 
     /// Sets from of `TrackTriggeringJob`.
@@ -119,7 +119,7 @@ where
     /// Gets to of `TrackTriggeringJob`.
     #[inline]
     pub fn to(&self) -> f32 {
-        return self.to;
+        self.to
     }
 
     /// Sets to of `TrackTriggeringJob`.
@@ -140,7 +140,7 @@ where
     /// Gets threshold of `TrackTriggeringJob`.
     #[inline]
     pub fn threshold(&self) -> f32 {
-        return self.threshold;
+        self.threshold
     }
 
     /// Sets threshold of `TrackTriggeringJob`.
@@ -158,15 +158,15 @@ where
     /// Validates `TrackTriggeringJob` parameters.
     #[inline]
     pub fn validate(&self) -> bool {
-        return self.track.is_some();
+        self.track.is_some()
     }
 
     /// Runs track triggering job's task.
     /// The validate job before any operation is performed.
     ///
     /// Returns an iterator of `Edge` that represents the detected edges.
-    pub fn run<'t>(&'t mut self) -> Result<TrackTriggeringIter<'t, T>, OzzError> {
-        if !self.track.is_some() {
+    pub fn run(&mut self) -> Result<TrackTriggeringIter<'_, T>, OzzError> {
+        if self.track.is_none() {
             return Err(OzzError::InvalidJob);
         }
         return Ok(TrackTriggeringIter::new(self));
@@ -192,8 +192,8 @@ where
     fn new(job: &'t TrackTriggeringJob<T>) -> TrackTriggeringIter<'t, T> {
         let track = job.track().unwrap().obj();
         let end = job.from == job.to;
-        return TrackTriggeringIter {
-            job: job,
+        TrackTriggeringIter {
+            job,
             track: if end { None } else { Some(track) },
             outer: job.from.floor(),
             inner: if job.from < job.to {
@@ -201,7 +201,7 @@ where
             } else {
                 track.key_count() as isize - 1
             },
-        };
+        }
     }
 
     fn detect_edge(&self, it0: usize, it1: usize, forward: bool) -> Option<Edge> {
@@ -228,17 +228,15 @@ where
         let step = (track.steps()[it0 / 8] & (1 << (it0 & 7))) != 0;
         if step {
             edge.ratio = track.ratios()[it1];
+        } else if it1 == 0 {
+            edge.ratio = 0.0;
         } else {
-            if it1 == 0 {
-                edge.ratio = 0.0;
-            } else {
-                let alpha = (self.job.threshold - val0) / (val1 - val0);
-                let ratio0 = track.ratios()[it0];
-                let ratio1 = track.ratios()[it1];
-                edge.ratio = ratio0 + (ratio1 - ratio0) * alpha;
-            }
+            let alpha = (self.job.threshold - val0) / (val1 - val0);
+            let ratio0 = track.ratios()[it0];
+            let ratio1 = track.ratios()[it1];
+            edge.ratio = ratio0 + (ratio1 - ratio0) * alpha;
         }
-        return Some(edge);
+        Some(edge)
     }
 }
 
@@ -301,7 +299,7 @@ where
 
         // iterator end
         self.track = None;
-        return None;
+        None
     }
 }
 
@@ -315,21 +313,21 @@ mod track_triggering_tests {
     #[wasm_bindgen_test]
     fn test_validity() {
         let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
-        assert_eq!(job.validate(), false);
+        assert!(!job.validate());
         assert!(job.run().unwrap_err().is_invalid_job());
 
         let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
         job.set_track(Rc::new(Track::default()));
         job.set_from(0.0);
         job.set_to(1.0);
-        assert_eq!(job.validate(), true);
+        assert!(job.validate());
         assert!(job.run().is_ok());
 
         let mut job: TrackTriggeringJobRc = TrackTriggeringJob::default();
         job.set_track(Rc::new(Track::default()));
         job.set_from(0.0);
         job.set_to(0.0);
-        assert_eq!(job.validate(), true);
+        assert!(job.validate());
         assert!(job.run().is_ok());
     }
 
@@ -608,7 +606,7 @@ mod track_triggering_tests {
         check_all(
             &mut job,
             -1.0,
-            -core::f32::MIN_POSITIVE,
+            -f32::MIN_POSITIVE,
             if edges[len - 1].ratio != 1.0 { len } else { len - 1 },
             edges,
             |i| i,

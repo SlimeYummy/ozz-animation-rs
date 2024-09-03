@@ -80,7 +80,7 @@ fn prepare_contexts(
     }
 
     let contexts: Vec<SamplingContext> = common::load_rkyv("context", name).unwrap();
-    return (skeleton, animation, contexts);
+    (skeleton, animation, contexts)
 }
 
 #[derive(Debug)]

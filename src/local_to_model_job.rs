@@ -51,7 +51,7 @@ where
     O: OzzMutBuf<Mat4>,
 {
     fn default() -> LocalToModelJob<S, I, O> {
-        return LocalToModelJob {
+        LocalToModelJob {
             skeleton: None,
             input: None,
             root: AosMat4::identity(),
@@ -59,7 +59,7 @@ where
             to: SKELETON_MAX_JOINTS,
             from_excluded: false,
             output: None,
-        };
+        }
     }
 }
 
@@ -112,7 +112,7 @@ where
     /// Gets root of `LocalToModelJob`.
     #[inline]
     pub fn root(&self) -> Mat4 {
-        return self.root.into();
+        self.root.into()
     }
 
     /// Sets root of `LocalToModelJob`.
@@ -127,7 +127,7 @@ where
     /// Gets from of `LocalToModelJob`.
     #[inline]
     pub fn from(&self) -> i32 {
-        return self.from;
+        self.from
     }
 
     /// Sets from of `LocalToModelJob`.
@@ -147,7 +147,7 @@ where
     /// Gets to of `LocalToModelJob`.
     #[inline]
     pub fn to(&self) -> i32 {
-        return self.to;
+        self.to
     }
 
     /// Sets to of `LocalToModelJob`.
@@ -165,7 +165,7 @@ where
     /// Gets from_excluded of `LocalToModelJob`.
     #[inline]
     pub fn from_excluded(&self) -> bool {
-        return self.from_excluded;
+        self.from_excluded
     }
 
     /// Sets from_excluded of `LocalToModelJob`.
@@ -211,7 +211,7 @@ where
 
             let mut ok = input.len() >= skeleton.num_soa_joints();
             ok &= output.len() >= skeleton.num_joints();
-            return Some(ok);
+            Some(ok)
         })()
         .unwrap_or(false);
     }
@@ -254,7 +254,7 @@ where
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -332,7 +332,7 @@ mod local_to_model_tests {
         // j1  j3
         //  |  / \
         // j2 j4 j5
-        return Rc::new(Skeleton::from_raw(&SkeletonRaw {
+        Rc::new(Skeleton::from_raw(&SkeletonRaw {
             joint_rest_poses: vec![
                 SoaTransform {
                     translation: SoaVec3::splat_col([0.0; 3]),
@@ -341,7 +341,7 @@ mod local_to_model_tests {
                 };
                 2
             ],
-            joint_names: (|| {
+            joint_names: {
                 let mut map = JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new());
                 map.insert("j0".into(), 0);
                 map.insert("j1".into(), 1);
@@ -349,14 +349,14 @@ mod local_to_model_tests {
                 map.insert("j3".into(), 3);
                 map.insert("j4".into(), 4);
                 map.insert("j5".into(), 5);
-                return map;
-            })(),
+                map
+            },
             joint_parents: vec![-1, 0, 1, 0, 3, 3],
-        }));
+        }))
     }
 
     fn new_input1() -> Rc<RefCell<Vec<SoaTransform>>> {
-        return Rc::new(RefCell::new(vec![
+        Rc::new(RefCell::new(vec![
             SoaTransform {
                 translation: SoaVec3::new([2.0, 0.0, 1.0, -2.0], [2.0, 0.0, 2.0, -2.0], [2.0, 0.0, 4.0, -2.0]),
                 rotation: SoaQuat::new(
@@ -377,7 +377,7 @@ mod local_to_model_tests {
                 ),
                 scale: SoaVec3::new([1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0]),
             },
-        ]));
+        ]))
     }
 
     fn new_skeleton2() -> Rc<Skeleton> {
@@ -391,7 +391,7 @@ mod local_to_model_tests {
         // j2 j4 j6
         //     |
         //    j5
-        return Rc::new(Skeleton::from_raw(&SkeletonRaw {
+        Rc::new(Skeleton::from_raw(&SkeletonRaw {
             joint_rest_poses: vec![
                 SoaTransform {
                     translation: SoaVec3::splat_col([0.0; 3]),
@@ -400,7 +400,7 @@ mod local_to_model_tests {
                 };
                 2
             ],
-            joint_names: (|| {
+            joint_names: {
                 let mut map = JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new());
                 map.insert("j0".into(), 0);
                 map.insert("j1".into(), 1);
@@ -410,14 +410,14 @@ mod local_to_model_tests {
                 map.insert("j5".into(), 5);
                 map.insert("j6".into(), 6);
                 map.insert("j7".into(), 7);
-                return map;
-            })(),
+                map
+            },
             joint_parents: vec![-1, 0, 1, 0, 3, 4, 3, -1],
-        }));
+        }))
     }
 
     fn new_input2() -> Rc<RefCell<Vec<SoaTransform>>> {
-        return Rc::new(RefCell::new(vec![
+        Rc::new(RefCell::new(vec![
             SoaTransform {
                 translation: SoaVec3::new([2.0, 0.0, -2.0, 1.0], [2.0, 0.0, -2.0, 2.0], [2.0, 0.0, -2.0, 4.0]),
                 rotation: SoaQuat::new(
@@ -438,9 +438,10 @@ mod local_to_model_tests {
                 ),
                 scale: SoaVec3::new([1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0], [1.0, -0.1, 1.0, 1.0]),
             },
-        ]));
+        ]))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn execute_test(
         skeleton: &Rc<Skeleton>,
         input: &Rc<RefCell<Vec<SoaTransform>>>,
@@ -462,10 +463,9 @@ mod local_to_model_tests {
         job.from_excluded = from_excluded;
 
         job.run().unwrap();
-        for idx in 0..skeleton.num_joints() {
+        for (idx, b) in expected.iter().enumerate().take(skeleton.num_joints()) {
             let a = output.as_ref().borrow()[idx];
-            let b = expected[idx];
-            assert!(a.abs_diff_eq(b, 2e-6f32), "{} joint={} {} {}", message, idx, a, b,);
+            assert!(a.abs_diff_eq(*b, 2e-6f32), "{} joint={} {} {}", message, idx, a, b,);
         }
     }
 

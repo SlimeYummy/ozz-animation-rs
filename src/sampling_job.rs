@@ -43,14 +43,14 @@ const _: () = {
     impl<S: Fallible + ?Sized> Serialize<S> for InterpSoaFloat3 {
         #[inline]
         fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
-            return Ok(());
+            Ok(())
         }
     }
 
     impl<D: Fallible + ?Sized> Deserialize<InterpSoaFloat3, D> for InterpSoaFloat3 {
         #[inline]
         fn deserialize(&self, _: &mut D) -> Result<InterpSoaFloat3, D::Error> {
-            return Ok(from_archived!(*self));
+            Ok(from_archived!(*self))
         }
     }
 
@@ -62,7 +62,7 @@ const _: () = {
             if value as usize % mem::align_of::<InterpSoaFloat3>() != 0 {
                 return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
             }
-            return Ok(&*value);
+            Ok(&*value)
         }
     }
 };
@@ -96,14 +96,14 @@ const _: () = {
     impl<S: Fallible + ?Sized> Serialize<S> for InterpSoaQuaternion {
         #[inline]
         fn serialize(&self, _: &mut S) -> Result<Self::Resolver, S::Error> {
-            return Ok(());
+            Ok(())
         }
     }
 
     impl<D: Fallible + ?Sized> Deserialize<InterpSoaQuaternion, D> for InterpSoaQuaternion {
         #[inline]
         fn deserialize(&self, _: &mut D) -> Result<InterpSoaQuaternion, D::Error> {
-            return Ok(from_archived!(*self));
+            Ok(from_archived!(*self))
         }
     }
 
@@ -115,7 +115,7 @@ const _: () = {
             if value as usize % mem::align_of::<InterpSoaQuaternion>() != 0 {
                 return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
             }
-            return Ok(&*value);
+            Ok(&*value)
         }
     }
 };
@@ -130,12 +130,12 @@ mod serde_interp {
         let mut seq = serializer.serialize_seq(Some(2))?;
         seq.serialize_element(value[0].as_array())?;
         seq.serialize_element(value[1].as_array())?;
-        return seq.end();
+        seq.end()
     }
 
     pub(crate) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[f32x4; 2], D::Error> {
         let tmp: [[f32; 4]; 2] = Deserialize::deserialize(deserializer)?;
-        return Ok([f32x4::from_array(tmp[0]), f32x4::from_array(tmp[1])]);
+        Ok([f32x4::from_array(tmp[0]), f32x4::from_array(tmp[1])])
     }
 }
 
@@ -166,7 +166,7 @@ struct SamplingContextInner {
 
 impl Default for SamplingContextInner {
     fn default() -> SamplingContextInner {
-        return SamplingContextInner {
+        SamplingContextInner {
             size: 0,
             max_tracks: 0,
             max_soa_tracks: 0,
@@ -188,7 +188,7 @@ impl Default for SamplingContextInner {
             scale_entries: ptr::null_mut(),
             scale_outdated: ptr::null_mut(),
             scale_next: 0,
-        };
+        }
     }
 }
 
@@ -236,7 +236,7 @@ impl Clone for SamplingContext {
         ctx.scale_outdated_mut().copy_from_slice(self.scale_outdated());
         ctx.set_scale_next(self.scale_next());
 
-        return ctx;
+        ctx
     }
 }
 
@@ -277,12 +277,12 @@ impl Drop for SamplingContext {
 impl SamplingContext {
     #[inline(always)]
     fn inner(&self) -> &SamplingContextInner {
-        return unsafe { &*self.0 };
+        unsafe { &*self.0 }
     }
 
     #[inline(always)]
     fn inner_mut(&mut self) -> &mut SamplingContextInner {
-        return unsafe { &mut *self.0 };
+        unsafe { &mut *self.0 }
     }
 
     /// Create a new `SamplingContext`
@@ -327,29 +327,29 @@ impl SamplingContext {
             ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * inner.max_soa_tracks);
             inner.translation_entries = ptr as *mut u32;
             ptr = ptr.add(mem::size_of::<u32>() * inner.max_tracks);
-            inner.translation_outdated = ptr as *mut u8;
-            ptr = ptr.add(mem::size_of::<u8>() * inner.max_outdated);
+            inner.translation_outdated = ptr;
+            ptr = ptr.add(inner.max_outdated);
             ptr = align_ptr(ptr, ALIGN);
 
             inner.rotations = ptr as *mut InterpSoaQuaternion;
             ptr = ptr.add(mem::size_of::<InterpSoaQuaternion>() * inner.max_soa_tracks);
             inner.rotation_entries = ptr as *mut u32;
             ptr = ptr.add(mem::size_of::<u32>() * inner.max_tracks);
-            inner.rotation_outdated = ptr as *mut u8;
-            ptr = ptr.add(mem::size_of::<u8>() * inner.max_outdated);
+            inner.rotation_outdated = ptr;
+            ptr = ptr.add(inner.max_outdated);
             ptr = align_ptr(ptr, ALIGN);
 
             inner.scales = ptr as *mut InterpSoaFloat3;
             ptr = ptr.add(mem::size_of::<InterpSoaFloat3>() * inner.max_soa_tracks);
             inner.scale_entries = ptr as *mut u32;
             ptr = ptr.add(mem::size_of::<u32>() * inner.max_tracks);
-            inner.scale_outdated = ptr as *mut u8;
-            ptr = ptr.add(mem::size_of::<u8>() * inner.max_outdated);
+            inner.scale_outdated = ptr;
+            ptr = ptr.add(inner.max_outdated);
             ptr = align_ptr(ptr, ALIGN);
 
             assert_eq!(ptr, (ctx.0 as *mut u8).add(size));
-            return ctx;
-        };
+            ctx
+        }
     }
 
     /// Create a new `SamplingContext` from an `Animation`.
@@ -358,7 +358,7 @@ impl SamplingContext {
     pub fn from_animation(animation: &Animation) -> SamplingContext {
         let mut ctx = SamplingContext::new(animation.num_tracks());
         ctx.inner_mut().animation_id = animation as *const _ as u64;
-        return ctx;
+        ctx
     }
 
     /// Clear the `SamplingContext`.
@@ -376,7 +376,7 @@ impl SamplingContext {
     pub fn clone_without_animation_id(&self) -> SamplingContext {
         let mut ctx = self.clone();
         ctx.set_animation_id(0);
-        return ctx;
+        ctx
     }
 
     /// The memory size of the context in bytes.
@@ -586,7 +586,7 @@ impl SamplingContext {
     }
 
     #[inline]
-    fn translation_decompress_args<'t>(&'t self) -> DecompressArgs<'t, InterpSoaFloat3> {
+    fn translation_decompress_args(&self) -> DecompressArgs<'_, InterpSoaFloat3> {
         let inner = self.inner();
         return DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.translation_entries, inner.max_tracks) },
@@ -608,7 +608,7 @@ impl SamplingContext {
     }
 
     #[inline]
-    fn rotation_decompress_args<'t>(&'t self) -> DecompressArgs<'t, InterpSoaQuaternion> {
+    fn rotation_decompress_args(&self) -> DecompressArgs<'_, InterpSoaQuaternion> {
         let inner = self.inner();
         return DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.rotation_entries, inner.max_tracks) },
@@ -630,7 +630,7 @@ impl SamplingContext {
     }
 
     #[inline]
-    fn scale_decompress_args<'t>(&'t self) -> DecompressArgs<'t, InterpSoaFloat3> {
+    fn scale_decompress_args(&self) -> DecompressArgs<'_, InterpSoaFloat3> {
         let inner = self.inner();
         return DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.scale_entries, inner.max_tracks) },
@@ -734,7 +734,7 @@ const _: () = {
     impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for SamplingContext {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
             serializer.align_for::<InterpSoaFloat3>()?;
-            return Ok(SamplingContextResolver {
+            Ok(SamplingContextResolver {
                 translations: ArchivedVec::serialize_from_slice(self.translations(), serializer)?,
                 rotations: ArchivedVec::serialize_from_slice(self.rotations(), serializer)?,
                 scales: ArchivedVec::serialize_from_slice(self.scales(), serializer)?,
@@ -744,7 +744,7 @@ const _: () = {
                 translation_outdateds: ArchivedVec::serialize_from_slice(self.translation_outdated(), serializer)?,
                 rotation_outdateds: ArchivedVec::serialize_from_slice(self.rotation_outdated(), serializer)?,
                 scale_outdateds: ArchivedVec::serialize_from_slice(self.scale_outdated(), serializer)?,
-            });
+            })
         }
     }
 
@@ -775,7 +775,7 @@ const _: () = {
             context.set_translation_next(archived.translation_next as usize);
             context.set_rotation_next(archived.rotation_next as usize);
             context.set_scale_next(archived.scale_next as usize);
-            return Ok(context);
+            Ok(context)
         }
     }
 
@@ -787,7 +787,7 @@ const _: () = {
             if value as usize % mem::align_of::<f32x4>() != 0 {
                 return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
             }
-            return Ok(&*value);
+            Ok(&*value)
         }
     }
 };
@@ -819,7 +819,7 @@ const _: () = {
             map.serialize_entry("scale_entries", self.scale_entries())?;
             map.serialize_entry("scale_outdated", self.scale_outdated())?;
             map.serialize_entry("scale_next", &self.scale_next())?;
-            return map.end();
+            map.end()
         }
     }
 
@@ -835,7 +835,7 @@ const _: () = {
         type Value = SamplingContext;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            return formatter.write_str("struct SamplingContext");
+            formatter.write_str("struct SamplingContext")
         }
 
         fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<Self::Value, V::Error> {
@@ -899,7 +899,7 @@ const _: () = {
                     }
                 }
             }
-            return Ok(ctx);
+            Ok(ctx)
         }
     }
 };
@@ -912,24 +912,24 @@ pub trait AsSamplingContext {
 impl AsSamplingContext for SamplingContext {
     #[inline(always)]
     fn as_ref(&self) -> &SamplingContext {
-        return self;
+        self
     }
 
     #[inline(always)]
     fn as_mut(&mut self) -> &mut SamplingContext {
-        return self;
+        self
     }
 }
 
 impl AsSamplingContext for &'_ mut SamplingContext {
     #[inline(always)]
     fn as_ref(&self) -> &SamplingContext {
-        return self;
+        self
     }
 
     #[inline(always)]
     fn as_mut(&mut self) -> &mut SamplingContext {
-        return *self;
+        self
     }
 }
 
@@ -982,12 +982,12 @@ where
     C: AsSamplingContext,
 {
     fn default() -> SamplingJob<A, O, C> {
-        return SamplingJob {
+        SamplingJob {
             animation: None,
             context: None,
             ratio: 0.0,
             output: None,
-        };
+        }
     }
 }
 
@@ -1036,13 +1036,13 @@ where
     /// Takes context of `SamplingJob`. See [SamplingContext].
     #[inline]
     pub fn take_context(&mut self) -> Option<C> {
-        return self.context.take();
+        self.context.take()
     }
 
     /// Gets the time ratio of `SamplingJob`.
     #[inline]
     pub fn ratio(&self) -> f32 {
-        return self.ratio;
+        self.ratio
     }
 
     /// Sets the time ratio of `SamplingJob`.
@@ -1091,7 +1091,7 @@ where
 
             let mut ok = context.as_ref().max_soa_tracks() >= animation.num_soa_tracks();
             ok &= output.len() >= animation.num_soa_tracks();
-            return Some(ok);
+            Some(ok)
         })()
         .unwrap_or(false);
     }
@@ -1131,7 +1131,7 @@ where
         Self::decompress_float3(args, anim.timepoints(), &anim.scales_ctrl(), anim.scales());
 
         Self::interpolates(anim, ctx.as_mut(), self.ratio, &mut output)?;
-        return Ok(());
+        Ok(())
     }
 
     #[inline]
@@ -1145,7 +1145,7 @@ where
         }
         let prev_ratio = ctx.ratio();
         ctx.set_ratio(ratio);
-        return prev_ratio;
+        prev_ratio
     }
 
     fn update_cache(
@@ -1181,7 +1181,7 @@ where
         // Forward
         let mut track = 0;
         while next < num_keys
-            && Self::key_ratio(ctrl, &animation.timepoints(), next - ctrl.previouses[next] as usize) <= ratio
+            && Self::key_ratio(ctrl, animation.timepoints(), next - ctrl.previouses[next] as usize) <= ratio
         {
             track = Self::track_forward(args.entries, ctrl.previouses, next, track, args.num_tracks);
             assert!((args.entries[track] as usize) == next - (ctrl.previouses[next] as usize));
@@ -1193,11 +1193,11 @@ where
         // Rewinds
         while Self::key_ratio(
             ctrl,
-            &animation.timepoints(),
+            animation.timepoints(),
             next - 1 - ctrl.previouses[next - 1] as usize,
         ) > ratio
         {
-            assert!(next - 1 >= args.num_tracks * 2);
+            assert!(next > args.num_tracks * 2);
             track = Self::track_backward(args.entries, next - 1, track, args.num_tracks);
             args.outdated[track / 32] |= 1 << ((track & 0x1F) / 4);
             assert!((args.entries[track] as usize) == next - 1);
@@ -1217,13 +1217,13 @@ where
             let iframe = (iframe - 1) * 2;
             let offset = ctrl.iframe_desc[iframe] as usize;
             decode_gv4_stream(&ctrl.iframe_entries[offset..], entries);
-            return (ctrl.iframe_desc[iframe + 1] + 1) as usize;
+            (ctrl.iframe_desc[iframe + 1] + 1) as usize
         } else {
             let num_tracks = entries.len() as u32;
             for i in 0..num_tracks {
                 entries[i as usize] = i + num_tracks;
             }
-            return (num_tracks * 2) as usize;
+            (num_tracks * 2) as usize
         }
     }
 
@@ -1240,22 +1240,24 @@ where
 
     #[inline]
     fn track_forward(cache: &[u32], previouses: &[u16], key: usize, last_track: usize, num_tracks: usize) -> usize {
-        assert!(key < previouses.len());
-        assert!(last_track < num_tracks);
+        let target = key.saturating_sub(previouses[key] as usize);
 
-        let target = key - previouses[key] as usize;
-        for entry in last_track..num_tracks {
-            if (cache[entry] as usize) == target {
-                return entry;
-            }
+        if let Some((entry, _)) = cache
+            .iter()
+            .enumerate()
+            .skip(last_track)
+            .take(num_tracks - last_track)
+            .find(|&(_, &value)| value as usize == target)
+        {
+            return entry;
         }
-        for entry in 0..num_tracks {
-            if (cache[entry] as usize) == target {
-                return entry;
-            }
-            assert!(entry < last_track);
-        }
-        return 0;
+
+        cache
+            .iter()
+            .enumerate()
+            .take(last_track)
+            .find(|&(_, &value)| value as usize == target)
+            .map_or(0, |(entry, _)| entry)
     }
 
     #[inline]
@@ -1273,22 +1275,22 @@ where
             }
             assert!(entry > last_track);
         }
-        return 0;
+        0
     }
 
     #[inline(always)]
     fn key_ratio(ctrl: &KeyframesCtrl<'_>, timepoints: &[f32], at: usize) -> f32 {
-        return timepoints[ctrl.ratios[at] as usize];
+        timepoints[ctrl.ratios[at] as usize]
     }
 
     #[inline(always)]
     fn key_ratio_simd(ctrl: &KeyframesCtrl<'_>, timepoints: &[f32], ats: &[u32]) -> f32x4 {
-        return f32x4::from_array([
+        f32x4::from_array([
             timepoints[ctrl.ratios[ats[0] as usize] as usize],
             timepoints[ctrl.ratios[ats[1] as usize] as usize],
             timepoints[ctrl.ratios[ats[2] as usize] as usize],
             timepoints[ctrl.ratios[ats[3] as usize] as usize],
-        ]);
+        ])
     }
 
     fn decompress_float3(
@@ -1323,7 +1325,7 @@ where
                 let k11 = compressed[rights[1] as usize];
                 let k21 = compressed[rights[2] as usize];
                 let k31 = compressed[rights[3] as usize];
-                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, &rights);
+                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
                 Float3Key::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
 
                 outdated >>= 1;
@@ -1363,7 +1365,7 @@ where
                 let k11 = compressed[rights[1] as usize];
                 let k21 = compressed[rights[2] as usize];
                 let k31 = compressed[rights[3] as usize];
-                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, &rights);
+                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
                 QuaternionKey::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
 
                 outdated >>= 1;
@@ -1378,20 +1380,21 @@ where
         output: &mut [SoaTransform],
     ) -> Result<(), OzzError> {
         let ratio4 = f32x4::splat(ratio);
-        for idx in 0..animation.num_soa_tracks() {
+        for (idx, out) in output.iter_mut().enumerate().take(animation.num_soa_tracks()) {
             let translation = &ctx.translations()[idx];
             let translation_ratio = (ratio4 - translation.ratio[0]) / (translation.ratio[1] - translation.ratio[0]);
-            output[idx].translation = SoaVec3::lerp(&translation.value[0], &translation.value[1], translation_ratio);
+            out.translation = SoaVec3::lerp(&translation.value[0], &translation.value[1], translation_ratio);
 
             let rotation = &ctx.rotations()[idx];
             let rotation_ratio = (ratio4 - rotation.ratio[0]) / (rotation.ratio[1] - rotation.ratio[0]);
-            output[idx].rotation = SoaQuat::nlerp(&rotation.value[0], &rotation.value[1], rotation_ratio);
+            out.rotation = SoaQuat::nlerp(&rotation.value[0], &rotation.value[1], rotation_ratio);
 
             let scale = &ctx.scales()[idx];
             let scale_ratio = (ratio4 - scale.ratio[0]) / (scale.ratio[1] - scale.ratio[0]);
-            output[idx].scale = SoaVec3::lerp(&scale.value[0], &scale.value[1], scale_ratio);
+            out.scale = SoaVec3::lerp(&scale.value[0], &scale.value[1], scale_ratio);
         }
-        return Ok(());
+
+        Ok(())
     }
 }
 
@@ -1402,7 +1405,7 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
 
     #[inline]
     fn load(input: &[u8]) -> u32 {
-        return input[0] as u32 | (input[1] as u32) << 8 | (input[2] as u32) << 16 | (input[3] as u32) << 24;
+        input[0] as u32 | (input[1] as u32) << 8 | (input[2] as u32) << 16 | (input[3] as u32) << 24
     }
 
     let mut in_buf = &buffer[1..];
@@ -1422,7 +1425,7 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
     output[3] = load(in_buf) & MASK[k3];
     in_buf = &in_buf[k3 + 1..];
 
-    return in_buf;
+    in_buf
 }
 
 fn decode_gv4_stream<'t>(buffer: &'t [u8], stream: &mut [u32]) -> &'t [u8] {
@@ -1434,9 +1437,9 @@ fn decode_gv4_stream<'t>(buffer: &'t [u8], stream: &mut [u32]) -> &'t [u8] {
 
     let mut in_buf = buffer;
     for chunk in stream.chunks_mut(4) {
-        in_buf = decode_gv4(in_buf, chunk.try_into().unwrap());
+        in_buf = decode_gv4(in_buf, chunk);
     }
-    return in_buf;
+    in_buf
 }
 
 #[cfg(test)]
@@ -1449,20 +1452,20 @@ mod sampling_tests {
     use crate::base::OzzBuf;
 
     fn make_buf<T>(v: Vec<T>) -> Rc<RefCell<Vec<T>>> {
-        return Rc::new(RefCell::new(v));
+        Rc::new(RefCell::new(v))
     }
 
     // f16 -> f32
     // ignore overflow, infinite, NaN
     pub fn f16(f: f32) -> u16 {
-        let n = unsafe { mem::transmute::<f32, u32>(f) };
+        let n = f.to_bits();
         if (n & 0x7FFFFFFF) == 0 {
             return (n >> 16) as u16;
         }
         let sign = (n >> 16) & 0x8000;
         let expo = (((n & 0x7f800000) - 0x38000000) >> 13) & 0x7c00;
         let base = (n >> 13) & 0x03ff;
-        return (sign | expo | base) as u16;
+        (sign | expo | base) as u16
     }
 
     #[test]
@@ -1509,27 +1512,27 @@ mod sampling_tests {
     };
 
     fn empty_translations() -> Vec<Float3Key> {
-        return vec![Float3Key::new([f16(0.0); 3]); 8];
+        vec![Float3Key::new([f16(0.0); 3]); 8]
     }
 
     fn empty_rotations() -> Vec<QuaternionKey> {
-        return vec![QuaternionKey::new([65531, 65533, 32766]); 8];
+        vec![QuaternionKey::new([65531, 65533, 32766]); 8]
     }
 
     fn empty_scales() -> Vec<Float3Key> {
-        return vec![Float3Key::new([f16(1.0); 3]); 8];
+        vec![Float3Key::new([f16(1.0); 3]); 8]
     }
 
     fn empty_ratios(n: u16) -> Vec<u16> {
-        return vec![0, 0, 0, 0, n, n, n, n];
+        vec![0, 0, 0, 0, n, n, n, n]
     }
 
     fn empty_previouses() -> Vec<u16> {
-        return vec![0, 0, 0, 0, 4, 4, 4, 4];
+        vec![0, 0, 0, 0, 4, 4, 4, 4]
     }
 
     fn empty_animation_raw<const S: usize>(duration: f32) -> AnimationRaw {
-        return AnimationRaw {
+        AnimationRaw {
             duration,
             num_tracks: S as u32,
             timepoints: vec![],
@@ -1543,7 +1546,7 @@ mod sampling_tests {
             s_ratios: empty_ratios(S as u16),
             s_previouses: empty_previouses(),
             ..Default::default()
-        };
+        }
     }
 
     #[derive(Debug, Clone)]
@@ -1603,7 +1606,7 @@ mod sampling_tests {
     #[wasm_bindgen_test]
     fn test_sampling() {
         fn frame(ratio: f32, t1: f32, t2: f32, t3: f32, t4: f32) -> Frame<4> {
-            return Frame {
+            Frame {
                 ratio,
                 transform: [
                     (Vec3::new(t1, 0.0, 0.0), QU, V1),
@@ -1611,7 +1614,7 @@ mod sampling_tests {
                     (Vec3::new(t3, 0.0, 0.0), QU, V1),
                     (Vec3::new(t4, 0.0, 0.0), QU, V1),
                 ],
-            };
+            }
         }
 
         let mut ar = empty_animation_raw::<4>(1.0);
@@ -1703,10 +1706,10 @@ mod sampling_tests {
     #[wasm_bindgen_test]
     fn test_sampling_1_track_2_key() {
         fn frame(ratio: f32, v: Vec3) -> Frame<2> {
-            return Frame {
+            Frame {
                 ratio,
                 transform: [(v, QU, V1), (V0, QU, V1)],
-            };
+            }
         }
 
         let mut ar = empty_animation_raw::<2>(46.0);
@@ -1858,7 +1861,7 @@ mod sampling_tests {
                     .abs_diff_eq(Quat::from_xyzw(0.0, 0.0, 0.0, 1.0), 5e-1));
                 assert_eq!(item.scale.col(0), Vec3::new(1.0, 1.0, 1.0));
             }
-            return Ok(());
+            Ok(())
         }
 
         job.set_ratio(0.0);

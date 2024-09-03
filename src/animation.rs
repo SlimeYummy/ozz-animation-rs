@@ -22,12 +22,12 @@ pub struct Float3Key([u16; 3]);
 
 impl Float3Key {
     pub const fn new(value: [u16; 3]) -> Float3Key {
-        return Float3Key(value);
+        Float3Key(value)
     }
 
     #[inline]
     pub fn decompress(&self) -> Vec3 {
-        return Vec3::new(f16_to_f32(self.0[0]), f16_to_f32(self.0[1]), f16_to_f32(self.0[2]));
+        Vec3::new(f16_to_f32(self.0[0]), f16_to_f32(self.0[1]), f16_to_f32(self.0[2]))
     }
 
     #[inline]
@@ -42,7 +42,7 @@ impl ArchiveRead<Float3Key> for Float3Key {
     #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<Float3Key, OzzError> {
         let value: [u16; 3] = [archive.read()?, archive.read()?, archive.read()?];
-        return Ok(Float3Key(value));
+        Ok(Float3Key(value))
     }
 }
 
@@ -55,7 +55,7 @@ pub struct QuaternionKey([u16; 3]);
 
 impl QuaternionKey {
     pub const fn new(value: [u16; 3]) -> QuaternionKey {
-        return QuaternionKey(value);
+        QuaternionKey(value)
     }
 
     #[inline]
@@ -64,7 +64,7 @@ impl QuaternionKey {
         let bigest = self.0[0] & 0x3;
         let sign = (self.0[0] >> 2) & 0x1;
         let value = [packed & 0x7fff, (packed >> 15) & 0x7fff, (self.0[2] as u32) >> 1];
-        return (bigest, sign, value);
+        (bigest, sign, value)
     }
 
     #[inline]
@@ -90,7 +90,7 @@ impl QuaternionKey {
         let w0 = ww0.sqrt();
         let restored = if sign == 0 { w0 } else { -w0 };
         cpnt[largest as usize] = restored;
-        return Quat::from_vec4(cpnt);
+        Quat::from_vec4(cpnt)
     }
 
     #[rustfmt::skip]
@@ -151,10 +151,10 @@ impl QuaternionKey {
         cpnt[largest2 as usize] = fx4(ix4(cpnt[largest2 as usize]) | (restored & MASK_00F0));
         cpnt[largest3 as usize] = fx4(ix4(cpnt[largest3 as usize]) | (restored & MASK_000F));
 
-        soa.x = unsafe { mem::transmute(cpnt[0]) };
-        soa.y = unsafe { mem::transmute(cpnt[1]) };
-        soa.z = unsafe { mem::transmute(cpnt[2]) };
-        soa.w = unsafe { mem::transmute(cpnt[3]) };
+        soa.x = cpnt[0];
+        soa.y = cpnt[1];
+        soa.z = cpnt[2];
+        soa.w = cpnt[3];
     }
 }
 
@@ -162,7 +162,7 @@ impl ArchiveRead<QuaternionKey> for QuaternionKey {
     #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<QuaternionKey, OzzError> {
         let value: [u16; 3] = [archive.read()?, archive.read()?, archive.read()?];
-        return Ok(QuaternionKey(value));
+        Ok(QuaternionKey(value))
     }
 }
 
@@ -298,24 +298,17 @@ pub(crate) struct AnimationRaw {
 }
 
 impl Animation {
-    /// `Animation` resource file tag for `Archive`.
-    #[inline]
-    pub fn tag() -> &'static str {
-        return "ozz-animation";
-    }
-
     /// `Animation` resource file version for `Archive`.
-    #[inline]
-    pub fn version() -> u32 {
-        return 7;
-    }
+    const VERSION: u32 = 7;
+    /// `Animation` resource file tag for `Archive`.
+    const TAG: &'static str = "ozz-animation";
 
     /// Reads an `AnimationMeta` from an `Archive`.
     pub fn read_meta(archive: &mut Archive<impl Read>) -> Result<AnimationMeta, OzzError> {
-        if archive.tag() != Self::tag() {
+        if archive.tag() != Self::TAG {
             return Err(OzzError::InvalidTag);
         }
-        if archive.version() != Self::version() {
+        if archive.version() != Self::VERSION {
             return Err(OzzError::InvalidVersion);
         }
 
@@ -339,7 +332,7 @@ impl Animation {
             name = String::from_utf8(buf).map_err(|e| e.utf8_error())?;
         }
 
-        return Ok(AnimationMeta {
+        Ok(AnimationMeta {
             version: archive.version(),
             duration,
             num_tracks,
@@ -354,7 +347,7 @@ impl Animation {
             scales_count,
             s_iframe_entries_count,
             s_iframe_desc_count,
-        });
+        })
     }
 
     /// Reads an `Animation` from an `Archive`.
@@ -404,28 +397,28 @@ impl Animation {
         animation.s_iframe_interval = archive.read()?;
         archive.read_slice(animation.scales_mut())?;
 
-        return Ok(animation);
+        Ok(animation)
     }
 
     /// Reads an `Animation` from a file path.
     #[cfg(not(feature = "wasm"))]
     pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Animation, OzzError> {
         let mut archive = Archive::from_path(path)?;
-        return Animation::from_archive(&mut archive);
+        Animation::from_archive(&mut archive)
     }
 
     /// Reads an `Animation` from a file path.
     #[cfg(all(feature = "wasm", feature = "nodejs"))]
     pub fn from_path(path: &str) -> Result<Animation, OzzError> {
         let mut archive = Archive::from_path(path)?;
-        return Animation::from_archive(&mut archive);
+        Animation::from_archive(&mut archive)
     }
 
     pub(crate) fn from_raw(raw: &AnimationRaw) -> Animation {
         let meta = AnimationMeta {
-            version: Animation::version(),
+            version: Animation::VERSION,
             duration: raw.duration,
-            num_tracks: raw.num_tracks as u32,
+            num_tracks: raw.num_tracks,
             name: raw.name.clone(),
             timepoints_count: raw.timepoints.len() as u32,
             translations_count: raw.translations.len() as u32,
@@ -461,7 +454,7 @@ impl Animation {
         animation.s_iframe_interval = raw.s_iframe_interval;
         animation.s_iframe_entries_mut().copy_from_slice(&raw.s_iframe_entries);
         animation.s_iframe_desc_mut().copy_from_slice(&raw.s_iframe_desc);
-        return animation;
+        animation
     }
 
     pub(crate) fn to_raw(&self) -> AnimationRaw {
@@ -571,8 +564,8 @@ impl Animation {
             ptr = ptr.add(animation.translations_count as usize * mem::size_of::<u16>());
             animation.t_previouses = ptr as *mut u16;
             ptr = ptr.add(animation.translations_count as usize * mem::size_of::<u16>());
-            animation.t_iframe_entries = ptr as *mut u8;
-            ptr = ptr.add(animation.t_iframe_entries_count as usize * mem::size_of::<u8>());
+            animation.t_iframe_entries = ptr;
+            ptr = ptr.add(animation.t_iframe_entries_count as usize);
             ptr = align_ptr(ptr, ALIGN);
             animation.t_iframe_desc = ptr as *mut u32;
             ptr = ptr.add(animation.t_iframe_desc_count as usize * mem::size_of::<u32>());
@@ -583,8 +576,8 @@ impl Animation {
             ptr = ptr.add(animation.rotations_count as usize * mem::size_of::<u16>());
             animation.r_previouses = ptr as *mut u16;
             ptr = ptr.add(animation.rotations_count as usize * mem::size_of::<u16>());
-            animation.r_iframe_entries = ptr as *mut u8;
-            ptr = ptr.add(animation.r_iframe_entries_count as usize * mem::size_of::<u8>());
+            animation.r_iframe_entries = ptr;
+            ptr = ptr.add(animation.r_iframe_entries_count as usize);
             ptr = align_ptr(ptr, ALIGN);
             animation.r_iframe_desc = ptr as *mut u32;
             ptr = ptr.add(animation.r_iframe_desc_count as usize * mem::size_of::<u32>());
@@ -595,15 +588,15 @@ impl Animation {
             ptr = ptr.add(animation.scales_count as usize * mem::size_of::<u16>());
             animation.s_previouses = ptr as *mut u16;
             ptr = ptr.add(animation.scales_count as usize * mem::size_of::<u16>());
-            animation.s_iframe_entries = ptr as *mut u8;
-            ptr = ptr.add(animation.s_iframe_entries_count as usize * mem::size_of::<u8>());
+            animation.s_iframe_entries = ptr;
+            ptr = ptr.add(animation.s_iframe_entries_count as usize);
             ptr = align_ptr(ptr, ALIGN);
             animation.s_iframe_desc = ptr as *mut u32;
             ptr = ptr.add(animation.s_iframe_desc_count as usize * mem::size_of::<u32>());
 
             assert_eq!(ptr, (animation.timepoints as *mut u8).add(animation.size));
         }
-        return animation;
+        animation
     }
 }
 
@@ -621,32 +614,32 @@ impl Animation {
     /// Gets the animation clip duration.
     #[inline]
     pub fn duration(&self) -> f32 {
-        return self.duration;
+        self.duration
     }
 
     /// Gets the number of animated tracks.
     #[inline]
     pub fn num_tracks(&self) -> usize {
-        return self.num_tracks as usize;
+        self.num_tracks as usize
     }
 
     /// Gets the number of animated tracks (aligned to 4 * SoA).
     #[inline]
     pub fn num_aligned_tracks(&self) -> usize {
-        return ((self.num_tracks as usize) + 3) & !0x3;
+        ((self.num_tracks as usize) + 3) & !0x3
     }
 
     /// Gets the number of SoA elements matching the number of tracks of `Animation`.
     /// This value is useful to allocate SoA runtime data structures.
     #[inline]
     pub fn num_soa_tracks(&self) -> usize {
-        return ((self.num_tracks as usize) + 3) / 4;
+        ((self.num_tracks as usize) + 3) / 4
     }
 
     /// Gets animation name.
     #[inline]
     pub fn name(&self) -> &str {
-        return &self.name;
+        &self.name
     }
 
     /// Gets the buffer of time points.
@@ -972,7 +965,7 @@ const _: () = {
 
     impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for Animation {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-            return Ok(AnimationResolver {
+            Ok(AnimationResolver {
                 name: ArchivedString::serialize_from_str(&self.name, serializer)?,
                 timepoints: ArchivedVec::serialize_from_slice(self.timepoints(), serializer)?,
                 translations: ArchivedVec::serialize_from_slice(self.translations(), serializer)?,
@@ -990,7 +983,7 @@ const _: () = {
                 s_previouses: ArchivedVec::serialize_from_slice(self.s_previouses(), serializer)?,
                 s_iframe_entries: ArchivedVec::serialize_from_slice(self.s_iframe_entries(), serializer)?,
                 s_iframe_desc: ArchivedVec::serialize_from_slice(self.s_iframe_desc(), serializer)?,
-            });
+            })
         }
     }
 
@@ -999,9 +992,9 @@ const _: () = {
         fn deserialize(&self, _: &mut D) -> Result<Animation, D::Error> {
             let archived = from_archived!(self);
             let mut animation = Animation::new(AnimationMeta {
-                version: Animation::version(),
+                version: Animation::VERSION,
                 duration: archived.duration,
-                num_tracks: archived.num_tracks as u32,
+                num_tracks: archived.num_tracks,
                 name: archived.name.to_string(),
                 timepoints_count: archived.timepoints.len() as u32,
                 translations_count: archived.translations.len() as u32,
@@ -1064,7 +1057,7 @@ const _: () = {
                 .copy_from_slice(archived.s_iframe_desc.as_slice());
             animation.s_iframe_interval = archived.s_iframe_interval;
 
-            return Ok(animation);
+            Ok(animation)
         }
     }
 };
@@ -1076,18 +1069,19 @@ const _: () = {
     impl Serialize for Animation {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             let raw = self.to_raw();
-            return raw.serialize(serializer);
+            raw.serialize(serializer)
         }
     }
 
     impl<'de> Deserialize<'de> for Animation {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Animation, D::Error> {
             let raw = AnimationRaw::deserialize(deserializer)?;
-            return Ok(Animation::from_raw(&raw));
+            Ok(Animation::from_raw(&raw))
         }
     }
 };
 
+#[allow(clippy::excessive_precision)]
 #[cfg(test)]
 mod tests {
     use wasm_bindgen_test::*;
@@ -1248,7 +1242,7 @@ mod tests {
         serializer.serialize_value(&animation).unwrap();
         let buf = serializer.into_serializer().into_inner();
         let archived = unsafe { rkyv::archived_root::<Animation>(&buf) };
-        let mut deserializer = rkyv::Infallible::default();
+        let mut deserializer = rkyv::Infallible;
         let animation2: Animation = archived.deserialize(&mut deserializer).unwrap();
 
         assert_eq!(animation.duration(), animation2.duration());
@@ -1310,7 +1304,7 @@ mod tests {
             animation2.scales_ctrl().iframe_desc
         );
     }
-    
+
     #[cfg(feature = "serde")]
     #[test]
     #[wasm_bindgen_test]
@@ -1320,7 +1314,7 @@ mod tests {
         let animation = Animation::from_path("./resource/blend/animation1.ozz").unwrap();
         let josn = serde_json::to_vec(&animation).unwrap();
         let animation2: Animation = serde_json::from_slice(&josn).unwrap();
-        
+
         assert_eq!(animation.duration(), animation2.duration());
         assert_eq!(animation.num_tracks(), animation2.num_tracks());
         assert_eq!(animation.name(), animation2.name());

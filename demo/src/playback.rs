@@ -14,6 +14,9 @@ pub struct OzzPlayback {
     spine_trans: Vec<OzzTransform>,
 }
 
+unsafe impl Send for OzzPlayback {}
+unsafe impl Sync for OzzPlayback {}
+
 impl OzzPlayback {
     pub async fn new() -> Box<dyn OzzExample> {
         let (mut ar_skeleton, mut ar_animation) = try_zip(
@@ -60,7 +63,7 @@ impl OzzPlayback {
 
         oc.bone_trans.reserve(bone_count);
         oc.spine_trans.reserve(spine_count);
-        return Box::new(oc);
+        Box::new(oc)
     }
 }
 
@@ -70,11 +73,11 @@ impl OzzExample for OzzPlayback {
     }
 
     fn bone_trans(&self) -> &[OzzTransform] {
-        return &self.bone_trans;
+        &self.bone_trans
     }
 
     fn spine_trans(&self) -> &[OzzTransform] {
-        return &self.spine_trans;
+        &self.spine_trans
     }
 
     fn update(&mut self, time: Time) {
@@ -113,14 +116,14 @@ impl OzzExample for OzzPlayback {
             let bone_rot = Quat::from_mat3(&Mat3::from_cols(bone_dir, bone_rot_y, bone_rot_z));
 
             self.bone_trans.push(OzzTransform {
-                scale: scale,
+                scale,
                 rotation: bone_rot,
                 position: parent_pos,
             });
 
             let parent_rot = Quat::from_mat4(parent);
             self.spine_trans.push(OzzTransform {
-                scale: scale,
+                scale,
                 rotation: parent_rot,
                 position: parent_pos,
             });
@@ -128,7 +131,7 @@ impl OzzExample for OzzPlayback {
             if self.skeleton.is_leaf(i as i16) {
                 let current_rot = Quat::from_mat4(current);
                 self.spine_trans.push(OzzTransform {
-                    scale: scale,
+                    scale,
                     rotation: current_rot,
                     position: current_pos,
                 });

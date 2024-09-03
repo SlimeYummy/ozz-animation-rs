@@ -18,7 +18,7 @@ struct TestData {
     reacheds: [bool; 4],
 }
 
-const JOINT_NAMES: &'static [&'static str] = &["Head", "Spine3", "Spine2", "Spine1"];
+const JOINT_NAMES: &[&str] = &["Head", "Spine3", "Spine2", "Spine1"];
 
 const TARGET_EXTENT: f32 = 1.0;
 const TARGET_OFFSET: Vec3A = Vec3A::new(0.2, 1.5, -0.3);
@@ -103,7 +103,7 @@ where
 
         let mut previous_joint = SKELETON_NO_PARENT;
         for (idx, joint) in joints_chain.iter().enumerate() {
-            ik_job.set_joint(models1.buf().unwrap()[*joint as usize].into());
+            ik_job.set_joint(models1.buf().unwrap()[*joint as usize]);
             ik_job.set_up(Vec3A::X);
 
             if idx == joints_chain.len() - 1 {
@@ -116,13 +116,13 @@ where
                 ik_job.set_offset(EYES_OFFSET);
                 ik_job.set_forward(Vec3A::Y);
             } else {
-                let transform: Mat4 = models1.buf().unwrap()[previous_joint as usize].into();
+                let transform: Mat4 = models1.buf().unwrap()[previous_joint as usize];
                 let corrected_forward_ms =
                     transform.transform_vector3a(ik_job.joint_correction().mul_vec3a(ik_job.forward()));
                 let corrected_offset_ms =
                     transform.transform_point3a(ik_job.joint_correction().mul_vec3a(ik_job.offset()));
 
-                let transform: Mat4 = models1.buf().unwrap()[*joint as usize].into();
+                let transform: Mat4 = models1.buf().unwrap()[*joint as usize];
                 let inv_transform = transform.inverse();
                 ik_job.set_offset(inv_transform.transform_point3a(corrected_offset_ms));
                 ik_job.set_forward(inv_transform.transform_vector3a(corrected_forward_ms));
@@ -160,7 +160,7 @@ where
 }
 
 fn validate_joints_order(skeleton: &Skeleton, joints: &[i16]) -> bool {
-    if joints.len() == 0 {
+    if joints.is_empty() {
         return true;
     }
 
@@ -175,5 +175,5 @@ fn validate_joints_order(skeleton: &Skeleton, joints: &[i16]) -> bool {
         parent = skeleton.joint_parent(joint as usize);
     }
 
-    return joints.len() == i;
+    joints.len() == i
 }

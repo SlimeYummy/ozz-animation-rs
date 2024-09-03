@@ -69,13 +69,13 @@ impl Skeleton {
     /// `Skeleton` resource file tag for `Archive`.
     #[inline]
     pub fn tag() -> &'static str {
-        return "ozz-skeleton";
+        "ozz-skeleton"
     }
 
     #[inline]
     /// `Skeleton` resource file version for `Archive`.
     pub fn version() -> u32 {
-        return 2;
+        2
     }
 
     /// Reads a `SkeletonMeta` from a reader.
@@ -109,12 +109,12 @@ impl Skeleton {
 
         let joint_parents: Vec<i16> = archive.read_vec(num_joints as usize)?;
 
-        return Ok(SkeletonMeta {
+        Ok(SkeletonMeta {
             version: Self::version(),
             num_joints,
             joint_names,
             joint_parents,
-        });
+        })
     }
 
     /// Reads a `Skeleton` from a reader.
@@ -129,21 +129,21 @@ impl Skeleton {
 
         archive.read_slice(skeleton.joint_parents_mut())?;
         archive.read_slice(skeleton.joint_rest_poses_mut())?;
-        return Ok(skeleton);
+        Ok(skeleton)
     }
 
     /// Reads a `Skeleton` from a file.
     #[cfg(not(feature = "wasm"))]
     pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Skeleton, OzzError> {
         let mut archive = Archive::from_path(path)?;
-        return Skeleton::from_archive(&mut archive);
+        Skeleton::from_archive(&mut archive)
     }
 
     // Only for wasm test in NodeJS environment.
     #[cfg(all(feature = "wasm", feature = "nodejs"))]
     pub fn from_path(path: &str) -> Result<Skeleton, OzzError> {
         let mut archive = Archive::from_path(path)?;
-        return Skeleton::from_archive(&mut archive);
+        Skeleton::from_archive(&mut archive)
     }
 
     pub(crate) fn from_raw(raw: &SkeletonRaw) -> Skeleton {
@@ -156,15 +156,15 @@ impl Skeleton {
         skeleton.joint_rest_poses_mut().copy_from_slice(&raw.joint_rest_poses);
         skeleton.joint_parents_mut().copy_from_slice(&raw.joint_parents);
         skeleton.joint_names = raw.joint_names.clone();
-        return skeleton;
+        skeleton
     }
 
     pub(crate) fn to_raw(&self) -> SkeletonRaw {
-        return SkeletonRaw {
+        SkeletonRaw {
             joint_rest_poses: self.joint_rest_poses().to_vec(),
             joint_parents: self.joint_parents().to_vec(),
             joint_names: self.joint_names().clone(),
-        };
+        }
     }
 
     fn new(meta: SkeletonMeta) -> Skeleton {
@@ -196,7 +196,7 @@ impl Skeleton {
 
             assert_eq!(ptr, (skeleton.joint_rest_poses as *mut u8).add(skeleton.size));
         }
-        return skeleton;
+        skeleton
     }
 }
 
@@ -204,20 +204,20 @@ impl Skeleton {
     /// Gets the number of joints of `Skeleton`.
     #[inline]
     pub fn num_joints(&self) -> usize {
-        return self.num_joints as usize;
+        self.num_joints as usize
     }
 
     /// Gets the number of joints of `Skeleton` (aligned to 4 * SoA).
     #[inline]
     pub fn num_aligned_joints(&self) -> usize {
-        return (self.num_joints() + 3) & !0x3;
+        (self.num_joints() + 3) & !0x3
     }
 
     /// Gets the number of soa elements matching the number of joints of `Skeleton`.
     /// This value is useful to allocate SoA runtime data structures.
     #[inline]
     pub fn num_soa_joints(&self) -> usize {
-        return self.num_soa_joints as usize;
+        self.num_soa_joints as usize
     }
 
     /// Gets joint's rest poses. Rest poses are stored in soa format.
@@ -234,13 +234,13 @@ impl Skeleton {
     /// Gets joint's name map.
     #[inline]
     pub fn joint_names(&self) -> &JointHashMap {
-        return &self.joint_names;
+        &self.joint_names
     }
 
     /// Gets joint's index by name.
     #[inline]
     pub fn joint_by_name(&self, name: &str) -> Option<i16> {
-        return self.joint_names.get_by_left(name).map(|idx| *idx);
+        self.joint_names.get_by_left(name).copied()
     }
 
     /// Gets joint's name by index.
@@ -346,14 +346,14 @@ const _: () = {
     impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for Skeleton {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
             serializer.align_for::<SoaTransform>()?;
-            return Ok(SkeletonResolver {
+            Ok(SkeletonResolver {
                 joint_rest_poses: ArchivedVec::serialize_from_slice(self.joint_rest_poses(), serializer)?,
                 joint_names: ArchivedVec::serialize_from_iter(
                     self.joint_names().iter().map(|(key, value)| Entry { key, value }),
                     serializer,
                 )?,
                 joint_parents: ArchivedVec::serialize_from_slice(self.joint_parents(), serializer)?,
-            });
+            })
         }
     }
 
@@ -372,7 +372,7 @@ const _: () = {
                 .copy_from_slice(archived.joint_rest_poses.as_slice());
 
             skeleton.joint_names = JointHashMap::with_capacity_and_hashers(
-                archived.joint_names.len() as usize,
+                archived.joint_names.len(),
                 DeterministicState::new(),
                 DeterministicState::new(),
             );
@@ -383,7 +383,7 @@ const _: () = {
             skeleton
                 .joint_parents_mut()
                 .copy_from_slice(archived.joint_parents.as_slice());
-            return Ok(skeleton);
+            Ok(skeleton)
         }
     }
 };
@@ -395,14 +395,14 @@ const _: () = {
     impl Serialize for Skeleton {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             let raw = self.to_raw();
-            return raw.serialize(serializer);
+            raw.serialize(serializer)
         }
     }
 
     impl<'de> Deserialize<'de> for Skeleton {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Skeleton, D::Error> {
             let raw = SkeletonRaw::deserialize(deserializer)?;
-            return Ok(Skeleton::from_raw(&raw));
+            Ok(Skeleton::from_raw(&raw))
         }
     }
 };
@@ -415,6 +415,7 @@ mod tests {
     use super::*;
     use crate::math::{SoaQuat, SoaVec3};
 
+    #[allow(clippy::excessive_precision)]
     #[test]
     #[wasm_bindgen_test]
     fn test_read_skeleton() {
@@ -495,7 +496,7 @@ mod tests {
         serializer.serialize_value(&skeleton).unwrap();
         let buf = serializer.into_serializer().into_inner();
         let archived = unsafe { rkyv::archived_root::<Skeleton>(&buf) };
-        let mut deserializer = rkyv::Infallible::default();
+        let mut deserializer = rkyv::Infallible;
         let skeleton2: Skeleton = archived.deserialize(&mut deserializer).unwrap();
 
         assert_eq!(skeleton.joint_rest_poses(), skeleton2.joint_rest_poses());

@@ -38,31 +38,31 @@ pub struct BlendingLayer<I: OzzBuf<SoaTransform>> {
 
 impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
     pub fn new(transform: I) -> BlendingLayer<I> {
-        return BlendingLayer {
+        BlendingLayer {
             transform,
             weight: 0.0,
             joint_weights: Vec::new(),
-        };
+        }
     }
 
     pub fn with_weight(transform: I, weight: f32) -> BlendingLayer<I> {
-        return BlendingLayer {
+        BlendingLayer {
             transform,
             weight,
             joint_weights: Vec::new(),
-        };
+        }
     }
 
     pub fn with_joint_weights(transform: I, joint_weights: Vec<Vec4>) -> BlendingLayer<I> {
-        return BlendingLayer {
+        BlendingLayer {
             transform,
             weight: 0.0,
             joint_weights,
-        };
+        }
     }
 
     fn joint_weight(&self, idx: usize) -> f32x4 {
-        return fx4_from_vec4(self.joint_weights[idx]);
+        fx4_from_vec4(self.joint_weights[idx])
     }
 }
 
@@ -77,24 +77,24 @@ pub struct BlendingContext {
 
 impl Default for BlendingContext {
     fn default() -> BlendingContext {
-        return BlendingContext {
+        BlendingContext {
             num_passes: 0,
             num_partial_passes: 0,
             accumulated_weight: 0.0,
             accumulated_weights: Vec::new(),
-        };
+        }
     }
 }
 
 impl BlendingContext {
     /// New blending context with a given soa joints.
     pub fn new(soa_joints: usize) -> BlendingContext {
-        return BlendingContext {
+        BlendingContext {
             num_passes: 0,
             num_partial_passes: 0,
             accumulated_weight: 0.0,
             accumulated_weights: vec![f32x4::splat(0.0); soa_joints],
-        };
+        }
     }
 }
 
@@ -138,14 +138,14 @@ where
     O: OzzMutBuf<SoaTransform>,
 {
     fn default() -> BlendingJob<S, I, O> {
-        return BlendingJob {
+        BlendingJob {
             skeleton: None,
             context: Some(BlendingContext::default()),
             threshold: 0.1,
             layers: Vec::new(),
             additive_layers: Vec::new(),
             output: None,
-        };
+        }
     }
 }
 
@@ -201,13 +201,13 @@ where
     /// Takes context of `BlendingJob`. See [BlendingContext].
     #[inline]
     pub fn take_context(&mut self) -> Option<BlendingContext> {
-        return self.context.take();
+        self.context.take()
     }
 
     /// Gets threshold of `BlendingJob`.
     #[inline]
     pub fn threshold(&self) -> f32 {
-        return self.threshold;
+        self.threshold
     }
 
     /// Set threshold of `BlendingJob`.
@@ -223,7 +223,7 @@ where
     /// Gets layers of `BlendingJob`.
     #[inline]
     pub fn layers(&self) -> &[BlendingLayer<I>] {
-        return &self.layers;
+        &self.layers
     }
 
     /// Gets mutable layers of `BlendingJob`.
@@ -231,13 +231,13 @@ where
     /// Job input layers, can be empty or nullptr. The range of layers that must be blended.
     #[inline]
     pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
-        return &mut self.layers;
+        &mut self.layers
     }
 
     /// Gets additive layers of `BlendingJob`.
     #[inline]
     pub fn additive_layers(&self) -> &[BlendingLayer<I>] {
-        return &self.additive_layers;
+        &self.additive_layers
     }
 
     /// Gets mutable additive layers of `BlendingJob`.
@@ -245,13 +245,13 @@ where
     /// Job input additive layers, can be empty or nullptr. The range of layers that must be added to the output.
     #[inline]
     pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
-        return &mut self.additive_layers;
+        &mut self.additive_layers
     }
 
     /// Gets output of `BlendingJob`.
     #[inline]
     pub fn output(&self) -> Option<&O> {
-        return self.output.as_ref();
+        self.output.as_ref()
     }
 
     /// Sets output of `BlendingJob`.
@@ -292,7 +292,7 @@ where
                 }
             }
 
-            return Some(ok);
+            Some(ok)
         })()
         .unwrap_or(false);
     }
@@ -321,7 +321,7 @@ where
         Self::blend_rest_pose(skeleton, ctx, self.threshold, &mut output);
         Self::normalize(skeleton, ctx, &mut output);
         Self::add_layers(skeleton, &self.additive_layers, &mut output)?;
-        return Ok(());
+        Ok(())
     }
 
     fn blend_layers(
@@ -380,7 +380,7 @@ where
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
     fn blend_rest_pose(skeleton: &Skeleton, ctx: &mut BlendingContext, threshold: f32, output: &mut [SoaTransform]) {
@@ -391,9 +391,7 @@ where
             if bp_weight > 0.0 {
                 if ctx.num_passes == 0 {
                     ctx.accumulated_weight = 1.0;
-                    for idx in 0..joint_rest_poses.len() {
-                        output[idx] = joint_rest_poses[idx];
-                    }
+                    output.copy_from_slice(joint_rest_poses);
                 } else {
                     ctx.accumulated_weight = threshold;
                     let simd_bp_weight = f32x4::splat(bp_weight);
@@ -417,15 +415,13 @@ where
 
         if ctx.num_partial_passes == 0 {
             let ratio = f32x4::splat(ctx.accumulated_weight.recip());
-            for idx in 0..joint_rest_poses.len() {
-                let dest = &mut output[idx];
+            for dest in output.iter_mut().take(joint_rest_poses.len()) {
                 dest.translation = dest.translation.mul_num(ratio);
                 dest.rotation = dest.rotation.normalize();
                 dest.scale = dest.scale.mul_num(ratio);
             }
         } else {
-            for idx in 0..joint_rest_poses.len() {
-                let dest = &mut output[idx];
+            for (idx, dest) in output.iter_mut().enumerate().take(joint_rest_poses.len()) {
                 let ratio = ctx.accumulated_weights[idx].recip();
                 dest.translation = dest.translation.mul_num(ratio);
                 dest.rotation = dest.rotation.normalize();
@@ -483,7 +479,7 @@ where
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
     #[inline(always)]
@@ -543,6 +539,7 @@ where
     }
 }
 
+#[allow(clippy::excessive_precision)]
 #[cfg(test)]
 mod blending_tests {
     use std::mem;
@@ -559,7 +556,7 @@ mod blending_tests {
     };
 
     fn make_buf<T>(v: Vec<T>) -> Rc<RefCell<Vec<T>>> {
-        return Rc::new(RefCell::new(v));
+        Rc::new(RefCell::new(v))
     }
 
     #[test]
@@ -704,7 +701,7 @@ mod blending_tests {
         input2: Vec<SoaTransform>,
         weights2: Vec<Vec4>,
     ) -> Vec<BlendingLayer<Rc<RefCell<Vec<SoaTransform>>>>> {
-        return vec![
+        vec![
             BlendingLayer {
                 transform: make_buf(input1),
                 weight: 0.0,
@@ -715,7 +712,7 @@ mod blending_tests {
                 weight: 0.0,
                 joint_weights: weights2,
             },
-        ];
+        ]
     }
 
     fn execute_test(
@@ -1026,12 +1023,13 @@ mod blending_tests {
         let mut joint_rest_poses = vec![IDENTITY];
         joint_rest_poses[0].scale = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
 
-        return Rc::new(Skeleton::from_raw(&SkeletonRaw {
+        Rc::new(Skeleton::from_raw(&SkeletonRaw {
             joint_rest_poses,
             joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
             joint_parents: vec![0; 4],
-        }));
+        }))
     }
+
     #[test]
     #[wasm_bindgen_test]
     fn test_normalize() {
