@@ -299,16 +299,23 @@ pub(crate) struct AnimationRaw {
 
 impl Animation {
     /// `Animation` resource file version for `Archive`.
-    const VERSION: u32 = 7;
+    #[inline]
+    pub fn tag() -> &'static str {
+        "ozz-animation"
+    }
+
     /// `Animation` resource file tag for `Archive`.
-    const TAG: &'static str = "ozz-animation";
+    #[inline]
+    pub fn version() -> u32 {
+        7
+    }
 
     /// Reads an `AnimationMeta` from an `Archive`.
     pub fn read_meta(archive: &mut Archive<impl Read>) -> Result<AnimationMeta, OzzError> {
-        if archive.tag() != Self::TAG {
+        if archive.tag() != Self::tag() {
             return Err(OzzError::InvalidTag);
         }
-        if archive.version() != Self::VERSION {
+        if archive.version() != Self::version() {
             return Err(OzzError::InvalidVersion);
         }
 
@@ -416,7 +423,7 @@ impl Animation {
 
     pub(crate) fn from_raw(raw: &AnimationRaw) -> Animation {
         let meta = AnimationMeta {
-            version: Animation::VERSION,
+            version: Animation::version(),
             duration: raw.duration,
             num_tracks: raw.num_tracks,
             name: raw.name.clone(),
@@ -992,7 +999,7 @@ const _: () = {
         fn deserialize(&self, _: &mut D) -> Result<Animation, D::Error> {
             let archived = from_archived!(self);
             let mut animation = Animation::new(AnimationMeta {
-                version: Animation::VERSION,
+                version: Animation::version(),
                 duration: archived.duration,
                 num_tracks: archived.num_tracks,
                 name: archived.name.to_string(),

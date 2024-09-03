@@ -72,8 +72,8 @@ impl Skeleton {
         "ozz-skeleton"
     }
 
-    #[inline]
     /// `Skeleton` resource file version for `Archive`.
+    #[inline]
     pub fn version() -> u32 {
         2
     }
@@ -503,7 +503,7 @@ mod tests {
         assert_eq!(skeleton.joint_parents(), skeleton2.joint_parents());
         assert_eq!(skeleton.joint_names(), skeleton2.joint_names());
     }
-    
+
     #[cfg(feature = "serde")]
     #[test]
     #[wasm_bindgen_test]
@@ -513,7 +513,7 @@ mod tests {
         let skeleton = Skeleton::from_path("./resource/blend/skeleton.ozz").unwrap();
         let josn = serde_json::to_vec(&skeleton).unwrap();
         let skeleton2: Skeleton = serde_json::from_slice(&josn).unwrap();
-        
+
         assert_eq!(skeleton.joint_rest_poses(), skeleton2.joint_rest_poses());
         assert_eq!(skeleton.joint_parents(), skeleton2.joint_parents());
         assert_eq!(skeleton.joint_names(), skeleton2.joint_names());

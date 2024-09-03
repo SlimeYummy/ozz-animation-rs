@@ -24,7 +24,6 @@ pub(crate) const TWO: f32x4 = f32x4::from_array([2.0; 4]);
 pub(crate) const THREE: f32x4 = f32x4::from_array([3.0; 4]);
 pub(crate) const NEG_ONE: f32x4 = f32x4::from_array([-1.0; 4]);
 pub(crate) const FRAC_1_2: f32x4 = f32x4::from_array([0.5; 4]);
-pub(crate) const PI: f32x4 = f32x4::from_array([core::f32::consts::PI; 4]);
 pub(crate) const FRAC_2_PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_2_PI; 4]);
 pub(crate) const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
 
@@ -110,15 +109,6 @@ impl SoaVec3 {
             x: self.x - other.x,
             y: self.y - other.y,
             z: self.z - other.z,
-        }
-    }
-
-    #[inline]
-    pub fn component_mul(&self, other: &SoaVec3) -> SoaVec3 {
-        SoaVec3 {
-            x: self.x * other.x,
-            y: self.y * other.y,
-            z: self.z * other.z,
         }
     }
 
@@ -1433,10 +1423,6 @@ mod tests {
 
         assert!(ms < 2.5e-5);
         assert!(mc < 2.5e-5);
-    }
-
-    fn approx_eq(a: f32x4, b: f32, epsilon: f32) -> bool {
-        (a - f32x4::splat(b)).abs().simd_lt(f32x4::splat(epsilon)).all()
     }
 
     #[test]

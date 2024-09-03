@@ -1240,24 +1240,23 @@ where
 
     #[inline]
     fn track_forward(cache: &[u32], previouses: &[u16], key: usize, last_track: usize, num_tracks: usize) -> usize {
-        let target = key.saturating_sub(previouses[key] as usize);
+        #![allow(clippy::needless_range_loop)] // to keep same style with track_backward
+        assert!(key < previouses.len());
+        assert!(last_track < num_tracks);
 
-        if let Some((entry, _)) = cache
-            .iter()
-            .enumerate()
-            .skip(last_track)
-            .take(num_tracks - last_track)
-            .find(|&(_, &value)| value as usize == target)
-        {
-            return entry;
+        let target = key - previouses[key] as usize;
+        for entry in last_track..num_tracks {
+            if (cache[entry] as usize) == target {
+                return entry;
+            }
         }
-
-        cache
-            .iter()
-            .enumerate()
-            .take(last_track)
-            .find(|&(_, &value)| value as usize == target)
-            .map_or(0, |(entry, _)| entry)
+        for entry in 0..num_tracks {
+            if (cache[entry] as usize) == target {
+                return entry;
+            }
+            assert!(entry < last_track);
+        }
+        0
     }
 
     #[inline]
