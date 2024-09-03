@@ -45,8 +45,6 @@
 //! ```
 //!
 
-#![feature(allocator_api)]
-#![feature(const_collections_with_hasher)]
 #![feature(portable_simd)]
 
 pub mod animation;
