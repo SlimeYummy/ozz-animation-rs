@@ -298,13 +298,13 @@ pub(crate) struct AnimationRaw {
 }
 
 impl Animation {
-    /// `Animation` resource file version for `Archive`.
+    /// `Animation` resource file tag for `Archive`.
     #[inline]
     pub fn tag() -> &'static str {
         "ozz-animation"
     }
 
-    /// `Animation` resource file tag for `Archive`.
+    /// `Animation` resource file version for `Archive`.
     #[inline]
     pub fn version() -> u32 {
         7
