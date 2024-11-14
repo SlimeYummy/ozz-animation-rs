@@ -1137,7 +1137,7 @@ where
     #[inline]
     fn step_context(ctx: &mut SamplingContext, animation: &Animation, ratio: f32) -> f32 {
         let animation_id = animation as *const _ as u64;
-        if (ctx.animation_id() != animation_id) || ratio < ctx.ratio() {
+        if ctx.animation_id() != animation_id {
             ctx.set_animation_id(animation_id);
             ctx.set_translation_next(0);
             ctx.set_rotation_next(0);
@@ -1197,7 +1197,7 @@ where
             next - 1 - ctrl.previouses[next - 1] as usize,
         ) > ratio
         {
-            assert!(next > args.num_tracks * 2);
+            assert!(next - 1 >= args.num_tracks * 2);
             track = Self::track_backward(args.entries, next - 1, track, args.num_tracks);
             args.outdated[track / 32] |= 1 << ((track & 0x1F) / 4);
             assert!((args.entries[track] as usize) == next - 1);
@@ -1301,32 +1301,29 @@ where
         for j in 0..args.outdated.len() {
             let mut outdated = args.outdated[j];
             for i in (8 * j)..(8 * j + 8) {
-                if outdated & 1 == 0 {
-                    continue;
+                if outdated & 1 != 0 {
+                    let rights = &args.entries[i * 4..i * 4 + 4];
+                    let lefts = [
+                        rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
+                        rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
+                        rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
+                        rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
+                    ];
+    
+                    let k00 = compressed[lefts[0] as usize];
+                    let k10 = compressed[lefts[1] as usize];
+                    let k20 = compressed[lefts[2] as usize];
+                    let k30 = compressed[lefts[3] as usize];
+                    args.values[i].ratio[0] = Self::key_ratio_simd(ctrl, timepoints, &lefts);
+                    Float3Key::simd_decompress(&k00, &k10, &k20, &k30, &mut args.values[i].value[0]);
+    
+                    let k01 = compressed[rights[0] as usize];
+                    let k11 = compressed[rights[1] as usize];
+                    let k21 = compressed[rights[2] as usize];
+                    let k31 = compressed[rights[3] as usize];
+                    args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
+                    Float3Key::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
                 }
-
-                let rights = &args.entries[i * 4..i * 4 + 4];
-                let lefts = [
-                    rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
-                    rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
-                    rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
-                    rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
-                ];
-
-                let k00 = compressed[lefts[0] as usize];
-                let k10 = compressed[lefts[1] as usize];
-                let k20 = compressed[lefts[2] as usize];
-                let k30 = compressed[lefts[3] as usize];
-                args.values[i].ratio[0] = Self::key_ratio_simd(ctrl, timepoints, &lefts);
-                Float3Key::simd_decompress(&k00, &k10, &k20, &k30, &mut args.values[i].value[0]);
-
-                let k01 = compressed[rights[0] as usize];
-                let k11 = compressed[rights[1] as usize];
-                let k21 = compressed[rights[2] as usize];
-                let k31 = compressed[rights[3] as usize];
-                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
-                Float3Key::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
-
                 outdated >>= 1;
             }
         }
@@ -1341,32 +1338,29 @@ where
         for j in 0..args.outdated.len() {
             let mut outdated = args.outdated[j];
             for i in (8 * j)..(8 * j + 8) {
-                if outdated & 1 == 0 {
-                    continue;
+                if outdated & 1 != 0 {
+                    let rights = &args.entries[i * 4..i * 4 + 4];
+                    let lefts = [
+                        rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
+                        rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
+                        rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
+                        rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
+                    ];
+    
+                    let k00 = compressed[lefts[0] as usize];
+                    let k10 = compressed[lefts[1] as usize];
+                    let k20 = compressed[lefts[2] as usize];
+                    let k30 = compressed[lefts[3] as usize];
+                    args.values[i].ratio[0] = Self::key_ratio_simd(ctrl, timepoints, &lefts);
+                    QuaternionKey::simd_decompress(&k00, &k10, &k20, &k30, &mut args.values[i].value[0]);
+    
+                    let k01 = compressed[rights[0] as usize];
+                    let k11 = compressed[rights[1] as usize];
+                    let k21 = compressed[rights[2] as usize];
+                    let k31 = compressed[rights[3] as usize];
+                    args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
+                    QuaternionKey::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
                 }
-
-                let rights = &args.entries[i * 4..i * 4 + 4];
-                let lefts = [
-                    rights[0] - (ctrl.previouses[rights[0] as usize] as u32),
-                    rights[1] - (ctrl.previouses[rights[1] as usize] as u32),
-                    rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
-                    rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
-                ];
-
-                let k00 = compressed[lefts[0] as usize];
-                let k10 = compressed[lefts[1] as usize];
-                let k20 = compressed[lefts[2] as usize];
-                let k30 = compressed[lefts[3] as usize];
-                args.values[i].ratio[0] = Self::key_ratio_simd(ctrl, timepoints, &lefts);
-                QuaternionKey::simd_decompress(&k00, &k10, &k20, &k30, &mut args.values[i].value[0]);
-
-                let k01 = compressed[rights[0] as usize];
-                let k11 = compressed[rights[1] as usize];
-                let k21 = compressed[rights[2] as usize];
-                let k31 = compressed[rights[3] as usize];
-                args.values[i].ratio[1] = Self::key_ratio_simd(ctrl, timepoints, rights);
-                QuaternionKey::simd_decompress(&k01, &k11, &k21, &k31, &mut args.values[i].value[1]);
-
                 outdated >>= 1;
             }
         }
