@@ -158,7 +158,7 @@ where
     /// Gets skeleton of `BlendingJob`.
     #[inline]
     pub fn skeleton(&self) -> Option<&S> {
-        return self.skeleton.as_ref();
+        self.skeleton.as_ref()
     }
 
     /// Set skeleton of `BlendingJob`.
@@ -183,7 +183,7 @@ where
     /// Gets context of `BlendingJob`. See [BlendingContext].
     #[inline]
     pub fn context(&self) -> Option<&BlendingContext> {
-        return self.context.as_ref();
+        self.context.as_ref()
     }
 
     /// Sets context of `BlendingJob`. See [BlendingContext].
@@ -270,7 +270,7 @@ where
 
     /// Validates `BlendingJob` parameters.
     pub fn validate(&self) -> bool {
-        return (|| {
+        (|| {
             let skeleton = self.skeleton.as_ref()?.obj();
             let _ctx = self.context.as_ref()?;
             let output = self.output.as_ref()?.buf().ok()?;
@@ -294,7 +294,7 @@ where
 
             Some(ok)
         })()
-        .unwrap_or(false);
+        .unwrap_or(false)
     }
 
     /// Runs job's blending task.
@@ -379,7 +379,6 @@ where
                 ctx.num_passes += 1;
             }
         }
-
         Ok(())
     }
 
@@ -478,7 +477,6 @@ where
                 }
             }
         }
-
         Ok(())
     }
 

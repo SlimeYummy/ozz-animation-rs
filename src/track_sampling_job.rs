@@ -51,7 +51,7 @@ where
     /// Gets track of `TrackSamplingJob`.
     #[inline]
     pub fn track(&self) -> Option<&T> {
-        return self.track.as_ref();
+        self.track.as_ref()
     }
 
     /// Sets track of `TrackSamplingJob`.
@@ -136,7 +136,6 @@ where
             let v1 = track.values()[id1];
             self.result = V::lerp(v0, v1, t);
         }
-
         Ok(())
     }
 }

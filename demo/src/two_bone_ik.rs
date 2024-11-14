@@ -70,7 +70,7 @@ impl OzzTwoBoneIK {
 
 impl OzzExample for OzzTwoBoneIK {
     fn root(&self) -> Mat4 {
-        return self.models2.buf().unwrap()[0];
+        self.models2.buf().unwrap()[0]
     }
 
     fn bone_trans(&self) -> &[OzzTransform] {

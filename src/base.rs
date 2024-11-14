@@ -122,12 +122,12 @@ macro_rules! ozz_index {
         impl OzzIndex for $type {
             #[inline(always)]
             fn usize(&self) -> usize {
-                return *self as usize;
+                *self as usize
             }
 
             #[inline(always)]
             fn i32(&self) -> i32 {
-                return *self as i32;
+                *self as i32
             }
         }
     };
@@ -165,7 +165,7 @@ impl<T: Debug> OzzObj<T> for T {
     }
 }
 
-impl<'t, T: Debug> OzzObj<T> for &'t T {
+impl<T: Debug> OzzObj<T> for &T {
     #[inline(always)]
     fn obj(&self) -> &T {
         self
@@ -175,14 +175,14 @@ impl<'t, T: Debug> OzzObj<T> for &'t T {
 impl<T: Debug> OzzObj<T> for Rc<T> {
     #[inline(always)]
     fn obj(&self) -> &T {
-        return self.as_ref();
+        self.as_ref()
     }
 }
 
 impl<T: Debug> OzzObj<T> for Arc<T> {
     #[inline(always)]
     fn obj(&self) -> &T {
-        return self.as_ref();
+        self.as_ref()
     }
 }
 
@@ -230,13 +230,13 @@ impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a [T] {
 
     #[inline(always)]
     fn buf(&self) -> Result<ObSliceRef<T>, OzzError> {
-        return Ok(ObSliceRef(self));
+        Ok(ObSliceRef(self))
     }
 }
 
 pub struct ObSliceRef<'t, T>(pub &'t [T]);
 
-impl<'t, T> Deref for ObSliceRef<'t, T> {
+impl<T> Deref for ObSliceRef<'_, T> {
     type Target = [T];
 
     #[inline(always)]
@@ -256,7 +256,7 @@ impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a mut [T] {
 
     #[inline(always)]
     fn buf(&self) -> Result<ObSliceRef<T>, OzzError> {
-        return Ok(ObSliceRef(self));
+        Ok(ObSliceRef(self))
     }
 }
 
@@ -267,13 +267,13 @@ impl<'a, T: 'static + Debug + Clone> OzzMutBuf<T> for &'a mut [T] {
 
     #[inline(always)]
     fn mut_buf(&mut self) -> Result<ObSliceRefMut<T>, OzzError> {
-        return Ok(ObSliceRefMut(self));
+        Ok(ObSliceRefMut(self))
     }
 }
 
 pub struct ObSliceRefMut<'t, T>(pub &'t mut [T]);
 
-impl<'t, T> Deref for ObSliceRefMut<'t, T> {
+impl<T> Deref for ObSliceRefMut<'_, T> {
     type Target = [T];
 
     #[inline(always)]
@@ -282,7 +282,7 @@ impl<'t, T> Deref for ObSliceRefMut<'t, T> {
     }
 }
 
-impl<'t, T> DerefMut for ObSliceRefMut<'t, T> {
+impl<T> DerefMut for ObSliceRefMut<'_, T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
@@ -298,7 +298,7 @@ impl<T: 'static + Debug + Clone> OzzBuf<T> for Vec<T> {
 
     #[inline(always)]
     fn buf(&self) -> Result<ObSliceRef<T>, OzzError> {
-        return Ok(ObSliceRef(self.as_slice()));
+        Ok(ObSliceRef(self.as_slice()))
     }
 }
 
@@ -307,7 +307,7 @@ impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Vec<T> {
 
     #[inline(always)]
     fn mut_buf(&mut self) -> Result<ObSliceRefMut<T>, OzzError> {
-        return Ok(ObSliceRefMut(self));
+        Ok(ObSliceRefMut(self))
     }
 }
 
@@ -320,18 +320,18 @@ impl<T: 'static + Debug + Clone> OzzBuf<T> for Rc<RefCell<Vec<T>>> {
 
     #[inline(always)]
     fn buf(&self) -> Result<ObCellRef<T>, OzzError> {
-        return Ok(ObCellRef(self.borrow()));
+        Ok(ObCellRef(self.borrow()))
     }
 }
 
 pub struct ObCellRef<'t, T>(pub Ref<'t, Vec<T>>);
 
-impl<'t, T> Deref for ObCellRef<'t, T> {
+impl<T> Deref for ObCellRef<'_, T> {
     type Target = [T];
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        return self.0.as_slice();
+        self.0.as_slice()
     }
 }
 
@@ -340,25 +340,25 @@ impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Rc<RefCell<Vec<T>>> {
 
     #[inline(always)]
     fn mut_buf(&mut self) -> Result<ObCellRefMut<T>, OzzError> {
-        return Ok(ObCellRefMut(self.borrow_mut()));
+        Ok(ObCellRefMut(self.borrow_mut()))
     }
 }
 
 pub struct ObCellRefMut<'t, T>(pub RefMut<'t, Vec<T>>);
 
-impl<'t, T> Deref for ObCellRefMut<'t, T> {
+impl<T> Deref for ObCellRefMut<'_, T> {
     type Target = [T];
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        return self.0.as_slice();
+        self.0.as_slice()
     }
 }
 
-impl<'t, T> DerefMut for ObCellRefMut<'t, T> {
+impl<T> DerefMut for ObCellRefMut<'_, T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        return self.0.as_mut_slice();
+        self.0.as_mut_slice()
     }
 }
 
@@ -371,21 +371,21 @@ impl<T: 'static + Debug + Clone> OzzBuf<T> for Arc<RwLock<Vec<T>>> {
 
     #[inline(always)]
     fn buf(&self) -> Result<ObRwLockReadGuard<T>, OzzError> {
-        return match self.read() {
+        match self.read() {
             Ok(guard) => Ok(ObRwLockReadGuard(guard)),
             Err(_) => Err(OzzError::LockPoison),
-        };
+        }
     }
 }
 
 pub struct ObRwLockReadGuard<'t, T>(pub RwLockReadGuard<'t, Vec<T>>);
 
-impl<'t, T> Deref for ObRwLockReadGuard<'t, T> {
+impl<T> Deref for ObRwLockReadGuard<'_, T> {
     type Target = [T];
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        return self.0.as_slice();
+        self.0.as_slice()
     }
 }
 
@@ -394,28 +394,28 @@ impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Arc<RwLock<Vec<T>>> {
 
     #[inline(always)]
     fn mut_buf(&mut self) -> Result<ObRwLockWriteGuard<T>, OzzError> {
-        return match self.write() {
+        match self.write() {
             Ok(guard) => Ok(ObRwLockWriteGuard(guard)),
             Err(_) => Err(OzzError::LockPoison),
-        };
+        }
     }
 }
 
 pub struct ObRwLockWriteGuard<'t, T>(pub RwLockWriteGuard<'t, Vec<T>>);
 
-impl<'t, T> Deref for ObRwLockWriteGuard<'t, T> {
+impl<T> Deref for ObRwLockWriteGuard<'_, T> {
     type Target = [T];
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        return self.0.as_slice();
+        self.0.as_slice()
     }
 }
 
-impl<'t, T> DerefMut for ObRwLockWriteGuard<'t, T> {
+impl<T> DerefMut for ObRwLockWriteGuard<'_, T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        return self.0.as_mut_slice();
+        self.0.as_mut_slice()
     }
 }
 

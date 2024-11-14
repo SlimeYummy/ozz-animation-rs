@@ -649,7 +649,6 @@ impl AosMat4 {
         let a01 = simd_swizzle!(other.cols[3], Y) * self.cols[1] + xxxx;
         let a23 = simd_swizzle!(other.cols[3], W) * self.cols[3] + zzzz;
         result.cols[3] = a01 + a23;
-
         result
     }
 

@@ -69,7 +69,7 @@ impl OzzPlayback {
 
 impl OzzExample for OzzPlayback {
     fn root(&self) -> Mat4 {
-        return self.models.buf().unwrap()[0];
+        self.models.buf().unwrap()[0]
     }
 
     fn bone_trans(&self) -> &[OzzTransform] {

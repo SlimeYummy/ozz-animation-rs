@@ -403,7 +403,6 @@ impl Animation {
         archive.read_slice(animation.s_iframe_desc_mut())?;
         animation.s_iframe_interval = archive.read()?;
         archive.read_slice(animation.scales_mut())?;
-
         Ok(animation)
     }
 
@@ -465,7 +464,7 @@ impl Animation {
     }
 
     pub(crate) fn to_raw(&self) -> AnimationRaw {
-        return AnimationRaw {
+        AnimationRaw {
             duration: self.duration,
             num_tracks: self.num_tracks,
             name: self.name.clone(),
@@ -491,7 +490,7 @@ impl Animation {
             s_iframe_interval: self.s_iframe_interval,
             s_iframe_entries: self.s_iframe_entries().to_vec(),
             s_iframe_desc: self.s_iframe_desc().to_vec(),
-        };
+        }
     }
 
     fn new(meta: AnimationMeta) -> Animation {
@@ -652,171 +651,171 @@ impl Animation {
     /// Gets the buffer of time points.
     #[inline]
     pub fn timepoints(&self) -> &[f32] {
-        return unsafe { slice::from_raw_parts(self.timepoints, self.timepoints_count as usize) };
+        unsafe { slice::from_raw_parts(self.timepoints, self.timepoints_count as usize) }
     }
 
     #[inline]
     fn timepoints_mut(&mut self) -> &mut [f32] {
-        return unsafe { slice::from_raw_parts_mut(self.timepoints, self.timepoints_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.timepoints, self.timepoints_count as usize) }
     }
 
     /// Gets the buffer of translation keys.
     #[inline]
     pub fn translations(&self) -> &[Float3Key] {
-        return unsafe { slice::from_raw_parts(self.translations, self.translations_count as usize) };
+        unsafe { slice::from_raw_parts(self.translations, self.translations_count as usize) }
     }
 
     #[inline]
     fn translations_mut(&mut self) -> &mut [Float3Key] {
-        return unsafe { slice::from_raw_parts_mut(self.translations, self.translations_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.translations, self.translations_count as usize) }
     }
 
     #[inline]
     fn t_ratios(&self) -> &[u16] {
-        return unsafe { slice::from_raw_parts(self.t_ratios, self.translations_count as usize) };
+        unsafe { slice::from_raw_parts(self.t_ratios, self.translations_count as usize) }
     }
 
     #[inline]
     fn t_ratios_mut(&mut self) -> &mut [u16] {
-        return unsafe { slice::from_raw_parts_mut(self.t_ratios, self.translations_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.t_ratios, self.translations_count as usize) }
     }
 
     #[inline]
     fn t_previouses(&self) -> &[u16] {
-        return unsafe { slice::from_raw_parts(self.t_previouses, self.translations_count as usize) };
+        unsafe { slice::from_raw_parts(self.t_previouses, self.translations_count as usize) }
     }
 
     #[inline]
     fn t_previouses_mut(&mut self) -> &mut [u16] {
-        return unsafe { slice::from_raw_parts_mut(self.t_previouses, self.translations_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.t_previouses, self.translations_count as usize) }
     }
 
     #[inline]
     fn t_iframe_entries(&self) -> &[u8] {
-        return unsafe { slice::from_raw_parts(self.t_iframe_entries, self.t_iframe_entries_count as usize) };
+        unsafe { slice::from_raw_parts(self.t_iframe_entries, self.t_iframe_entries_count as usize) }
     }
 
     #[inline]
     fn t_iframe_entries_mut(&mut self) -> &mut [u8] {
-        return unsafe { slice::from_raw_parts_mut(self.t_iframe_entries, self.t_iframe_entries_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.t_iframe_entries, self.t_iframe_entries_count as usize) }
     }
 
     #[inline]
     fn t_iframe_desc(&self) -> &[u32] {
-        return unsafe { slice::from_raw_parts(self.t_iframe_desc, self.t_iframe_desc_count as usize) };
+        unsafe { slice::from_raw_parts(self.t_iframe_desc, self.t_iframe_desc_count as usize) }
     }
 
     #[inline]
     fn t_iframe_desc_mut(&mut self) -> &mut [u32] {
-        return unsafe { slice::from_raw_parts_mut(self.t_iframe_desc, self.t_iframe_desc_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.t_iframe_desc, self.t_iframe_desc_count as usize) }
     }
 
     /// Gets the buffer of rotation keys.
     #[inline]
     pub fn rotations(&self) -> &[QuaternionKey] {
-        return unsafe { slice::from_raw_parts(self.rotations, self.rotations_count as usize) };
+        unsafe { slice::from_raw_parts(self.rotations, self.rotations_count as usize) }
     }
 
     #[inline]
     fn rotations_mut(&mut self) -> &mut [QuaternionKey] {
-        return unsafe { slice::from_raw_parts_mut(self.rotations, self.rotations_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.rotations, self.rotations_count as usize) }
     }
 
     #[inline]
     fn r_ratios(&self) -> &[u16] {
-        return unsafe { slice::from_raw_parts(self.r_ratios, self.rotations_count as usize) };
+        unsafe { slice::from_raw_parts(self.r_ratios, self.rotations_count as usize) }
     }
 
     #[inline]
     fn r_ratios_mut(&mut self) -> &mut [u16] {
-        return unsafe { slice::from_raw_parts_mut(self.r_ratios, self.rotations_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.r_ratios, self.rotations_count as usize) }
     }
 
     #[inline]
     fn r_previouses(&self) -> &[u16] {
-        return unsafe { slice::from_raw_parts(self.r_previouses, self.rotations_count as usize) };
+        unsafe { slice::from_raw_parts(self.r_previouses, self.rotations_count as usize) }
     }
 
     #[inline]
     fn r_previouses_mut(&mut self) -> &mut [u16] {
-        return unsafe { slice::from_raw_parts_mut(self.r_previouses, self.rotations_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.r_previouses, self.rotations_count as usize) }
     }
 
     #[inline]
     fn r_iframe_entries(&self) -> &[u8] {
-        return unsafe { slice::from_raw_parts(self.r_iframe_entries, self.r_iframe_entries_count as usize) };
+        unsafe { slice::from_raw_parts(self.r_iframe_entries, self.r_iframe_entries_count as usize) }
     }
 
     #[inline]
     fn r_iframe_entries_mut(&mut self) -> &mut [u8] {
-        return unsafe { slice::from_raw_parts_mut(self.r_iframe_entries, self.r_iframe_entries_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.r_iframe_entries, self.r_iframe_entries_count as usize) }
     }
 
     #[inline]
     fn r_iframe_desc(&self) -> &[u32] {
-        return unsafe { slice::from_raw_parts(self.r_iframe_desc, self.r_iframe_desc_count as usize) };
+        unsafe { slice::from_raw_parts(self.r_iframe_desc, self.r_iframe_desc_count as usize) }
     }
 
     #[inline]
     fn r_iframe_desc_mut(&mut self) -> &mut [u32] {
-        return unsafe { slice::from_raw_parts_mut(self.r_iframe_desc, self.r_iframe_desc_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.r_iframe_desc, self.r_iframe_desc_count as usize) }
     }
 
     /// Gets the buffer of scale keys.
     #[inline]
     pub fn scales(&self) -> &[Float3Key] {
-        return unsafe { slice::from_raw_parts(self.scales, self.scales_count as usize) };
+        unsafe { slice::from_raw_parts(self.scales, self.scales_count as usize) }
     }
 
     #[inline]
     fn scales_mut(&mut self) -> &mut [Float3Key] {
-        return unsafe { slice::from_raw_parts_mut(self.scales, self.scales_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.scales, self.scales_count as usize) }
     }
 
     #[inline]
     fn s_ratios(&self) -> &[u16] {
-        return unsafe { slice::from_raw_parts(self.s_ratios, self.scales_count as usize) };
+        unsafe { slice::from_raw_parts(self.s_ratios, self.scales_count as usize) }
     }
 
     #[inline]
     fn s_ratios_mut(&mut self) -> &mut [u16] {
-        return unsafe { slice::from_raw_parts_mut(self.s_ratios, self.scales_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.s_ratios, self.scales_count as usize) }
     }
 
     #[inline]
     fn s_previouses(&self) -> &[u16] {
-        return unsafe { slice::from_raw_parts(self.s_previouses, self.scales_count as usize) };
+        unsafe { slice::from_raw_parts(self.s_previouses, self.scales_count as usize) }
     }
 
     #[inline]
     fn s_previouses_mut(&mut self) -> &mut [u16] {
-        return unsafe { slice::from_raw_parts_mut(self.s_previouses, self.scales_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.s_previouses, self.scales_count as usize) }
     }
 
     #[inline]
     fn s_iframe_entries(&self) -> &[u8] {
-        return unsafe { slice::from_raw_parts(self.s_iframe_entries, self.s_iframe_entries_count as usize) };
+        unsafe { slice::from_raw_parts(self.s_iframe_entries, self.s_iframe_entries_count as usize) }
     }
 
     #[inline]
     fn s_iframe_entries_mut(&mut self) -> &mut [u8] {
-        return unsafe { slice::from_raw_parts_mut(self.s_iframe_entries, self.s_iframe_entries_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.s_iframe_entries, self.s_iframe_entries_count as usize) }
     }
 
     #[inline]
     fn s_iframe_desc(&self) -> &[u32] {
-        return unsafe { slice::from_raw_parts(self.s_iframe_desc, self.s_iframe_desc_count as usize) };
+        unsafe { slice::from_raw_parts(self.s_iframe_desc, self.s_iframe_desc_count as usize) }
     }
 
     #[inline]
     fn s_iframe_desc_mut(&mut self) -> &mut [u32] {
-        return unsafe { slice::from_raw_parts_mut(self.s_iframe_desc, self.s_iframe_desc_count as usize) };
+        unsafe { slice::from_raw_parts_mut(self.s_iframe_desc, self.s_iframe_desc_count as usize) }
     }
 
     /// Gets the buffer of translation keys.
     #[inline]
     pub fn translations_ctrl(&self) -> KeyframesCtrl<'_> {
-        return unsafe {
+        unsafe {
             KeyframesCtrl {
                 ratios: slice::from_raw_parts(self.t_ratios, self.translations_count as usize),
                 previouses: slice::from_raw_parts(self.t_previouses, self.translations_count as usize),
@@ -824,13 +823,13 @@ impl Animation {
                 iframe_desc: slice::from_raw_parts(self.t_iframe_desc, self.t_iframe_desc_count as usize),
                 iframe_interval: self.t_iframe_interval,
             }
-        };
+        }
     }
 
     /// Gets the buffer of rotation keys.
     #[inline]
     pub fn rotations_ctrl(&self) -> KeyframesCtrl<'_> {
-        return unsafe {
+        unsafe {
             KeyframesCtrl {
                 ratios: slice::from_raw_parts(self.r_ratios, self.rotations_count as usize),
                 previouses: slice::from_raw_parts(self.r_previouses, self.rotations_count as usize),
@@ -838,13 +837,13 @@ impl Animation {
                 iframe_desc: slice::from_raw_parts(self.r_iframe_desc, self.r_iframe_desc_count as usize),
                 iframe_interval: self.r_iframe_interval,
             }
-        };
+        }
     }
 
     /// Gets the buffer of scale keys.
     #[inline]
     pub fn scales_ctrl(&self) -> KeyframesCtrl<'_> {
-        return unsafe {
+        unsafe {
             KeyframesCtrl {
                 ratios: slice::from_raw_parts(self.s_ratios, self.scales_count as usize),
                 previouses: slice::from_raw_parts(self.s_previouses, self.scales_count as usize),
@@ -852,7 +851,7 @@ impl Animation {
                 iframe_desc: slice::from_raw_parts(self.s_iframe_desc, self.s_iframe_desc_count as usize),
                 iframe_interval: self.s_iframe_interval,
             }
-        };
+        }
     }
 }
 

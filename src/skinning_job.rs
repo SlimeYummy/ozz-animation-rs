@@ -134,7 +134,7 @@ where
     /// Gets joint matrices of `SkinningJob`.
     #[inline]
     pub fn joint_matrices(&self) -> Option<&JM> {
-        return self.joint_matrices.as_ref();
+        self.joint_matrices.as_ref()
     }
 
     /// Sets joint matrices of `SkinningJob`.
@@ -154,7 +154,7 @@ where
     /// Gets joint inverse transpose matrices of `SkinningJob`.
     #[inline]
     pub fn joint_it_matrices(&self) -> Option<&JM> {
-        return self.joint_it_matrices.as_ref();
+        self.joint_it_matrices.as_ref()
     }
 
     /// Sets joint inverse transpose matrices of `SkinningJob`.
@@ -175,7 +175,7 @@ where
     /// Gets joint indices of `SkinningJob`.
     #[inline]
     pub fn joint_indices(&self) -> Option<&JI> {
-        return self.joint_indices.as_ref();
+        self.joint_indices.as_ref()
     }
 
     /// Sets joint indices of `SkinningJob`.
@@ -193,7 +193,7 @@ where
     /// Gets joint weights of `SkinningJob`.
     #[inline]
     pub fn joint_weights(&self) -> Option<&JW> {
-        return self.joint_weights.as_ref();
+        self.joint_weights.as_ref()
     }
 
     /// Sets joint weights of `SkinningJob`.
@@ -219,7 +219,7 @@ where
     /// Gets input positions of `SkinningJob`.
     #[inline]
     pub fn in_positions(&self) -> Option<&I> {
-        return self.in_positions.as_ref();
+        self.in_positions.as_ref()
     }
 
     /// Sets input positions of `SkinningJob`.
@@ -239,7 +239,7 @@ where
     /// Gets input normals of `SkinningJob`.
     #[inline]
     pub fn in_normals(&self) -> Option<&I> {
-        return self.in_normals.as_ref();
+        self.in_normals.as_ref()
     }
 
     /// Sets input normals of `SkinningJob`.
@@ -259,7 +259,7 @@ where
     /// Gets input tangents of `SkinningJob`.
     #[inline]
     pub fn in_tangents(&self) -> Option<&I> {
-        return self.in_tangents.as_ref();
+        self.in_tangents.as_ref()
     }
 
     /// Sets input tangents of `SkinningJob`.
@@ -279,7 +279,7 @@ where
     /// Gets output positions of `SkinningJob`.
     #[inline]
     pub fn out_positions(&self) -> Option<&O> {
-        return self.out_positions.as_ref();
+        self.out_positions.as_ref()
     }
 
     /// Sets output positions of `SkinningJob`.
@@ -299,7 +299,7 @@ where
     /// Gets output normals of `SkinningJob`.
     #[inline]
     pub fn out_normals(&self) -> Option<&O> {
-        return self.out_normals.as_ref();
+        self.out_normals.as_ref()
     }
 
     /// Sets output normals of `SkinningJob`.
@@ -319,7 +319,7 @@ where
     /// Gets output tangents of `SkinningJob`.
     #[inline]
     pub fn out_tangents(&self) -> Option<&O> {
-        return self.out_tangents.as_ref();
+        self.out_tangents.as_ref()
     }
 
     /// Sets output tangents of `SkinningJob`.
