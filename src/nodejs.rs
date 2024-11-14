@@ -14,5 +14,5 @@ extern "C" {
 pub fn read_file(path: &str) -> Result<Vec<u8>, Error> {
     let buf = read_file_sync(path).unwrap();
     let array = Uint8Array::new(&buf);
-    return Ok(array.to_vec());
+    Ok(array.to_vec())
 }

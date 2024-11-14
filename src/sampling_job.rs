@@ -204,12 +204,12 @@ impl Debug for SamplingContext {
         if self.0.is_null() {
             return f.debug_struct("SamplingContext").finish();
         }
-        return f
+        f
             .debug_struct("SamplingContext")
             .field("mem", &self.0)
             .field("animation_id", &self.animation_id())
             .field("ratio", &self.ratio())
-            .finish();
+            .finish()
     }
 }
 
@@ -235,14 +235,13 @@ impl Clone for SamplingContext {
         ctx.scale_entries_mut().copy_from_slice(self.scale_entries());
         ctx.scale_outdated_mut().copy_from_slice(self.scale_outdated());
         ctx.set_scale_next(self.scale_next());
-
         ctx
     }
 }
 
 impl PartialEq for SamplingContext {
     fn eq(&self, other: &Self) -> bool {
-        return self.max_tracks() == other.max_tracks()
+        self.max_tracks() == other.max_tracks()
             && self.max_soa_tracks() == other.max_soa_tracks()
             && self.max_outdated() == other.max_outdated()
             && self.animation_id() == other.animation_id()
@@ -258,7 +257,7 @@ impl PartialEq for SamplingContext {
             && self.scales() == other.scales()
             && self.scale_entries() == other.scale_entries()
             && self.scale_outdated() == other.scale_outdated()
-            && self.scale_next() == other.scale_next();
+            && self.scale_next() == other.scale_next()
     }
 }
 
@@ -382,31 +381,31 @@ impl SamplingContext {
     /// The memory size of the context in bytes.
     #[inline]
     pub fn size(&self) -> usize {
-        return self.inner().size;
+        self.inner().size
     }
 
     /// The maximum number of SoA tracks that the context can handle.
     #[inline]
     pub fn max_soa_tracks(&self) -> usize {
-        return self.inner().max_soa_tracks;
+        self.inner().max_soa_tracks
     }
 
     /// The maximum number of tracks that the context can handle.
     #[inline]
     pub fn max_tracks(&self) -> usize {
-        return self.inner().max_tracks;
+        self.inner().max_tracks
     }
 
     /// The number of tracks that are outdated.
     #[inline]
     pub fn max_outdated(&self) -> usize {
-        return self.inner().max_outdated;
+        self.inner().max_outdated
     }
 
     /// The unique identifier of the animation that the context is sampling.
     #[inline]
     pub fn animation_id(&self) -> u64 {
-        return self.inner().animation_id;
+        self.inner().animation_id
     }
 
     fn set_animation_id(&mut self, animation_id: u64) {
@@ -416,7 +415,7 @@ impl SamplingContext {
     /// The current time ratio in the animation.
     #[inline]
     pub fn ratio(&self) -> f32 {
-        return self.inner().ratio;
+        self.inner().ratio
     }
 
     fn set_ratio(&mut self, ratio: f32) {
@@ -427,45 +426,45 @@ impl SamplingContext {
     #[inline]
     pub fn translations(&self) -> &[InterpSoaFloat3] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.translations, inner.max_soa_tracks) };
+        unsafe { slice::from_raw_parts(inner.translations, inner.max_soa_tracks) }
     }
 
     #[inline]
     fn translations_mut(&mut self) -> &mut [InterpSoaFloat3] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.translations, inner.max_soa_tracks) };
+        unsafe { slice::from_raw_parts_mut(inner.translations, inner.max_soa_tracks) }
     }
 
     /// The keys in the animation that are valid for the current time ratio.
     #[inline]
     pub fn translation_entries(&self) -> &[u32] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.translation_entries, inner.max_tracks) };
+        unsafe { slice::from_raw_parts(inner.translation_entries, inner.max_tracks) }
     }
 
     #[inline]
     fn translation_entries_mut(&mut self) -> &mut [u32] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.translation_entries, inner.max_tracks) };
+        unsafe { slice::from_raw_parts_mut(inner.translation_entries, inner.max_tracks) }
     }
 
     /// Outdated soa entries. One bit per soa entry (32 joints per byte).
     #[inline]
     pub fn translation_outdated(&self) -> &[u8] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.translation_outdated, inner.max_outdated) };
+        unsafe { slice::from_raw_parts(inner.translation_outdated, inner.max_outdated) }
     }
 
     #[inline]
     fn translation_outdated_mut(&mut self) -> &mut [u8] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.translation_outdated, inner.max_outdated) };
+        unsafe { slice::from_raw_parts_mut(inner.translation_outdated, inner.max_outdated) }
     }
 
     /// Next key to process in the animation.
     #[inline]
     pub fn translation_next(&self) -> usize {
-        return self.inner().translation_next;
+        self.inner().translation_next
     }
 
     #[inline]
@@ -477,45 +476,45 @@ impl SamplingContext {
     #[inline]
     pub fn rotations(&self) -> &[InterpSoaQuaternion] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.rotations, inner.max_soa_tracks) };
+        unsafe { slice::from_raw_parts(inner.rotations, inner.max_soa_tracks) }
     }
 
     #[inline]
     fn rotations_mut(&mut self) -> &mut [InterpSoaQuaternion] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.rotations, inner.max_soa_tracks) };
+        unsafe { slice::from_raw_parts_mut(inner.rotations, inner.max_soa_tracks) }
     }
 
     /// The keys in the animation that are valid for the current time ratio.
     #[inline]
     pub fn rotation_entries(&self) -> &[u32] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.rotation_entries, inner.max_tracks) };
+        unsafe { slice::from_raw_parts(inner.rotation_entries, inner.max_tracks) }
     }
 
     #[inline]
     fn rotation_entries_mut(&mut self) -> &mut [u32] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.rotation_entries, inner.max_tracks) };
+        unsafe { slice::from_raw_parts_mut(inner.rotation_entries, inner.max_tracks) }
     }
 
     /// Outdated soa entries. One bit per soa entry (32 joints per byte).
     #[inline]
     pub fn rotation_outdated(&self) -> &[u8] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.rotation_outdated, inner.max_outdated) };
+        unsafe { slice::from_raw_parts(inner.rotation_outdated, inner.max_outdated) }
     }
 
     #[inline]
     fn rotation_outdated_mut(&mut self) -> &mut [u8] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.rotation_outdated, inner.max_outdated) };
+        unsafe { slice::from_raw_parts_mut(inner.rotation_outdated, inner.max_outdated) }
     }
 
     /// Next key to process in the animation.
     #[inline]
     pub fn rotation_next(&self) -> usize {
-        return self.inner().rotation_next;
+        self.inner().rotation_next
     }
 
     #[inline]
@@ -527,45 +526,45 @@ impl SamplingContext {
     #[inline]
     pub fn scales(&self) -> &[InterpSoaFloat3] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.scales, inner.max_soa_tracks) };
+        unsafe { slice::from_raw_parts(inner.scales, inner.max_soa_tracks) }
     }
 
     #[inline]
     fn scales_mut(&mut self) -> &mut [InterpSoaFloat3] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.scales, inner.max_soa_tracks) };
+        unsafe { slice::from_raw_parts_mut(inner.scales, inner.max_soa_tracks) }
     }
 
     /// The keys in the animation that are valid for the current time ratio.
     #[inline]
     pub fn scale_entries(&self) -> &[u32] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.scale_entries, inner.max_tracks) };
+        unsafe { slice::from_raw_parts(inner.scale_entries, inner.max_tracks) }
     }
 
     #[inline]
     fn scale_entries_mut(&mut self) -> &mut [u32] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.scale_entries, inner.max_tracks) };
+        unsafe { slice::from_raw_parts_mut(inner.scale_entries, inner.max_tracks) }
     }
 
     /// Outdated soa entries. One bit per soa entry (32 joints per byte).
     #[inline]
     pub fn scale_outdated(&self) -> &[u8] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts(inner.scale_outdated, inner.max_outdated) };
+        unsafe { slice::from_raw_parts(inner.scale_outdated, inner.max_outdated) }
     }
 
     #[inline]
     fn scale_outdated_mut(&mut self) -> &mut [u8] {
         let inner = self.inner();
-        return unsafe { slice::from_raw_parts_mut(inner.scale_outdated, inner.max_outdated) };
+        unsafe { slice::from_raw_parts_mut(inner.scale_outdated, inner.max_outdated) }
     }
 
     /// Next key to process in the animation.
     #[inline]
     pub fn scale_next(&self) -> usize {
-        return self.inner().scale_next;
+        self.inner().scale_next
     }
 
     #[inline]
@@ -576,67 +575,67 @@ impl SamplingContext {
     #[inline]
     fn translation_update_args<'t>(&'t mut self, animation: &Animation) -> UpdateArgs<'t> {
         let inner = self.inner_mut();
-        return UpdateArgs {
+        UpdateArgs {
             num_tracks: animation.num_tracks(),
             num_soa_tracks: animation.num_soa_tracks(),
             entries: unsafe { slice::from_raw_parts_mut(inner.translation_entries, inner.max_tracks) },
             outdated: unsafe { slice::from_raw_parts_mut(inner.translation_outdated, inner.max_outdated) },
             next: &mut inner.translation_next,
-        };
+        }
     }
 
     #[inline]
     fn translation_decompress_args(&self) -> DecompressArgs<'_, InterpSoaFloat3> {
         let inner = self.inner();
-        return DecompressArgs {
+        DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.translation_entries, inner.max_tracks) },
             outdated: unsafe { slice::from_raw_parts_mut(inner.translation_outdated, inner.max_outdated) },
             values: unsafe { slice::from_raw_parts_mut(inner.translations, inner.max_soa_tracks) },
-        };
+        }
     }
 
     #[inline]
     fn rotation_update_args(&mut self, animation: &Animation) -> UpdateArgs<'_> {
         let inner = self.inner_mut();
-        return UpdateArgs {
+        UpdateArgs {
             num_tracks: animation.num_tracks(),
             num_soa_tracks: animation.num_soa_tracks(),
             entries: unsafe { slice::from_raw_parts_mut(inner.rotation_entries, inner.max_tracks) },
             outdated: unsafe { slice::from_raw_parts_mut(inner.rotation_outdated, inner.max_outdated) },
             next: &mut inner.rotation_next,
-        };
+        }
     }
 
     #[inline]
     fn rotation_decompress_args(&self) -> DecompressArgs<'_, InterpSoaQuaternion> {
         let inner = self.inner();
-        return DecompressArgs {
+        DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.rotation_entries, inner.max_tracks) },
             outdated: unsafe { slice::from_raw_parts_mut(inner.rotation_outdated, inner.max_outdated) },
             values: unsafe { slice::from_raw_parts_mut(inner.rotations, inner.max_soa_tracks) },
-        };
+        }
     }
 
     #[inline]
     fn scale_update_args(&mut self, animation: &Animation) -> UpdateArgs<'_> {
         let inner = self.inner_mut();
-        return UpdateArgs {
+        UpdateArgs {
             num_tracks: animation.num_tracks(),
             num_soa_tracks: animation.num_soa_tracks(),
             entries: unsafe { slice::from_raw_parts_mut(inner.scale_entries, inner.max_tracks) },
             outdated: unsafe { slice::from_raw_parts_mut(inner.scale_outdated, inner.max_outdated) },
             next: &mut inner.scale_next,
-        };
+        }
     }
 
     #[inline]
     fn scale_decompress_args(&self) -> DecompressArgs<'_, InterpSoaFloat3> {
         let inner = self.inner();
-        return DecompressArgs {
+        DecompressArgs {
             entries: unsafe { slice::from_raw_parts(inner.scale_entries, inner.max_tracks) },
             outdated: unsafe { slice::from_raw_parts_mut(inner.scale_outdated, inner.max_outdated) },
             values: unsafe { slice::from_raw_parts_mut(inner.scales, inner.max_soa_tracks) },
-        };
+        }
     }
 }
 
@@ -825,7 +824,7 @@ const _: () = {
 
     impl<'de> Deserialize<'de> for SamplingContext {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<SamplingContext, D::Error> {
-            return deserializer.deserialize_map(SamplingContextVisitor);
+            deserializer.deserialize_map(SamplingContextVisitor)
         }
     }
 
@@ -1000,7 +999,7 @@ where
     /// Gets animation to sample of `SamplingJob`.
     #[inline]
     pub fn animation(&self) -> Option<&A> {
-        return self.animation.as_ref();
+        self.animation.as_ref()
     }
 
     /// Sets animation to sample of `SamplingJob`.
@@ -1018,7 +1017,7 @@ where
     /// Gets context of `SamplingJob`. See [SamplingContext].
     #[inline]
     pub fn context(&self) -> Option<&C> {
-        return self.context.as_ref();
+        self.context.as_ref()
     }
 
     /// Sets context of `SamplingJob`. See [SamplingContext].
@@ -1061,7 +1060,7 @@ where
     /// Gets output of `SamplingJob`.
     #[inline]
     pub fn output(&self) -> Option<&O> {
-        return self.output.as_ref();
+        self.output.as_ref()
     }
 
     /// Sets output of `SamplingJob`.
@@ -1084,7 +1083,7 @@ where
 
     /// Validates `SamplingJob` parameters.
     pub fn validate(&self) -> bool {
-        return (|| {
+        (|| {
             let animation = self.animation.as_ref()?.obj();
             let context = self.context.as_ref()?;
             let output = self.output.as_ref()?.buf().ok()?;
@@ -1093,7 +1092,7 @@ where
             ok &= output.len() >= animation.num_soa_tracks();
             Some(ok)
         })()
-        .unwrap_or(false);
+        .unwrap_or(false)
     }
 
     /// Runs job's sampling task.
@@ -1197,7 +1196,7 @@ where
             next - 1 - ctrl.previouses[next - 1] as usize,
         ) > ratio
         {
-            assert!(next - 1 >= args.num_tracks * 2);
+            assert!(next > args.num_tracks * 2);
             track = Self::track_backward(args.entries, next - 1, track, args.num_tracks);
             args.outdated[track / 32] |= 1 << ((track & 0x1F) / 4);
             assert!((args.entries[track] as usize) == next - 1);
@@ -1386,7 +1385,6 @@ where
             let scale_ratio = (ratio4 - scale.ratio[0]) / (scale.ratio[1] - scale.ratio[0]);
             out.scale = SoaVec3::lerp(&scale.value[0], &scale.value[1], scale_ratio);
         }
-
         Ok(())
     }
 }
@@ -1417,7 +1415,6 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
     let k3 = (prefix >> 6) as usize;
     output[3] = load(in_buf) & MASK[k3];
     in_buf = &in_buf[k3 + 1..];
-
     in_buf
 }
 

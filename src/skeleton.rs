@@ -223,12 +223,12 @@ impl Skeleton {
     /// Gets joint's rest poses. Rest poses are stored in soa format.
     #[inline]
     pub fn joint_rest_poses(&self) -> &[SoaTransform] {
-        return unsafe { slice::from_raw_parts(self.joint_rest_poses, self.num_soa_joints()) };
+        unsafe { slice::from_raw_parts(self.joint_rest_poses, self.num_soa_joints()) }
     }
 
     #[inline]
     fn joint_rest_poses_mut(&mut self) -> &mut [SoaTransform] {
-        return unsafe { slice::from_raw_parts_mut(self.joint_rest_poses, self.num_soa_joints()) };
+        unsafe { slice::from_raw_parts_mut(self.joint_rest_poses, self.num_soa_joints()) }
     }
 
     /// Gets joint's name map.
@@ -246,23 +246,23 @@ impl Skeleton {
     /// Gets joint's name by index.
     #[inline]
     pub fn name_by_joint(&self, index: i16) -> Option<&str> {
-        return self.joint_names.get_by_right(&index).map(|s| s.as_str());
+        self.joint_names.get_by_right(&index).map(|s| s.as_str())
     }
 
     /// Gets joint's parent indices range.
     #[inline]
     pub fn joint_parents(&self) -> &[i16] {
-        return unsafe { slice::from_raw_parts(self.joint_parents, self.num_joints()) };
+        unsafe { slice::from_raw_parts(self.joint_parents, self.num_joints()) }
     }
 
     fn joint_parents_mut(&mut self) -> &mut [i16] {
-        return unsafe { slice::from_raw_parts_mut(self.joint_parents, self.num_joints()) };
+        unsafe { slice::from_raw_parts_mut(self.joint_parents, self.num_joints()) }
     }
 
     /// Gets joint's parent by index.
     #[inline]
     pub fn joint_parent(&self, idx: impl OzzIndex) -> i16 {
-        return self.joint_parents()[idx.usize()];
+        self.joint_parents()[idx.usize()]
     }
 
     /// Test if a joint is a leaf.
@@ -272,7 +272,7 @@ impl Skeleton {
     #[inline]
     pub fn is_leaf(&self, joint: impl OzzIndex) -> bool {
         let next = joint.usize() + 1;
-        return next == self.num_joints() || (self.joint_parents()[next] as i32 != joint.i32());
+        next == self.num_joints() || (self.joint_parents()[next] as i32 != joint.i32())
     }
 
     /// Iterates through the joint hierarchy in depth-first order.

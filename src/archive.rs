@@ -43,7 +43,6 @@ impl<R: Read> Archive<R> {
 
         let version = archive.read::<u32>()?;
         archive.version = version;
-
         Ok(archive)
     }
 
@@ -105,9 +104,9 @@ impl Archive<Cursor<Vec<u8>>> {
     #[cfg(all(feature = "wasm", feature = "nodejs"))]
     pub fn from_path(path: &str) -> Result<Archive<Cursor<Vec<u8>>>, OzzError> {
         match crate::nodejs::read_file(path) {
-            Ok(buf) => return Archive::from_vec(buf),
-            Err(err) => return Err(OzzError::Custom(Box::new(err.as_string().unwrap_or("".into())))),
-        };
+            Ok(buf) => Archive::from_vec(buf),
+            Err(err) => Err(OzzError::Custom(Box::new(err.as_string().unwrap_or("".into())))),
+        }
     }
 }
 

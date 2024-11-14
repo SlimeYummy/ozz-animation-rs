@@ -72,7 +72,7 @@ where
     /// Gets skeleton of `LocalToModelJob`.
     #[inline]
     pub fn skeleton(&self) -> Option<&S> {
-        return self.skeleton.as_ref();
+        self.skeleton.as_ref()
     }
 
     /// Sets skeleton of `LocalToModelJob`.
@@ -92,7 +92,7 @@ where
     /// Gets input of `LocalToModelJob`.
     #[inline]
     pub fn input(&self) -> Option<&I> {
-        return self.input.as_ref();
+        self.input.as_ref()
     }
 
     /// Sets input of `LocalToModelJob`.
@@ -185,7 +185,7 @@ where
     /// Gets output of `LocalToModelJob`.
     #[inline]
     pub fn output(&self) -> Option<&O> {
-        return self.output.as_ref();
+        self.output.as_ref()
     }
 
     /// Sets output of `LocalToModelJob`.
@@ -204,7 +204,7 @@ where
 
     /// Validates `LocalToModelJob` parameters.
     pub fn validate(&self) -> bool {
-        return (|| {
+        (|| {
             let skeleton = self.skeleton.as_ref()?.obj();
             let input = self.input.as_ref()?.buf().ok()?;
             let output = self.output.as_ref()?.buf().ok()?;
@@ -213,7 +213,7 @@ where
             ok &= output.len() >= skeleton.num_joints();
             Some(ok)
         })()
-        .unwrap_or(false);
+        .unwrap_or(false)
     }
 
     /// Runs local to model job's task.
@@ -253,7 +253,6 @@ where
                 process = idx < end && skeleton.joint_parent(idx) as i32 >= self.from;
             }
         }
-
         Ok(())
     }
 }

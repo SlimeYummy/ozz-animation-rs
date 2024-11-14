@@ -19,6 +19,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Clippy
+      run: cargo clippy -p ozz-animation-rs -- --no-deps
     - name: Build
       run: cargo build --release
     - name: Run tests

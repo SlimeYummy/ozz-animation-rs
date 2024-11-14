@@ -78,7 +78,7 @@ where
     /// Gets track of `TrackTriggeringJob`.
     #[inline]
     pub fn track(&self) -> Option<&T> {
-        return self.track.as_ref();
+        self.track.as_ref()
     }
 
     /// Sets track of `TrackTriggeringJob`.
@@ -169,7 +169,7 @@ where
         if self.track.is_none() {
             return Err(OzzError::InvalidJob);
         }
-        return Ok(TrackTriggeringIter::new(self));
+        Ok(TrackTriggeringIter::new(self))
     }
 }
 
@@ -240,7 +240,7 @@ where
     }
 }
 
-impl<'t, T> Iterator for TrackTriggeringIter<'t, T>
+impl<T> Iterator for TrackTriggeringIter<'_, T>
 where
     T: OzzObj<Track<f32>>,
 {

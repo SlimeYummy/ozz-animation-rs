@@ -323,7 +323,6 @@ impl IKTwoBoneJob {
         let mid_rot_ms = self.compute_mid_joint(&setup, start_target_ss_len2);
         let start_rot_ss = self.compute_start_joint(&setup, mid_rot_ms, start_target_ss, start_target_ss_len2);
         self.weight_output(start_rot_ss, mid_rot_ms);
-
         Ok(())
     }
 
@@ -389,7 +388,6 @@ impl IKTwoBoneJob {
         let mid_initial_angle = fx4_xor(fx4_splat_y(mid_corrected_angle), bent_side_flip); // [x]
 
         let mid_angles_diff = mid_corrected_angle - mid_initial_angle; // [x]
-
         quat_from_axis_angle(self.mid_axis, mid_angles_diff)
     }
 
@@ -451,7 +449,6 @@ impl IKTwoBoneJob {
                 start_rot_ss = quat_mul(rotate_plane_ss, end_to_target_rot_ss);
             }
         }
-
         start_rot_ss
     }
 
