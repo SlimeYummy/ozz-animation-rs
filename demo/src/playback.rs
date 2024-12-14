@@ -82,7 +82,7 @@ impl OzzExample for OzzPlayback {
 
     fn update(&mut self, time: Time) {
         let duration = self.sample_job.animation().unwrap().duration();
-        let ratio = (time.elapsed_seconds() % duration) / duration;
+        let ratio = (time.elapsed_secs() % duration) / duration;
         self.sample_job.set_ratio(ratio);
         self.sample_job.run().unwrap();
         self.l2m_job.run().unwrap();

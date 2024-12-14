@@ -122,7 +122,7 @@ impl OzzExample for OzzBlend {
 
     fn update(&mut self, time: Time) {
         let duration = self.sample_job1.animation().unwrap().duration();
-        let scaled_time = time.elapsed_seconds() * 0.5;
+        let scaled_time = time.elapsed_secs() * 0.5;
         let ratio = (scaled_time % duration) / duration;
 
         self.sample_job1.set_ratio(ratio);
