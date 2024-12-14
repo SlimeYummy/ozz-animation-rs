@@ -5,9 +5,8 @@
 use glam::{Quat, Vec3, Vec4};
 use std::alloc::{self, Layout};
 use std::io::Read;
-use std::simd::prelude::*;
-use std::simd::*;
 use std::{mem, slice};
+use wide::{f32x4, i32x4};
 
 use crate::archive::{Archive, ArchiveRead};
 use crate::base::{align_ptr, align_usize, OzzError};
@@ -102,15 +101,15 @@ impl QuaternionKey {
         k3: &QuaternionKey,
         soa: &mut SoaQuat,
     ) {
-        const MASK_F000:i32x4 = i32x4::from_array([-1i32, 0, 0, 0]);
-        const MASK_0F00:i32x4 = i32x4::from_array([0, -1i32, 0, 0]);
-        const MASK_00F0:i32x4 = i32x4::from_array([0, 0, -1i32, 0]);
-        const MASK_000F:i32x4 = i32x4::from_array([0, 0, 0, -1i32]);
+        const MASK_F000:i32x4 = i32x4::new([-1i32, 0, 0, 0]);
+        const MASK_0F00:i32x4 = i32x4::new([0, -1i32, 0, 0]);
+        const MASK_00F0:i32x4 = i32x4::new([0, 0, -1i32, 0]);
+        const MASK_000F:i32x4 = i32x4::new([0, 0, 0, -1i32]);
 
         const MAPPING: [[usize; 4]; 4] = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 1, 0, 2], [0, 1, 2, 0]];
 
-        const SCALE: f32x4 = f32x4::from_array([core::f32::consts::SQRT_2 / 32767.0; 4]);
-        const OFFSET: f32x4 = f32x4::from_array([-core::f32::consts::SQRT_2 / 2.0; 4]);
+        const SCALE: f32x4 = f32x4::new([core::f32::consts::SQRT_2 / 32767.0; 4]);
+        const OFFSET: f32x4 = f32x4::new([-core::f32::consts::SQRT_2 / 2.0; 4]);
 
         let (largest0, sign0, value0) = k0.unpack();
         let (largest1, sign1, value1) = k1.unpack();
@@ -123,10 +122,10 @@ impl QuaternionKey {
         let m3 = &MAPPING[largest3 as usize];
 
         let cmp_keys: [f32x4; 4] = [
-            f32x4::from_array([ value0[m0[0]] as f32, value1[m1[0]] as f32, value2[m2[0]] as f32, value3[m3[0]] as f32 ]),
-            f32x4::from_array([ value0[m0[1]] as f32, value1[m1[1]] as f32, value2[m2[1]] as f32, value3[m3[1]] as f32 ]),
-            f32x4::from_array([ value0[m0[2]] as f32, value1[m1[2]] as f32, value2[m2[2]] as f32, value3[m3[2]] as f32 ]),
-            f32x4::from_array([ value0[m0[3]] as f32, value1[m1[3]] as f32, value2[m2[3]] as f32, value3[m3[3]] as f32 ]),
+            f32x4::new([ value0[m0[0]] as f32, value1[m1[0]] as f32, value2[m2[0]] as f32, value3[m3[0]] as f32 ]),
+            f32x4::new([ value0[m0[1]] as f32, value1[m1[1]] as f32, value2[m2[1]] as f32, value3[m3[1]] as f32 ]),
+            f32x4::new([ value0[m0[2]] as f32, value1[m1[2]] as f32, value2[m2[2]] as f32, value3[m3[2]] as f32 ]),
+            f32x4::new([ value0[m0[3]] as f32, value1[m1[3]] as f32, value2[m2[3]] as f32, value3[m3[3]] as f32 ]),
         ]; // TODO: simd int to float
 
         let mut cpnt = [
@@ -141,9 +140,9 @@ impl QuaternionKey {
         cpnt[largest3 as usize] = fx4(ix4(cpnt[largest3 as usize]) & !MASK_000F);
 
         let dot = cpnt[0] * cpnt[0] + cpnt[1] * cpnt[1] + cpnt[2] * cpnt[2] + cpnt[3] * cpnt[3];
-        let ww0 =  f32x4::simd_max(ZERO, ONE - dot); // prevent NaN, different from C++ code
+        let ww0 =  f32x4::fast_max(ZERO, ONE - dot); // prevent NaN, different from C++ code
         let w0 = ww0.sqrt();
-        let sign = i32x4::from_array([sign0 as i32, sign1 as i32, sign2 as i32, sign3 as i32]) << 31;
+        let sign = i32x4::new([sign0 as i32, sign1 as i32, sign2 as i32, sign3 as i32]) << 31;
         let restored = ix4(w0) | sign;
 
         cpnt[largest0 as usize] = fx4(ix4(cpnt[largest0 as usize]) | (restored & MASK_F000));
@@ -1116,14 +1115,14 @@ mod tests {
         assert_eq!(
             soa,
             SoaVec3 {
-                x: f32x4::from_array([0.0711059570, 0.0251312255859375, 0.0711059570, 0.0251312255859375]),
-                y: f32x4::from_array([
+                x: f32x4::new([0.0711059570, 0.0251312255859375, 0.0711059570, 0.0251312255859375]),
+                y: f32x4::new([
                     -8.77380371e-05,
                     5.960464477539063e-8,
                     -8.77380371e-05,
                     5.960464477539063e-8
                 ]),
-                z: f32x4::from_array([1.84774399e-06, 0.0, 1.84774399e-06, 0.0]),
+                z: f32x4::new([1.84774399e-06, 0.0, 1.84774399e-06, 0.0]),
             }
         );
     }
@@ -1172,10 +1171,10 @@ mod tests {
         assert_eq!(
             soa,
             SoaQuat {
-                x: f32x4::from_array([-0.491480947, -0.498861253, -0.00912827253, 0.00852406025]),
-                y: f32x4::from_array([-0.508615375, -0.501123607, 0.0251405239, 0.00882613659]),
-                z: f32x4::from_array([-0.538519204, -0.498861253, -0.0326502919, 0.00610709190]),
-                w: f32x4::from_array([0.457989037, 0.501148760, 0.999108911, 0.999906063]),
+                x: f32x4::new([-0.491480947, -0.498861253, -0.00912827253, 0.00852406025]),
+                y: f32x4::new([-0.508615375, -0.501123607, 0.0251405239, 0.00882613659]),
+                z: f32x4::new([-0.538519204, -0.498861253, -0.0326502919, 0.00610709190]),
+                w: f32x4::new([0.457989037, 0.501148760, 0.999108911, 0.999906063]),
             }
         );
     }

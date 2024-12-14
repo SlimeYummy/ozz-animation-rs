@@ -11,30 +11,30 @@ use static_assertions::const_assert_eq;
 use std::fmt::Debug;
 use std::io::Read;
 use std::mem;
-use std::simd::prelude::*;
-use std::simd::*;
 
+use wide::{f32x4, i32x4};
+// use wide::f32x4
 use crate::archive::{Archive, ArchiveRead};
 use crate::base::OzzError;
 use crate::math;
 
-pub(crate) const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
-pub(crate) const ONE: f32x4 = f32x4::from_array([1.0; 4]);
-pub(crate) const TWO: f32x4 = f32x4::from_array([2.0; 4]);
-pub(crate) const THREE: f32x4 = f32x4::from_array([3.0; 4]);
-pub(crate) const NEG_ONE: f32x4 = f32x4::from_array([-1.0; 4]);
-pub(crate) const FRAC_1_2: f32x4 = f32x4::from_array([0.5; 4]);
-pub(crate) const FRAC_2_PI: f32x4 = f32x4::from_array([core::f32::consts::FRAC_2_PI; 4]);
-pub(crate) const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
+pub(crate) const ZERO: f32x4 = f32x4::ZERO;
+pub(crate) const ONE: f32x4 = f32x4::ONE;
+pub(crate) const TWO: f32x4 = f32x4::new([2.0; 4]);
+pub(crate) const THREE: f32x4 = f32x4::new([3.0; 4]);
+pub(crate) const NEG_ONE: f32x4 = f32x4::new([-1.0; 4]);
+pub(crate) const FRAC_1_2: f32x4 = f32x4::HALF;
+pub(crate) const FRAC_2_PI: f32x4 = f32x4::FRAC_2_PI;
+pub(crate) const FRAC_PI_2: f32x4 = f32x4::FRAC_PI_2;
 
-pub(crate) const X_AXIS: f32x4 = f32x4::from_array([1.0, 0.0, 0.0, 0.0]);
-pub(crate) const Y_AXIS: f32x4 = f32x4::from_array([0.0, 1.0, 0.0, 0.0]);
-pub(crate) const Z_AXIS: f32x4 = f32x4::from_array([0.0, 0.0, 1.0, 0.0]);
+pub(crate) const X_AXIS: f32x4 = f32x4::new([1.0, 0.0, 0.0, 0.0]);
+pub(crate) const Y_AXIS: f32x4 = f32x4::new([0.0, 1.0, 0.0, 0.0]);
+pub(crate) const Z_AXIS: f32x4 = f32x4::new([0.0, 0.0, 1.0, 0.0]);
 
-pub(crate) const QUAT_UNIT: f32x4 = f32x4::from_array([0.0, 0.0, 0.0, 1.0]);
+pub(crate) const QUAT_UNIT: f32x4 = f32x4::new([0.0, 0.0, 0.0, 1.0]);
 
-const SIGN: i32x4 = i32x4::from_array([i32::MIN; 4]);
-const SIGN_W: i32x4 = i32x4::from_array([0, 0, 0, i32::MIN]);
+pub(super) const SIGN: i32x4 = i32x4::new([i32::MIN; 4]);
+pub(super) const SIGN_W: i32x4 = i32x4::new([0, 0, 0, i32::MIN]);
 
 //
 // SoaVec3
@@ -53,9 +53,9 @@ impl SoaVec3 {
     #[inline]
     pub const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4]) -> SoaVec3 {
         SoaVec3 {
-            x: f32x4::from_array(x),
-            y: f32x4::from_array(y),
-            z: f32x4::from_array(z),
+            x: f32x4::new(x),
+            y: f32x4::new(y),
+            z: f32x4::new(z),
         }
     }
 
@@ -67,22 +67,22 @@ impl SoaVec3 {
     #[inline]
     pub const fn splat_col(v: [f32; 3]) -> SoaVec3 {
         SoaVec3 {
-            x: f32x4::from_array([v[0]; 4]),
-            y: f32x4::from_array([v[1]; 4]),
-            z: f32x4::from_array([v[2]; 4]),
+            x: f32x4::new([v[0]; 4]),
+            y: f32x4::new([v[1]; 4]),
+            z: f32x4::new([v[2]; 4]),
         }
     }
 
     #[inline]
     pub fn col(&self, idx: usize) -> Vec3 {
-        Vec3::new(self.x[idx], self.y[idx], self.z[idx])
+        Vec3::new(self.x.as_array_ref()[idx], self.y.as_array_ref()[idx], self.z.as_array_ref()[idx])
     }
 
     #[inline]
     pub fn set_col(&mut self, idx: usize, v: Vec3) {
-        self.x[idx] = v.x;
-        self.y[idx] = v.y;
-        self.z[idx] = v.z;
+        self.x.as_array_mut()[idx] = v.x;
+        self.y.as_array_mut()[idx] = v.y;
+        self.z.as_array_mut()[idx] = v.z;
     }
 
     #[inline]
@@ -209,9 +209,9 @@ const _: () = {
     impl Serialize for SoaVec3 {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
             let mut seq = serializer.serialize_seq(Some(3))?;
-            seq.serialize_element(&self.x.as_array())?;
-            seq.serialize_element(&self.y.as_array())?;
-            seq.serialize_element(&self.z.as_array())?;
+            seq.serialize_element(&self.x.as_array_ref())?;
+            seq.serialize_element(&self.y.as_array_ref())?;
+            seq.serialize_element(&self.z.as_array_ref())?;
             seq.end()
         }
     }
@@ -242,10 +242,10 @@ impl SoaQuat {
     #[inline]
     pub const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4], w: [f32; 4]) -> SoaQuat {
         SoaQuat {
-            x: f32x4::from_array(x),
-            y: f32x4::from_array(y),
-            z: f32x4::from_array(z),
-            w: f32x4::from_array(w),
+            x: f32x4::new(x),
+            y: f32x4::new(y),
+            z: f32x4::new(z),
+            w: f32x4::new(w),
         }
     }
 
@@ -257,10 +257,10 @@ impl SoaQuat {
     #[inline]
     pub const fn splat_col(v: [f32; 4]) -> SoaQuat {
         SoaQuat {
-            x: f32x4::from_array([v[0]; 4]),
-            y: f32x4::from_array([v[1]; 4]),
-            z: f32x4::from_array([v[2]; 4]),
-            w: f32x4::from_array([v[3]; 4]),
+            x: f32x4::new([v[0]; 4]),
+            y: f32x4::new([v[1]; 4]),
+            z: f32x4::new([v[2]; 4]),
+            w: f32x4::new([v[3]; 4]),
         }
     }
 
@@ -574,10 +574,10 @@ impl AosMat4 {
     ) -> AosMat4 {
         AosMat4 {
             cols: [
-                f32x4::from_array([n00, n01, n02, n03]),
-                f32x4::from_array([n10, n11, n12, n13]),
-                f32x4::from_array([n20, n21, n22, n23]),
-                f32x4::from_array([n30, n31, n32, n33]),
+                f32x4::new([n00, n01, n02, n03]),
+                f32x4::new([n10, n11, n12, n13]),
+                f32x4::new([n20, n21, n22, n23]),
+                f32x4::new([n30, n31, n32, n33]),
             ],
         }
     }
@@ -586,10 +586,10 @@ impl AosMat4 {
     pub(crate) fn new_translation(t: Vec3) -> AosMat4 {
         AosMat4 {
             cols: [
-                f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
-                f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
-                f32x4::from_array([0.0, 0.0, 1.0, 0.0]),
-                f32x4::from_array([t.x, t.y, t.z, 1.0]),
+                f32x4::new([1.0, 0.0, 0.0, 0.0]),
+                f32x4::new([0.0, 1.0, 0.0, 0.0]),
+                f32x4::new([0.0, 0.0, 1.0, 0.0]),
+                f32x4::new([t.x, t.y, t.z, 1.0]),
             ],
         }
     }
@@ -598,10 +598,10 @@ impl AosMat4 {
     pub(crate) fn new_scaling(s: Vec3) -> AosMat4 {
         AosMat4 {
             cols: [
-                f32x4::from_array([s.x, 0.0, 0.0, 0.0]),
-                f32x4::from_array([0.0, s.y, 0.0, 0.0]),
-                f32x4::from_array([0.0, 0.0, s.z, 0.0]),
-                f32x4::from_array([0.0, 0.0, 0.0, 1.0]),
+                f32x4::new([s.x, 0.0, 0.0, 0.0]),
+                f32x4::new([0.0, s.y, 0.0, 0.0]),
+                f32x4::new([0.0, 0.0, s.z, 0.0]),
+                f32x4::new([0.0, 0.0, 0.0, 1.0]),
             ],
         }
     }
@@ -610,10 +610,10 @@ impl AosMat4 {
     pub(crate) fn identity() -> AosMat4 {
         AosMat4 {
             cols: [
-                f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
-                f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
-                f32x4::from_array([0.0, 0.0, 1.0, 0.0]),
-                f32x4::from_array([0.0, 0.0, 0.0, 1.0]),
+                f32x4::new([1.0, 0.0, 0.0, 0.0]),
+                f32x4::new([0.0, 1.0, 0.0, 0.0]),
+                f32x4::new([0.0, 0.0, 1.0, 0.0]),
+                f32x4::new([0.0, 0.0, 0.0, 1.0]),
             ],
         }
     }
@@ -865,10 +865,10 @@ pub(crate) fn f16_to_f32(n: u16) -> f32 {
 
 #[inline]
 pub(crate) fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
-    const MASK_NO_SIGN: i32x4 = i32x4::from_array([0x7FFF; 4]);
-    const MAGIC: f32x4 = fx4(i32x4::from_array([(254 - 15) << 23; 4]));
-    const WAS_INFNAN: i32x4 = i32x4::from_array([0x7BFF; 4]);
-    const EXP_INFNAN: i32x4 = i32x4::from_array([255 << 23; 4]);
+    const MASK_NO_SIGN: i32x4 = i32x4::new([0x7FFF; 4]);
+    const MAGIC: f32x4 = fx4(i32x4::new([(254 - 15) << 23; 4]));
+    const WAS_INFNAN: i32x4 = i32x4::new([0x7BFF; 4]);
+    const EXP_INFNAN: i32x4 = i32x4::new([255 << 23; 4]);
 
     let int4 = i32x4::from([half4[0] as i32, half4[1] as i32, half4[2] as i32, half4[3] as i32]);
     let expmant = MASK_NO_SIGN & int4;
@@ -1035,17 +1035,17 @@ pub(crate) fn fx4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
 
-    const N1: f32x4 = f32x4::from_array([1.5703125; 4]);
-    const N2: f32x4 = f32x4::from_array([0.0004837512969970703125; 4]);
-    const N3: f32x4 = f32x4::from_array([7.549789948768648e-8; 4]);
+    const N1: f32x4 = f32x4::new([1.5703125; 4]);
+    const N2: f32x4 = f32x4::new([0.0004837512969970703125; 4]);
+    const N3: f32x4 = f32x4::new([7.549789948768648e-8; 4]);
 
-    const C1: f32x4 = f32x4::from_array([2.443315711809948e-5; 4]);
-    const C2: f32x4 = f32x4::from_array([1.388731625493765e-3; 4]);
-    const C3: f32x4 = f32x4::from_array([4.166664568298827e-2; 4]);
+    const C1: f32x4 = f32x4::new([2.443315711809948e-5; 4]);
+    const C2: f32x4 = f32x4::new([1.388731625493765e-3; 4]);
+    const C3: f32x4 = f32x4::new([4.166664568298827e-2; 4]);
 
-    const S1: f32x4 = f32x4::from_array([-1.9515295891e-4; 4]);
-    const S2: f32x4 = f32x4::from_array([8.3321608736e-3; 4]);
-    const S3: f32x4 = f32x4::from_array([1.6666654611e-1; 4]);
+    const S1: f32x4 = f32x4::new([-1.9515295891e-4; 4]);
+    const S2: f32x4 = f32x4::new([8.3321608736e-3; 4]);
+    const S3: f32x4 = f32x4::new([1.6666654611e-1; 4]);
 
     // Make argument positive and remember sign for sin only since cos is symmetric around x (highest bit of a float is the sign bit)
     let mut sin_sign = fx4_sign(v);
@@ -1129,11 +1129,11 @@ pub(crate) fn fx4_asin(v: f32x4) -> f32x4 {
     // Implementation based on Vec4.inl from the JoltPhysics
     // https://github.com/jrouwe/JoltPhysics/blob/master/Jolt/Math/Vec4.inl
 
-    const N1: f32x4 = f32x4::from_array([4.2163199048e-2; 4]);
-    const N2: f32x4 = f32x4::from_array([2.4181311049e-2; 4]);
-    const N3: f32x4 = f32x4::from_array([4.5470025998e-2; 4]);
-    const N4: f32x4 = f32x4::from_array([7.4953002686e-2; 4]);
-    const N5: f32x4 = f32x4::from_array([1.6666752422e-1; 4]);
+    const N1: f32x4 = f32x4::new([4.2163199048e-2; 4]);
+    const N2: f32x4 = f32x4::new([2.4181311049e-2; 4]);
+    const N3: f32x4 = f32x4::new([4.5470025998e-2; 4]);
+    const N4: f32x4 = f32x4::new([7.4953002686e-2; 4]);
+    const N5: f32x4 = f32x4::new([1.6666752422e-1; 4]);
 
     // Make argument positive
     let asin_sign = fx4_sign(v);
@@ -1167,7 +1167,7 @@ pub(crate) fn fx4_asin(v: f32x4) -> f32x4 {
 
 #[inline]
 pub(crate) fn fx4_acos(v: f32x4) -> f32x4 {
-    const FRAC_PI_2: f32x4 = f32x4::from_array([core::f32::consts::FRAC_PI_2; 4]);
+    const FRAC_PI_2: f32x4 = f32x4::new([core::f32::consts::FRAC_PI_2; 4]);
     FRAC_PI_2 - fx4_asin(v)
 }
 
@@ -1240,9 +1240,9 @@ pub(crate) fn quat_from_vectors(from: f32x4, to: f32x4) -> f32x4 {
     let quat;
     if real_part_x < 1.0e-6 * norm_from_norm_to_x {
         if from[0].abs() > from[2].abs() {
-            quat = f32x4::from_array([-from[1], from[0], 0.0, 0.0])
+            quat = f32x4::new([-from[1], from[0], 0.0, 0.0])
         } else {
-            quat = f32x4::from_array([0.0, -from[2], from[1], 0.0])
+            quat = f32x4::new([0.0, -from[2], from[1], 0.0])
         }
     } else {
         quat = fx4_set_w(vec3_cross(from, to), real_part)
@@ -1318,13 +1318,13 @@ mod tests {
             0b01111100_00000000,
         ];
         let float4 = simd_f16_to_f32(half4);
-        assert_eq!(float4, f32x4::from_array([1.0f32, -1.0f32, 3.5f32, f32::INFINITY]));
+        assert_eq!(float4, f32x4::new([1.0f32, -1.0f32, 3.5f32, f32::INFINITY]));
 
         let half4 = [0b11111100_00000000, 0, 0x8000, 32791];
         let float4 = simd_f16_to_f32(half4);
         assert_eq!(
             float4,
-            f32x4::from_array([f32::NEG_INFINITY, 0.0f32, 0.0f32, -1.37090683e-06])
+            f32x4::new([f32::NEG_INFINITY, 0.0f32, 0.0f32, -1.37090683e-06])
         );
 
         let half4 = [0xFFFF, 0, 0, 0];
@@ -1382,19 +1382,19 @@ mod tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_sin_cos() {
-        const EPSILON: f32x4 = f32x4::from_array([2.0e-7; 4]);
+        const EPSILON: f32x4 = f32x4::new([2.0e-7; 4]);
 
-        let (sin, cos) = fx4_sin_cos(f32x4::from_array([
+        let (sin, cos) = fx4_sin_cos(f32x4::new([
             0.0,
             core::f32::consts::FRAC_PI_2,
             core::f32::consts::PI,
             -core::f32::consts::FRAC_PI_2,
         ]));
-        assert!((sin - f32x4::from_array([0.0, 1.0, 0.0, -1.0]))
+        assert!((sin - f32x4::new([0.0, 1.0, 0.0, -1.0]))
             .abs()
             .simd_lt(EPSILON)
             .all());
-        assert!((cos - f32x4::from_array([1.0, 0.0, -1.0, 0.0]))
+        assert!((cos - f32x4::new([1.0, 0.0, -1.0, 0.0]))
             .abs()
             .simd_lt(EPSILON)
             .all());
@@ -1404,7 +1404,7 @@ mod tests {
 
         let mut i = -100.0 * core::f32::consts::PI;
         while i < 100.0 * core::f32::consts::PI {
-            let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]);
+            let iv = f32x4::splat(i) + f32x4::new([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]);
             let (sin, cos) = fx4_sin_cos(iv);
 
             for i in 0..4 {
@@ -1437,7 +1437,7 @@ mod tests {
 
         let mut i = -1.0;
         while i < 1.0 {
-            let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
+            let iv = f32x4::splat(i) + f32x4::new([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
             let asin = fx4_asin(iv);
 
             for i in 0..4 {
@@ -1465,7 +1465,7 @@ mod tests {
 
         let mut i = -1.0;
         while i < 1.0 {
-            let iv = f32x4::splat(i) + f32x4::from_array([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
+            let iv = f32x4::splat(i) + f32x4::new([0.0e-4, 2.5e-4, 5.0e-4, 7.5e-4]).simd_min(f32x4::splat(1.0));
             let acos = fx4_acos(iv);
 
             for i in 0..4 {
