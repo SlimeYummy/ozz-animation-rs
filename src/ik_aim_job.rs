@@ -3,8 +3,7 @@
 //!
 
 use glam::{Mat4, Quat, Vec3A};
-use std::simd::prelude::*;
-use std::simd::StdFloat;
+use wide::{f32x4, CmpEq, CmpGt, CmpNe};
 
 use crate::base::OzzError;
 use crate::math::*;
@@ -234,7 +233,7 @@ impl IKAimJob {
 
         let offsetted_forward = Self::compute_offsetted_forward(self.forward, self.offset, joint_to_target_js);
         self.reached = offsetted_forward.is_some();
-        if !self.reached || (joint_to_target_js_len2.simd_eq(ZERO).to_bitmask() & 0x1 == 0x1) {
+        if !self.reached || (joint_to_target_js_len2.cmp_eq(ZERO).to_bitmask() & 0x1 == 0x1) {
             self.joint_correction = QUAT_UNIT;
             return Ok(());
         }
@@ -256,7 +255,7 @@ impl IKAimJob {
 
         let rotate_plane_axis_js;
         let rotate_plane_js;
-        if denoms.simd_ne(ZERO).to_bitmask() & 0x7 == 0x7 {
+        if denoms.cmp_ne(ZERO).to_bitmask() & 0x7 == 0x7 {
             let rsqrts = denoms.sqrt().recip();
             rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(rsqrts);
 
@@ -268,7 +267,7 @@ impl IKAimJob {
             let rotate_plane_axis_flipped_js = fx4_xor(rotate_plane_axis_js, axis_flip);
             rotate_plane_js = quat_from_cos_angle(
                 rotate_plane_axis_flipped_js,
-                rotate_plane_cos_angle.simd_clamp(NEG_ONE, ONE),
+                rotate_plane_cos_angle.fast_max(NEG_ONE).fast_min(ONE), // clamp elements between -1.0 and 1.0
             );
         } else {
             rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(denoms.sqrt().recip());
@@ -284,7 +283,7 @@ impl IKAimJob {
 
         let twisted_fu = quat_positive_w(twisted);
         if self.weight < 1.0 {
-            let simd_weight = f32x4::splat(self.weight).simd_max(ZERO);
+            let simd_weight = f32x4::splat(self.weight).fast_max(ZERO);
             self.joint_correction = quat_normalize(fx4_lerp(QUAT_UNIT, twisted_fu, simd_weight));
         } else {
             self.joint_correction = twisted_fu;
@@ -296,7 +295,7 @@ impl IKAimJob {
         let ao_l = vec3_dot_s(forward, offset);
         let ac_l2 = vec3_length2_s(offset) - ao_l * ao_l;
         let r2 = vec3_length2_s(target);
-        if ac_l2.simd_gt(r2).to_bitmask() & 0x1 == 0x1 {
+        if ac_l2.cmp_gt(r2).to_bitmask() & 0x1 == 0x1 {
             return None;
         }
         let ai_l = (r2 - ac_l2).sqrt();

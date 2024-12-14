@@ -45,8 +45,6 @@
 //! ```
 //!
 
-#![feature(portable_simd)]
-
 pub mod animation;
 pub mod archive;
 pub mod base;

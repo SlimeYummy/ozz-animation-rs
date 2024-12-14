@@ -3,8 +3,9 @@
 //!
 
 use glam::{Mat4, Quat, Vec3A};
-use std::simd::prelude::*;
-use std::simd::StdFloat;
+// use std::simd::prelude::*;
+// use std::simd::StdFloat;
+use wide::{f32x4, CmpGt};
 
 use crate::base::OzzError;
 use crate::math::*;
@@ -339,12 +340,12 @@ impl IKTwoBoneJob {
         let start_target_original_ss_len = fx4_splat_z(lengths); // [x y z w]
         let bone_len_diff_abs = (start_mid_ss_len - mid_end_ss_len).abs(); // [x]
         let bones_chain_len = start_mid_ss_len + mid_end_ss_len; // [x]
-        let da = bones_chain_len * fx4_clamp_or_min(f32x4::from_array([self.soften, 0.0, 0.0, 0.0]), ZERO, ONE); // [x 0 0 0] da.yzw needs to be 0
+        let da = bones_chain_len * fx4_clamp_or_min(f32x4::new([self.soften, 0.0, 0.0, 0.0]), ZERO, ONE); // [x 0 0 0] da.yzw needs to be 0
         let ds = bones_chain_len - da; // [x]
 
         let left = fx4_set_w(start_target_original_ss_len, ds); // [x y z w]
         let right = fx4_set_z(da, bone_len_diff_abs); // [x y z w]
-        let comp_mask = left.simd_gt(right).to_bitmask();
+        let comp_mask = left.cmp_gt(right).to_bitmask();
 
         let start_target_ss;
         let start_target_ss_len2;
@@ -410,7 +411,7 @@ impl IKTwoBoneJob {
 
         let mut start_rot_ss = end_to_target_rot_ss;
 
-        if start_target_ss_len2.simd_gt(ZERO).to_bitmask() & 0x1 == 0x1 {
+        if start_target_ss_len2.cmp_gt(ZERO).to_bitmask() & 0x1 == 0x1 {
             // [x]
             let ref_plane_normal_ss = vec3_cross(start_target_ss, pole_ss); // [x y z]
             let ref_plane_normal_ss_len2 = vec3_length2_s(ref_plane_normal_ss); // [x]
@@ -439,7 +440,7 @@ impl IKTwoBoneJob {
 
             let rotate_plane_ss = quat_from_cos_angle(
                 rotate_plane_axis_flipped_ss,
-                rotate_plane_cos_angle.simd_clamp(NEG_ONE, ONE),
+                rotate_plane_cos_angle.fast_max(NEG_ONE).fast_min(ONE), // clamp elements between -1.0 and 1.0
             );
 
             if self.twist_angle != 0.0 {
@@ -457,14 +458,14 @@ impl IKTwoBoneJob {
         let mid_rot_fu = quat_positive_w(mid_rot);
 
         if self.weight < 1.0 {
-            let simd_weight = f32x4::splat(self.weight).simd_max(ZERO);
+            let simd_weight = f32x4::splat(self.weight).fast_max(ZERO);
 
             let start_lerp = fx4_lerp(QUAT_UNIT, start_rot_fu, simd_weight);
             let mid_lerp = fx4_lerp(QUAT_UNIT, mid_rot_fu, simd_weight);
 
-            let rsqrts = f32x4::from_array([
-                (start_lerp * start_lerp).reduce_sum(),
-                (mid_lerp * mid_lerp).reduce_sum(),
+            let rsqrts = f32x4::new([
+                (start_lerp * start_lerp).reduce_add(),
+                (mid_lerp * mid_lerp).reduce_add(),
                 0.0,
                 0.0,
             ])

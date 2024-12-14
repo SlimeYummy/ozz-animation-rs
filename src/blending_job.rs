@@ -3,17 +3,14 @@
 //!
 
 use glam::Vec4;
+use wide::f32x4;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::simd::prelude::*;
 use std::sync::{Arc, RwLock};
 
 use crate::base::{OzzBuf, OzzError, OzzMutBuf, OzzObj};
-use crate::math::{fx4_from_vec4, fx4_sign, SoaQuat, SoaTransform, SoaVec3};
+use crate::math::{fx4_from_vec4, fx4_sign, SoaQuat, SoaTransform, SoaVec3, ONE, ZERO};
 use crate::skeleton::Skeleton;
-
-const ZERO: f32x4 = f32x4::from_array([0.0; 4]);
-const ONE: f32x4 = f32x4::from_array([1.0; 4]);
 
 /// Defines a layer of blending input data (local space transforms) and parameters (weights).
 #[derive(Debug, Clone)]
@@ -352,13 +349,13 @@ where
 
                 if ctx.num_passes == 0 {
                     for idx in 0..num_soa_joints {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).fast_max(ZERO);
                         ctx.accumulated_weights[idx] = weight;
                         Self::blend_1st_pass(&transform[idx], weight, &mut output[idx]);
                     }
                 } else {
                     for idx in 0..num_soa_joints {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).fast_max(ZERO);
                         ctx.accumulated_weights[idx] += weight;
                         Self::blend_n_pass(&transform[idx], weight, &mut output[idx]);
                     }
@@ -402,8 +399,8 @@ where
         } else {
             let simd_threshold = f32x4::splat(threshold);
             for idx in 0..joint_rest_poses.len() {
-                let bp_weight = (simd_threshold - ctx.accumulated_weights[idx]).simd_max(ZERO);
-                ctx.accumulated_weights[idx] = simd_threshold.simd_max(ctx.accumulated_weights[idx]);
+                let bp_weight = (simd_threshold - ctx.accumulated_weights[idx]).fast_max(ZERO);
+                ctx.accumulated_weights[idx] = simd_threshold.fast_max(ctx.accumulated_weights[idx]);
                 Self::blend_n_pass(&joint_rest_poses[idx], bp_weight, &mut output[idx]);
             }
         }
@@ -450,7 +447,7 @@ where
 
                 if !layer.joint_weights.is_empty() {
                     for idx in 0..joint_rest_poses.len() {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).fast_max(ZERO);
                         let one_minus_weight = ONE - weight;
                         Self::blend_add_pass(&transform[idx], weight, one_minus_weight, &mut output[idx]);
                     }
@@ -465,7 +462,7 @@ where
 
                 if !layer.joint_weights.is_empty() {
                     for idx in 0..joint_rest_poses.len() {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * layer.joint_weight(idx).fast_max(ZERO);
                         let one_minus_weight = ONE - weight;
                         Self::blend_sub_pass(&transform[idx], weight, one_minus_weight, &mut output[idx]);
                     }

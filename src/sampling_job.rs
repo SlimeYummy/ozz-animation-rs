@@ -6,9 +6,10 @@ use std::alloc::{self, Layout};
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
-use std::simd::prelude::*;
 use std::sync::{Arc, RwLock};
 use std::{mem, ptr, slice};
+
+use wide::f32x4;
 
 use crate::animation::{Animation, Float3Key, KeyframesCtrl, QuaternionKey};
 use crate::base::{align_ptr, align_usize, OzzError, OzzMutBuf, OzzObj};
@@ -124,18 +125,18 @@ const _: () = {
 mod serde_interp {
     use serde::ser::SerializeSeq;
     use serde::{Deserialize, Deserializer, Serializer};
-    use std::simd::prelude::*;
+    use wide::f32x4;
 
     pub(crate) fn serialize<S: Serializer>(value: &[f32x4; 2], serializer: S) -> Result<S::Ok, S::Error> {
         let mut seq = serializer.serialize_seq(Some(2))?;
-        seq.serialize_element(value[0].as_array())?;
-        seq.serialize_element(value[1].as_array())?;
+        seq.serialize_element(value[0].as_array_ref())?;
+        seq.serialize_element(value[1].as_array_ref())?;
         seq.end()
     }
 
     pub(crate) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[f32x4; 2], D::Error> {
         let tmp: [[f32; 4]; 2] = Deserialize::deserialize(deserializer)?;
-        Ok([f32x4::from_array(tmp[0]), f32x4::from_array(tmp[1])])
+        Ok([f32x4::new(tmp[0]), f32x4::new(tmp[1])])
     }
 }
 
@@ -1283,7 +1284,7 @@ where
 
     #[inline(always)]
     fn key_ratio_simd(ctrl: &KeyframesCtrl<'_>, timepoints: &[f32], ats: &[u32]) -> f32x4 {
-        f32x4::from_array([
+        f32x4::new([
             timepoints[ctrl.ratios[ats[0] as usize] as usize],
             timepoints[ctrl.ratios[ats[1] as usize] as usize],
             timepoints[ctrl.ratios[ats[2] as usize] as usize],
