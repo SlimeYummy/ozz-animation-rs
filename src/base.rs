@@ -224,7 +224,8 @@ where
 //
 
 impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a [T] {
-    type Buf<'b> = ObSliceRef<'b, T>
+    type Buf<'b>
+        = ObSliceRef<'b, T>
     where
         'a: 'b;
 
@@ -250,7 +251,8 @@ impl<T> Deref for ObSliceRef<'_, T> {
 //
 
 impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a mut [T] {
-    type Buf<'b> = ObSliceRef<'b, T>
+    type Buf<'b>
+        = ObSliceRef<'b, T>
     where
         'a: 'b;
 
@@ -261,7 +263,8 @@ impl<'a, T: 'static + Debug + Clone> OzzBuf<T> for &'a mut [T] {
 }
 
 impl<'a, T: 'static + Debug + Clone> OzzMutBuf<T> for &'a mut [T] {
-    type MutBuf<'b> = ObSliceRefMut<'b, T>
+    type MutBuf<'b>
+        = ObSliceRefMut<'b, T>
     where
         'a: 'b;
 

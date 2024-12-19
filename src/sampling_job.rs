@@ -204,8 +204,7 @@ impl Debug for SamplingContext {
         if self.0.is_null() {
             return f.debug_struct("SamplingContext").finish();
         }
-        f
-            .debug_struct("SamplingContext")
+        f.debug_struct("SamplingContext")
             .field("mem", &self.0)
             .field("animation_id", &self.animation_id())
             .field("ratio", &self.ratio())
@@ -1308,14 +1307,14 @@ where
                         rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
                         rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
                     ];
-    
+
                     let k00 = compressed[lefts[0] as usize];
                     let k10 = compressed[lefts[1] as usize];
                     let k20 = compressed[lefts[2] as usize];
                     let k30 = compressed[lefts[3] as usize];
                     args.values[i].ratio[0] = Self::key_ratio_simd(ctrl, timepoints, &lefts);
                     Float3Key::simd_decompress(&k00, &k10, &k20, &k30, &mut args.values[i].value[0]);
-    
+
                     let k01 = compressed[rights[0] as usize];
                     let k11 = compressed[rights[1] as usize];
                     let k21 = compressed[rights[2] as usize];
@@ -1345,14 +1344,14 @@ where
                         rights[2] - (ctrl.previouses[rights[2] as usize] as u32),
                         rights[3] - (ctrl.previouses[rights[3] as usize] as u32),
                     ];
-    
+
                     let k00 = compressed[lefts[0] as usize];
                     let k10 = compressed[lefts[1] as usize];
                     let k20 = compressed[lefts[2] as usize];
                     let k30 = compressed[lefts[3] as usize];
                     args.values[i].ratio[0] = Self::key_ratio_simd(ctrl, timepoints, &lefts);
                     QuaternionKey::simd_decompress(&k00, &k10, &k20, &k30, &mut args.values[i].value[0]);
-    
+
                     let k01 = compressed[rights[0] as usize];
                     let k11 = compressed[rights[1] as usize];
                     let k21 = compressed[rights[2] as usize];
@@ -1496,9 +1495,9 @@ mod sampling_tests {
     const V1: Vec3 = Vec3::new(1.0, 1.0, 1.0);
     const QU: Quat = Quat::from_xyzw(0.0, 0.0, 0.0, 1.0);
     const TX: SoaTransform = SoaTransform {
-        translation: SoaVec3::splat_col([1234.5678; 3]),
-        rotation: SoaQuat::splat_col([1234.5678; 4]),
-        scale: SoaVec3::splat_col([1234.5678; 3]),
+        translation: SoaVec3::splat_vec3(Vec3::new(1234.5678, 1234.5678, 1234.5678)),
+        rotation: SoaQuat::splat_quat(Quat::from_xyzw(1234.5678, 1234.5678, 1234.5678, 1234.5678)),
+        scale: SoaVec3::splat_vec3(Vec3::new(1234.5678, 1234.5678, 1234.5678)),
     };
 
     fn empty_translations() -> Vec<Float3Key> {
@@ -1564,23 +1563,23 @@ mod sampling_tests {
             for idx in 0..S {
                 let out = output.borrow()[idx / 4];
                 assert!(
-                    out.translation.col(idx % 4).abs_diff_eq(frame.transform[idx].0, 1e-6),
+                    out.translation.vec3(idx % 4).abs_diff_eq(frame.transform[idx].0, 1e-6),
                     "ratio={} translation idx={} left={}, right={}",
                     frame.ratio,
                     idx,
-                    out.translation.col(idx % 4),
+                    out.translation.vec3(idx % 4),
                     frame.transform[idx].0
                 );
                 assert!(
-                    out.rotation.col(idx % 4).abs_diff_eq(frame.transform[idx].1, 5e-5),
+                    out.rotation.quat(idx % 4).abs_diff_eq(frame.transform[idx].1, 5e-5),
                     "ratio={} rotation idx={} left={}, right={}",
                     frame.ratio,
                     idx,
-                    out.rotation.col(idx % 4),
+                    out.rotation.quat(idx % 4),
                     frame.transform[idx].1
                 );
                 assert_eq!(
-                    out.scale.col(idx % 4),
+                    out.scale.vec3(idx % 4),
                     frame.transform[idx].2,
                     "ratio={} scale idx={}",
                     frame.ratio,
@@ -1844,12 +1843,12 @@ mod sampling_tests {
             job.set_output(output.clone());
             job.run()?;
             for item in output.buf().unwrap().iter() {
-                assert_eq!(item.translation.col(0), Vec3::new(1.0, -1.0, 5.0));
+                assert_eq!(item.translation.vec3(0), Vec3::new(1.0, -1.0, 5.0));
                 assert!(item
                     .rotation
-                    .col(0)
+                    .quat(0)
                     .abs_diff_eq(Quat::from_xyzw(0.0, 0.0, 0.0, 1.0), 5e-1));
-                assert_eq!(item.scale.col(0), Vec3::new(1.0, 1.0, 1.0));
+                assert_eq!(item.scale.vec3(0), Vec3::new(1.0, 1.0, 1.0));
             }
             Ok(())
         }

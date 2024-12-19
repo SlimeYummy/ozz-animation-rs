@@ -135,8 +135,8 @@ where
             {
                 let mut locals_mut = locals2.borrow_mut();
                 let idx = *joint as usize;
-                let quat = locals_mut[idx / 4].rotation.col(idx & 3) * ik_job.joint_correction();
-                locals_mut[idx / 4].rotation.set_col(idx & 3, quat);
+                let quat = locals_mut[idx / 4].rotation.quat(idx & 3) * ik_job.joint_correction();
+                locals_mut[idx / 4].rotation.set_quat(idx & 3, quat);
             }
 
             previous_joint = *joint as i32;

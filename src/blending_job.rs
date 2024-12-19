@@ -547,12 +547,6 @@ mod blending_tests {
     use crate::base::DeterministicState;
     use crate::skeleton::{JointHashMap, SkeletonRaw};
 
-    const IDENTITY: SoaTransform = SoaTransform {
-        translation: SoaVec3::splat_col([0.0; 3]),
-        rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
-        scale: SoaVec3::splat_col([1.0; 3]),
-    };
-
     fn make_buf<T>(v: Vec<T>) -> Rc<RefCell<Vec<T>>> {
         Rc::new(RefCell::new(v))
     }
@@ -786,14 +780,14 @@ mod blending_tests {
         let mut joint_rest_poses = vec![SoaTransform::default(); 2];
         joint_rest_poses[0].translation =
             SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
-        joint_rest_poses[0].rotation = SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]);
+        joint_rest_poses[0].rotation = SoaQuat::IDENTITY;
         joint_rest_poses[0].scale = SoaVec3::new(
             [0.0, 10.0, 20.0, 30.0],
             [40.0, 50.0, 60.0, 70.0],
             [80.0, 90.0, 100.0, 110.0],
         );
         joint_rest_poses[1].translation = joint_rest_poses[0].translation.mul_num(f32x4::splat(2.0));
-        joint_rest_poses[1].rotation = SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]);
+        joint_rest_poses[1].rotation = SoaQuat::IDENTITY;
         joint_rest_poses[1].scale = joint_rest_poses[0].scale.mul_num(f32x4::splat(2.0));
 
         let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
@@ -830,27 +824,27 @@ mod blending_tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_weight() {
-        let mut input1 = vec![IDENTITY; 2];
+        let mut input1 = vec![SoaTransform::IDENTITY; 2];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
         input1[1].translation = SoaVec3::new(
             [12.0, 13.0, 14.0, 15.0],
             [16.0, 17.0, 18.0, 19.0],
             [20.0, 21.0, 22.0, 23.0],
         );
-        let mut input2 = vec![IDENTITY; 2];
+        let mut input2 = vec![SoaTransform::IDENTITY; 2];
         input2[0].translation = input1[0].translation.neg();
         input2[1].translation = input1[1].translation.neg();
         let mut layers = new_layers(input1, vec![], input2, vec![]);
 
         let joint_rest_poses = vec![
             SoaTransform {
-                translation: SoaVec3::splat_col([0.0, 0.0, 0.0]),
-                rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
+                translation: SoaVec3::ZERO,
+                rotation: SoaQuat::IDENTITY,
                 scale: SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]),
             },
             SoaTransform {
-                translation: SoaVec3::splat_col([0.0, 0.0, 0.0]),
-                rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
+                translation: SoaVec3::ZERO,
+                rotation: SoaQuat::IDENTITY,
                 scale: SoaVec3::new(
                     [12.0, 13.0, 14.0, 15.0],
                     [16.0, 17.0, 18.0, 19.0],
@@ -884,7 +878,7 @@ mod blending_tests {
                     ),
                 ],
                 vec![],
-                vec![SoaVec3::splat_col([1.0, 1.0, 1.0]); 2],
+                vec![SoaVec3::ONE; 2],
                 "weight - 1",
             );
         }
@@ -905,7 +899,7 @@ mod blending_tests {
                     ),
                 ],
                 vec![],
-                vec![SoaVec3::splat_col([1.0, 1.0, 1.0]); 2],
+                vec![SoaVec3::ONE; 2],
                 "weight - 2",
             );
         }
@@ -917,9 +911,9 @@ mod blending_tests {
                 &skeleton,
                 layers.clone(),
                 Vec::new(),
-                vec![SoaVec3::splat_col([0.0, 0.0, 0.0]); 2],
+                vec![SoaVec3::ZERO; 2],
                 vec![],
-                vec![SoaVec3::splat_col([1.0, 1.0, 1.0]); 2],
+                vec![SoaVec3::ONE; 2],
                 "weight - 3",
             );
         }
@@ -928,14 +922,14 @@ mod blending_tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_joint_weights() {
-        let mut input1 = vec![IDENTITY; 2];
+        let mut input1 = vec![SoaTransform::IDENTITY; 2];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
         input1[1].translation = SoaVec3::new(
             [12.0, 13.0, 14.0, 15.0],
             [16.0, 17.0, 18.0, 19.0],
             [20.0, 21.0, 22.0, 23.0],
         );
-        let mut input2 = vec![IDENTITY; 2];
+        let mut input2 = vec![SoaTransform::IDENTITY; 2];
         input2[0].translation = input1[0].translation.neg();
         input2[1].translation = input1[1].translation.neg();
         let weights1 = vec![Vec4::new(1.0, 1.0, 0.0, 0.0), Vec4::new(1.0, 0.0, 1.0, 1.0)];
@@ -949,12 +943,12 @@ mod blending_tests {
                     [14.0, 15.0, 16.0, 17.0],
                     [18.0, 19.0, 20.0, 21.0],
                 ),
-                rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
+                rotation: SoaQuat::IDENTITY,
                 scale: SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]),
             },
             SoaTransform {
-                translation: SoaVec3::splat_col([0.0, 0.0, 0.0]),
-                rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
+                translation: SoaVec3::ZERO,
+                rotation: SoaQuat::IDENTITY,
                 scale: SoaVec3::new([0.0, 2.0, 4.0, 6.0], [8.0, 10.0, 12.0, 14.0], [16.0, 18.0, 20.0, 22.0]),
             },
         ];
@@ -982,7 +976,7 @@ mod blending_tests {
                 vec![],
                 vec![
                     SoaVec3::new([1.0, 1.0, 1.0, 3.0], [1.0, 1.0, 1.0, 7.0], [1.0, 1.0, 1.0, 11.0]),
-                    SoaVec3::splat_col([1.0, 1.0, 1.0]),
+                    SoaVec3::ONE,
                 ],
                 "joint weight - 1",
             );
@@ -1018,7 +1012,7 @@ mod blending_tests {
     }
 
     fn new_skeleton1() -> Rc<Skeleton> {
-        let mut joint_rest_poses = vec![IDENTITY];
+        let mut joint_rest_poses = vec![SoaTransform::IDENTITY];
         joint_rest_poses[0].scale = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
 
         Rc::new(Skeleton::from_raw(&SkeletonRaw {
@@ -1033,14 +1027,14 @@ mod blending_tests {
     fn test_normalize() {
         let skeleton = new_skeleton1();
 
-        let mut input1 = vec![IDENTITY; 1];
+        let mut input1 = vec![SoaTransform::IDENTITY; 1];
         input1[0].rotation = SoaQuat::new(
             [0.70710677, 0.0, 0.0, 0.382683432],
             [0.0, 0.0, 0.70710677, 0.0],
             [0.0, 0.0, 0.0, 0.0],
             [0.70710677, 1.0, 0.70710677, 0.9238795],
         );
-        let mut input2 = vec![IDENTITY; 1];
+        let mut input2 = vec![SoaTransform::IDENTITY; 1];
         input2[0].rotation = SoaQuat::new(
             [0.0, 0.70710677, -0.70710677, -0.382683432],
             [0.0, 0.0, 0.0, 0.0],
@@ -1083,7 +1077,7 @@ mod blending_tests {
                     [0.0, 0.0, -0.58843851, 0.0],
                     [0.95224595, 0.88906217, 0.39229235, 0.92387962],
                 )],
-                vec![SoaVec3::splat_col([1.0, 1.0, 1.0])],
+                vec![SoaVec3::ONE],
                 "normalize - 1",
             );
         }
@@ -1118,7 +1112,7 @@ mod blending_tests {
                     [0.0, 0.0, -0.58843851, 0.0],
                     [0.95224595, 0.88906217, 0.39229235, 0.92387962],
                 )],
-                vec![SoaVec3::splat_col([1.0, 1.0, 1.0])],
+                vec![SoaVec3::ONE],
                 "normalize - 1",
             );
         }
@@ -1136,7 +1130,7 @@ mod blending_tests {
                     [48.0, 50.0, 470.0 / 8.0, 139.5 / 2.30],
                 )],
                 vec![],
-                vec![SoaVec3::splat_col([1.0, 1.0, 1.0])],
+                vec![SoaVec3::ONE],
                 "normalize - 3",
             );
         }
@@ -1147,9 +1141,9 @@ mod blending_tests {
     fn test_threshold() {
         let skeleton = new_skeleton1();
 
-        let mut input1 = vec![IDENTITY; 1];
+        let mut input1 = vec![SoaTransform::IDENTITY; 1];
         input1[0].translation = SoaVec3::new([2.0, 3.0, 4.0, 5.0], [6.0, 7.0, 8.0, 9.0], [10.0, 11.0, 12.0, 13.0]);
-        let mut input2 = vec![IDENTITY; 1];
+        let mut input2 = vec![SoaTransform::IDENTITY; 1];
         input2[0].translation = SoaVec3::new([3.0, 4.0, 5.0, 6.0], [7.0, 8.0, 9.0, 10.0], [11.0, 12.0, 13.0, 14.0]);
         let mut layers = vec![
             BlendingLayer {
@@ -1176,8 +1170,8 @@ mod blending_tests {
                     [6.6, 7.6, 8.6, 9.6],
                     [10.6, 11.6, 12.6, 13.6],
                 )],
-                vec![SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0])],
-                vec![SoaVec3::splat_col([1.0, 1.0, 1.0])],
+                vec![SoaQuat::IDENTITY],
+                vec![SoaVec3::ONE],
                 "threshold - 1",
             );
         }
@@ -1189,8 +1183,8 @@ mod blending_tests {
                 &skeleton,
                 layers.clone(),
                 Vec::new(),
-                vec![SoaVec3::splat_col([0.0; 3])],
-                vec![SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0])],
+                vec![SoaVec3::ZERO],
+                vec![SoaQuat::IDENTITY],
                 vec![SoaVec3::new(
                     [0.0, 1.0, 2.0, 3.0],
                     [4.0, 5.0, 6.0, 7.0],
@@ -1243,12 +1237,12 @@ mod blending_tests {
     #[wasm_bindgen_test]
     fn test_additive_weight() {
         let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
-            joint_rest_poses: vec![IDENTITY; 1],
+            joint_rest_poses: vec![SoaTransform::IDENTITY; 1],
             joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
             joint_parents: vec![0; 4],
         }));
 
-        let mut input1 = vec![IDENTITY; 1];
+        let mut input1 = vec![SoaTransform::IDENTITY; 1];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
         input1[0].rotation = SoaQuat::new(
             [0.70710677, 0.0, 0.0, 0.382683432],
@@ -1261,7 +1255,7 @@ mod blending_tests {
             [16.0, 17.0, 18.0, 19.0],
             [20.0, 21.0, 22.0, 23.0],
         );
-        let mut input2 = vec![IDENTITY; 1];
+        let mut input2 = vec![SoaTransform::IDENTITY; 1];
         input2[0].translation = input1[0].translation.neg();
         input2[0].rotation = input1[0].rotation.conjugate();
         input2[0].scale = input1[0].scale.neg();
@@ -1277,9 +1271,9 @@ mod blending_tests {
                 &skeleton,
                 vec![],
                 layers.clone(),
-                vec![SoaVec3::splat_col([0.0; 3]); 4],
-                vec![SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
-                vec![SoaVec3::splat_col([1.0; 3]); 4],
+                vec![SoaVec3::ZERO; 4],
+                vec![SoaQuat::IDENTITY; 4],
+                vec![SoaVec3::ONE; 4],
                 "additive weight - 1",
             );
         }
@@ -1383,8 +1377,8 @@ mod blending_tests {
                 &skeleton,
                 vec![],
                 layers.clone(),
-                vec![SoaVec3::splat_col([0.0; 3]); 4],
-                vec![SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
+                vec![SoaVec3::ZERO; 4],
+                vec![SoaQuat::IDENTITY; 4],
                 vec![SoaVec3::new(
                     [-144.0, -169.0, -196.0, -225.0],
                     [-256.0, -289.0, -324.0, -361.0],
@@ -1402,9 +1396,9 @@ mod blending_tests {
                 &skeleton,
                 vec![],
                 layers.clone(),
-                vec![SoaVec3::splat_col([0.0; 3]); 4],
-                vec![SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
-                vec![SoaVec3::splat_col([1.0; 3]); 4],
+                vec![SoaVec3::ZERO; 4],
+                vec![SoaQuat::IDENTITY; 4],
+                vec![SoaVec3::ONE; 4],
                 "additive weight - 6",
             );
         }
@@ -1414,12 +1408,12 @@ mod blending_tests {
     #[wasm_bindgen_test]
     fn test_additive_joint_weight() {
         let skeleton = Rc::new(Skeleton::from_raw(&SkeletonRaw {
-            joint_rest_poses: vec![IDENTITY; 1],
+            joint_rest_poses: vec![SoaTransform::IDENTITY; 1],
             joint_names: JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new()),
             joint_parents: vec![0; 4],
         }));
 
-        let mut input1 = vec![IDENTITY; 1];
+        let mut input1 = vec![SoaTransform::IDENTITY; 1];
         input1[0].translation = SoaVec3::new([0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0], [8.0, 9.0, 10.0, 11.0]);
         input1[0].rotation = SoaQuat::new(
             [0.70710677, 0.0, 0.0, 0.382683432],
@@ -1444,9 +1438,9 @@ mod blending_tests {
                 &skeleton,
                 vec![],
                 layers.clone(),
-                vec![SoaVec3::splat_col([0.0; 3]); 4],
-                vec![SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]); 4],
-                vec![SoaVec3::splat_col([1.0; 3]); 4],
+                vec![SoaVec3::ZERO; 4],
+                vec![SoaQuat::IDENTITY; 4],
+                vec![SoaVec3::ONE; 4],
                 "additive joint weight - 1",
             );
         }
