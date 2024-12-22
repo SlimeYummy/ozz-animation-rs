@@ -86,7 +86,7 @@ impl OzzExample for OzzTwoBoneIK {
         let mid_joint = self.skeleton.joint_by_name("forearm").unwrap();
         let end_joint = self.skeleton.joint_by_name("wrist").unwrap();
 
-        let ratio = time.elapsed_seconds() % 5.0;
+        let ratio = time.elapsed_secs() % 5.0;
         let anim_extent: f32 = (1.0 - ratio.cos()) * 0.5 * TARGET_EXTENT;
         let floor: usize = (ratio.abs() / (2.0 * core::f32::consts::PI)) as usize;
 

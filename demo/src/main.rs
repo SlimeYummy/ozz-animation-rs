@@ -20,12 +20,8 @@ const BONE_COUNT: usize = 256;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
-        .add_systems(Startup, setup_ui)
-        .add_systems(Update, update_ozz_animation)
-        .add_systems(Update, update_camera)
-        .add_systems(Update, update_bones)
-        .add_systems(Update, draw_spines)
+        .add_systems(Startup, (setup, setup_ui))
+        .add_systems(Update, (update_ozz_animation, update_camera, update_bones, draw_spines))
         .run();
 }
 
@@ -85,81 +81,73 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     commands.spawn(oc);
 
     // ground
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Rectangle::new(20.0, 30.0)),
-        material: materials.add(Color::srgb(1.0, 0.96, 0.95)),
-        transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+    commands.spawn((
+        Mesh3d(meshes.add(Rectangle::new(20.0, 30.0))),
+        MeshMaterial3d(materials.add(Color::srgb(1.0, 0.96, 0.95))),
+        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
             .with_translation(Vec3::new(-2.0, 0.0, -5.0)),
-        ..default()
-    });
+    ));
 
     // bones
     let bone_mesh = meshes.add(build_bone_mesh());
     let bone_material = materials.add(Color::srgb(0.68, 0.68, 0.8));
     for i in 0..BONE_COUNT {
         commands.spawn((
-            PbrBundle {
-                mesh: bone_mesh.clone(),
-                material: bone_material.clone(),
-                transform: Transform::from_xyz(0.0, 0.0, 0.0),
-                visibility: Visibility::Hidden,
-                ..default()
-            },
+            Mesh3d(bone_mesh.clone()),
+            MeshMaterial3d(bone_material.clone()),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            Visibility::Hidden,
             BoneIndex(i),
         ));
     }
 
     // camera
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(1.5, 1.0, 3.0).looking_at(Vec3::new(0.0, 1.0, -0.0), Vec3::Y),
-        ..default()
-    });
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(1.5, 1.0, 3.0).looking_at(Vec3::new(0.0, 1.0, -0.0), Vec3::Y),
+    ));
 
     // Sky
     commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Cuboid::new(2.0, 1.0, 1.0)),
-            material: materials.add(StandardMaterial {
-                base_color: Color::srgb(0.4, 0.61, 0.98),
-                unlit: true,
-                cull_mode: None,
-                ..default()
-            }),
-            transform: Transform::from_scale(Vec3::splat(30.0)),
+        Mesh3d(meshes.add(Cuboid::new(2.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.4, 0.61, 0.98),
+            unlit: true,
+            cull_mode: None,
             ..default()
-        },
+        })),
+        Transform::from_scale(Vec3::splat(30.0)),
         NotShadowCaster,
     ));
 
     // Sun
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn((
+        DirectionalLight {
             color: Color::WHITE,
             illuminance: 10000.0,
             shadows_enabled: true,
             shadow_depth_bias: 0.05,
             shadow_normal_bias: 0.9,
         },
-        transform: Transform::from_xyz(-3.0, 1.6, -4.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
-        ..default()
-    });
+        Transform::from_xyz(-3.0, 1.6, -4.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
+    ));
 
     // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             shadows_enabled: false,
             color: Color::WHITE,
             ..default()
         },
-        transform: Transform::from_xyz(0.0, 5.0, 3.0),
-        ..default()
-    });
+        Transform::from_xyz(0.0, 5.0, 3.0),
+    ));
 }
 
 fn update_ozz_animation(
     keycode: Res<ButtonInput<KeyCode>>,
     mut oc_query: Query<&mut OzzComponent>,
-    mut text_query: Query<&mut Text, With<DemoName>>,
+    text_query: Query<Entity, With<DemoName>>,
+    mut writer: TextUiWriter,
     time: Res<Time>,
 ) {
     let mut oc = oc_query.iter_mut().last().unwrap(); // only one OzzComponent
@@ -168,8 +156,8 @@ fn update_ozz_animation(
     if keycode.just_pressed(KeyCode::Space) {
         oc.load_next();
 
-        let mut text = text_query.iter_mut().last().unwrap();
-        text.sections[0].value = format!("Demo: {}", OZZ_TYPES[oc.typ].1);
+        let text_entity = text_query.iter().last().unwrap();
+        *writer.text(text_entity, 0) = format!("Demo: {}", OZZ_TYPES[oc.typ].1);
     }
 
     if let Some(example) = &mut oc.example {
@@ -286,21 +274,18 @@ fn draw_gizmos(gizmos: &mut Gizmos, trans: &OzzTransform) {
     let normal_y = trans.rotation.mul_vec3(Vec3::Y).normalize();
     let normal_z = trans.rotation.mul_vec3(Vec3::Z).normalize();
     gizmos.circle(
-        trans.position,
-        Dir3::new_unchecked(normal_x),
+        Isometry3d::new(trans.position, Quat::from_scaled_axis(normal_x)),
         trans.scale * 0.25,
         Color::srgba(1.0, 0.1, 0.1, 0.5),
     );
 
     gizmos.circle(
-        trans.position,
-        Dir3::new_unchecked(normal_y),
+        Isometry3d::new(trans.position, Quat::from_scaled_axis(normal_y)),
         trans.scale * 0.25,
         Color::srgba(0.1, 1.0, 0.1, 0.5),
     );
     gizmos.circle(
-        trans.position,
-        Dir3::new_unchecked(normal_z),
+        Isometry3d::new(trans.position, Quat::from_scaled_axis(normal_z)),
         trans.scale * 0.25,
         Color::srgba(0.1, 0.1, 1.0, 0.5),
     );
@@ -310,36 +295,20 @@ fn draw_gizmos(gizmos: &mut Gizmos, trans: &OzzTransform) {
 struct DemoName;
 
 fn setup_ui(mut commands: Commands) {
-    commands.spawn((
-        TextBundle::from_section(
-            format!("Demo: {}", OZZ_TYPES[0].1).as_str(),
-            TextStyle {
-                font_size: 32.0,
+    commands
+        .spawn((
+            Text::new(format!("Demo: {}", OZZ_TYPES[0].1).as_str()),
+            TextFont::from_font_size(32.0),
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(5.0),
+                top: Val::Px(5.0),
                 ..default()
             },
-        )
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            left: Val::Px(5.0),
-            top: Val::Px(5.0),
-            ..default()
-        }),
-        DemoName,
-    ));
-
-    commands.spawn(
-        TextBundle::from_section(
-            "Press space to switch demo",
-            TextStyle {
-                font_size: 32.0,
-                ..default()
-            },
-        )
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            left: Val::Px(5.0),
-            top: Val::Px(40.0),
-            ..default()
-        }),
-    );
+            DemoName,
+        ))
+        .with_child((
+            TextSpan::new("\nPress space to switch demo"),
+            TextFont::from_font_size(32.0),
+        ));
 }
