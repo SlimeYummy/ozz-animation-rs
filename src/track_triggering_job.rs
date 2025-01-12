@@ -24,10 +24,7 @@ pub struct Edge {
 impl Edge {
     /// Creates a new `Edge`.
     pub fn new(ratio: f32, rising: bool) -> Edge {
-        Edge {
-            ratio,
-            rising,
-        }
+        Edge { ratio, rising }
     }
 }
 

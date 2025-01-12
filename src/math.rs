@@ -7,6 +7,8 @@
 #![allow(dead_code)]
 
 use glam::{Mat4, Quat, Vec3, Vec3A, Vec4};
+#[cfg(feature = "glam-ext")]
+use glam_ext::Transform3A;
 use static_assertions::const_assert_eq;
 use std::fmt::Debug;
 use std::io::Read;
@@ -50,6 +52,21 @@ pub struct SoaVec3 {
 }
 
 impl SoaVec3 {
+    pub const ZERO: SoaVec3 = SoaVec3::splat(0.0);
+    pub const ONE: SoaVec3 = SoaVec3::splat(1.0);
+    pub const NEG_ONE: SoaVec3 = SoaVec3::splat(-1.0);
+    pub const MIN: SoaVec3 = SoaVec3::splat(f32::MIN);
+    pub const MAX: SoaVec3 = SoaVec3::splat(f32::MAX);
+    pub const NAN: SoaVec3 = SoaVec3::splat(f32::NAN);
+    pub const INFINITY: SoaVec3 = SoaVec3::splat(f32::INFINITY);
+    pub const NEG_INFINITY: SoaVec3 = SoaVec3::splat(f32::NEG_INFINITY);
+    pub const X: SoaVec3 = SoaVec3::splat_vec3(Vec3::X);
+    pub const Y: SoaVec3 = SoaVec3::splat_vec3(Vec3::Y);
+    pub const Z: SoaVec3 = SoaVec3::splat_vec3(Vec3::Z);
+    pub const NEG_X: SoaVec3 = SoaVec3::splat_vec3(Vec3::NEG_X);
+    pub const NEG_Y: SoaVec3 = SoaVec3::splat_vec3(Vec3::NEG_Y);
+    pub const NEG_Z: SoaVec3 = SoaVec3::splat_vec3(Vec3::NEG_Z);
+
     #[inline]
     pub const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4]) -> SoaVec3 {
         SoaVec3 {
@@ -60,26 +77,27 @@ impl SoaVec3 {
     }
 
     #[inline]
-    pub const fn splat_row(v: f32x4) -> SoaVec3 {
+    pub const fn splat(f: f32) -> SoaVec3 {
+        let v = f32x4::from_array([f; 4]);
         SoaVec3 { x: v, y: v, z: v }
     }
 
     #[inline]
-    pub const fn splat_col(v: [f32; 3]) -> SoaVec3 {
+    pub const fn splat_vec3(v: Vec3) -> SoaVec3 {
         SoaVec3 {
-            x: f32x4::from_array([v[0]; 4]),
-            y: f32x4::from_array([v[1]; 4]),
-            z: f32x4::from_array([v[2]; 4]),
+            x: f32x4::from_array([v.x; 4]),
+            y: f32x4::from_array([v.y; 4]),
+            z: f32x4::from_array([v.z; 4]),
         }
     }
 
     #[inline]
-    pub fn col(&self, idx: usize) -> Vec3 {
+    pub fn vec3(&self, idx: usize) -> Vec3 {
         Vec3::new(self.x[idx], self.y[idx], self.z[idx])
     }
 
     #[inline]
-    pub fn set_col(&mut self, idx: usize, v: Vec3) {
+    pub fn set_vec3(&mut self, idx: usize, v: Vec3) {
         self.x[idx] = v.x;
         self.y[idx] = v.y;
         self.z[idx] = v.z;
@@ -239,6 +257,10 @@ pub struct SoaQuat {
 }
 
 impl SoaQuat {
+    pub const ZERO: SoaQuat = SoaQuat::splat(0.0);
+    pub const IDENTITY: SoaQuat = SoaQuat::splat_quat(Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
+    pub const NAN: SoaQuat = SoaQuat::splat(f32::NAN);
+
     #[inline]
     pub const fn new(x: [f32; 4], y: [f32; 4], z: [f32; 4], w: [f32; 4]) -> SoaQuat {
         SoaQuat {
@@ -250,12 +272,14 @@ impl SoaQuat {
     }
 
     #[inline]
-    pub const fn splat_row(v: f32x4) -> SoaQuat {
+    pub const fn splat(f: f32) -> SoaQuat {
+        let v = f32x4::from_array([f; 4]);
         SoaQuat { x: v, y: v, z: v, w: v }
     }
 
     #[inline]
-    pub const fn splat_col(v: [f32; 4]) -> SoaQuat {
+    pub const fn splat_quat(q: Quat) -> SoaQuat {
+        let v = unsafe { mem::transmute::<Quat, [f32; 4]>(q) };
         SoaQuat {
             x: f32x4::from_array([v[0]; 4]),
             y: f32x4::from_array([v[1]; 4]),
@@ -265,16 +289,16 @@ impl SoaQuat {
     }
 
     #[inline]
-    pub fn col(&self, idx: usize) -> Quat {
+    pub fn quat(&self, idx: usize) -> Quat {
         Quat::from_xyzw(self.x[idx], self.y[idx], self.z[idx], self.w[idx])
     }
 
     #[inline]
-    pub fn set_col(&mut self, idx: usize, v: Quat) {
-        self.x[idx] = v.x;
-        self.y[idx] = v.y;
-        self.z[idx] = v.z;
-        self.w[idx] = v.w;
+    pub fn set_quat(&mut self, idx: usize, q: Quat) {
+        self.x[idx] = q.x;
+        self.y[idx] = q.y;
+        self.z[idx] = q.z;
+        self.w[idx] = q.w;
     }
 
     #[inline]
@@ -485,13 +509,47 @@ impl ArchiveRead<SoaTransform> for SoaTransform {
 }
 
 impl SoaTransform {
+    pub const ZERO: SoaTransform = SoaTransform::new(SoaVec3::ZERO, SoaQuat::ZERO, SoaVec3::ZERO);
+    pub const IDENTITY: SoaTransform = SoaTransform::new(SoaVec3::ZERO, SoaQuat::IDENTITY, SoaVec3::ONE);
+    pub const NAN: SoaTransform = SoaTransform::new(SoaVec3::NAN, SoaQuat::NAN, SoaVec3::NAN);
+
     #[inline]
-    pub fn new(translation: SoaVec3, rotation: SoaQuat, scale: SoaVec3) -> SoaTransform {
+    pub const fn new(translation: SoaVec3, rotation: SoaQuat, scale: SoaVec3) -> SoaTransform {
         SoaTransform {
             translation,
             rotation,
             scale,
         }
+    }
+}
+
+#[cfg(feature = "glam-ext")]
+impl SoaTransform {
+    #[inline]
+    pub const fn splat_transform(transform: Transform3A) -> SoaTransform {
+        let t = unsafe { mem::transmute::<Vec3A, [f32; 4]>(transform.translation) };
+        let s = unsafe { mem::transmute::<Vec3A, [f32; 4]>(transform.scale) };
+        SoaTransform {
+            translation: SoaVec3::splat_vec3(Vec3::new(t[0], t[1], t[2])),
+            rotation: SoaQuat::splat_quat(transform.rotation),
+            scale: SoaVec3::splat_vec3(Vec3::new(s[0], s[1], s[2])),
+        }
+    }
+
+    #[inline]
+    pub fn transform(&self, idx: usize) -> Transform3A {
+        Transform3A {
+            translation: self.translation.vec3(idx).into(),
+            rotation: self.rotation.quat(idx),
+            scale: self.scale.vec3(idx).into(),
+        }
+    }
+
+    #[inline]
+    pub fn set_transform(&mut self, idx: usize, transform: Transform3A) {
+        self.translation.set_vec3(idx, transform.translation.into());
+        self.rotation.set_quat(idx, transform.rotation);
+        self.scale.set_vec3(idx, transform.scale.into());
     }
 }
 
@@ -566,7 +624,7 @@ impl AosMat4 {
     #[allow(clippy::too_many_arguments)]
     #[rustfmt::skip]
     #[inline]
-    pub(crate) fn new(
+    pub fn new(
         n00: f32, n01: f32, n02: f32, n03: f32,
         n10: f32, n11: f32, n12: f32, n13: f32,
         n20: f32, n21: f32, n22: f32, n23: f32,
@@ -1486,14 +1544,14 @@ mod tests {
     fn test_rkyv() {
         use rkyv::Deserialize;
 
-        let vec3 = SoaVec3::splat_col([2.0, 3.0, 4.0]);
+        let vec3 = SoaVec3::splat_vec3(Vec3::new(2.0, 3.0, 4.0));
         let bytes = rkyv::to_bytes::<_, 256>(&vec3).unwrap();
         let archived = rkyv::check_archived_root::<SoaVec3>(&bytes[..]).unwrap();
         assert_eq!(archived, &vec3);
         let vec3_de: SoaVec3 = archived.deserialize(&mut rkyv::Infallible).unwrap();
         assert_eq!(vec3_de, vec3);
 
-        let quat = SoaQuat::splat_col([2.0, 3.0, 4.0, 5.0]);
+        let quat = SoaQuat::splat_quat(Quat::from_xyzw(2.0, 3.0, 4.0, 5.0));
         let bytes = rkyv::to_bytes::<_, 256>(&quat).unwrap();
         let archived = rkyv::check_archived_root::<SoaQuat>(&bytes[..]).unwrap();
         assert_eq!(archived, &quat);
@@ -1501,9 +1559,9 @@ mod tests {
         assert_eq!(quat_de, quat);
 
         let transform = SoaTransform::new(
-            SoaVec3::splat_col([9.0, 8.0, 7.0]),
-            SoaQuat::splat_col([6.0, 5.0, 4.0, 3.0]),
-            SoaVec3::splat_col([-1.0, -2.0, -3.0]),
+            SoaVec3::splat_vec3(Vec3::new(9.0, 8.0, 7.0)),
+            SoaQuat::splat_quat(Quat::from_xyzw(6.0, 5.0, 4.0, 3.0)),
+            SoaVec3::splat_vec3(Vec3::new(-1.0, -2.0, -3.0)),
         );
         let bytes = rkyv::to_bytes::<_, 256>(&transform).unwrap();
         let archived = rkyv::check_archived_root::<SoaTransform>(&bytes[..]).unwrap();
@@ -1516,12 +1574,12 @@ mod tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_serde() {
-        let vec3 = SoaVec3::splat_col([2.0, 3.0, 4.0]);
+        let vec3 = SoaVec3::splat_vec3(Vec3::new(2.0, 3.0, 4.0));
         let json = serde_json::to_string(&vec3).unwrap();
         let vec3_de: SoaVec3 = serde_json::from_str(&json).unwrap();
         assert_eq!(vec3_de, vec3);
 
-        let quat = SoaQuat::splat_col([2.0, 3.0, 4.0, 5.0]);
+        let quat = SoaQuat::splat_quat(Quat::from_xyzw(2.0, 3.0, 4.0, 5.0));
         let json = serde_json::to_string(&quat).unwrap();
         let quat_de: SoaQuat = serde_json::from_str(&json).unwrap();
         assert_eq!(quat_de, quat);

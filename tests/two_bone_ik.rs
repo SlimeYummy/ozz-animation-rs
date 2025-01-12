@@ -100,12 +100,12 @@ where
             let mut locals_mut = locals.borrow_mut();
 
             let idx = start_joint as usize;
-            let quat = locals_mut[idx / 4].rotation.col(idx & 3) * ik_job.start_joint_correction();
-            locals_mut[idx / 4].rotation.set_col(idx & 3, quat);
+            let quat = locals_mut[idx / 4].rotation.quat(idx & 3) * ik_job.start_joint_correction();
+            locals_mut[idx / 4].rotation.set_quat(idx & 3, quat);
 
             let idx = mid_joint as usize;
-            let quat = locals_mut[idx / 4].rotation.col(idx & 3) * ik_job.mid_joint_correction();
-            locals_mut[idx / 4].rotation.set_col(idx & 3, quat);
+            let quat = locals_mut[idx / 4].rotation.quat(idx & 3) * ik_job.mid_joint_correction();
+            locals_mut[idx / 4].rotation.set_quat(idx & 3, quat);
         }
 
         l2m_job2.set_from(start_joint as i32);

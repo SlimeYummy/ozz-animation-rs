@@ -47,6 +47,8 @@
 
 #![feature(portable_simd)]
 
+#![allow(unexpected_cfgs)] // TODO: Upgrade rkyv to 0.8
+
 pub mod animation;
 pub mod archive;
 pub mod base;
@@ -75,7 +77,7 @@ pub use blending_job::{BlendingContext, BlendingJob, BlendingJobArc, BlendingJob
 pub use ik_aim_job::IKAimJob;
 pub use ik_two_bone_job::IKTwoBoneJob;
 pub use local_to_model_job::{LocalToModelJob, LocalToModelJobArc, LocalToModelJobRc, LocalToModelJobRef};
-pub use math::{SoaMat4, SoaQuat, SoaTransform, SoaVec3};
+pub use math::{SoaQuat, SoaTransform, SoaVec3};
 pub use sampling_job::{
     InterpSoaFloat3, InterpSoaQuaternion, SamplingContext, SamplingJob, SamplingJobArc, SamplingJobRc, SamplingJobRef,
 };

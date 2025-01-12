@@ -332,14 +332,7 @@ mod local_to_model_tests {
         //  |  / \
         // j2 j4 j5
         Rc::new(Skeleton::from_raw(&SkeletonRaw {
-            joint_rest_poses: vec![
-                SoaTransform {
-                    translation: SoaVec3::splat_col([0.0; 3]),
-                    rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
-                    scale: SoaVec3::splat_col([0.0; 3]),
-                };
-                2
-            ],
+            joint_rest_poses: vec![SoaTransform::IDENTITY; 2],
             joint_names: {
                 let mut map = JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new());
                 map.insert("j0".into(), 0);
@@ -391,14 +384,7 @@ mod local_to_model_tests {
         //     |
         //    j5
         Rc::new(Skeleton::from_raw(&SkeletonRaw {
-            joint_rest_poses: vec![
-                SoaTransform {
-                    translation: SoaVec3::splat_col([0.0; 3]),
-                    rotation: SoaQuat::splat_col([0.0, 0.0, 0.0, 1.0]),
-                    scale: SoaVec3::splat_col([0.0; 3]),
-                };
-                2
-            ],
+            joint_rest_poses: vec![SoaTransform::IDENTITY; 2],
             joint_names: {
                 let mut map = JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new());
                 map.insert("j0".into(), 0);
