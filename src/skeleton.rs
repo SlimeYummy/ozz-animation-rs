@@ -171,7 +171,7 @@ impl Skeleton {
         let mut skeleton = Skeleton {
             size: 0,
             num_joints: meta.num_joints,
-            num_soa_joints: ((meta.num_joints + 3) / 4),
+            num_soa_joints: meta.num_joints.div_ceil(4),
             joint_rest_poses: std::ptr::null_mut(),
             joint_parents: std::ptr::null_mut(),
             joint_names: BiHashMap::with_capacity_and_hashers(

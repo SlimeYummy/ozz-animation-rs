@@ -60,7 +60,7 @@ impl QuaternionKey {
 
     #[inline]
     fn unpack(&self) -> (u16, u16, [u32; 3]) {
-        let packed: u32 = (self.0[0] as u32) >> 3 | (self.0[1] as u32) << 13 | (self.0[2] as u32) << 29;
+        let packed: u32 = ((self.0[0] as u32) >> 3) | ((self.0[1] as u32) << 13) | ((self.0[2] as u32) << 29);
         let bigest = self.0[0] & 0x3;
         let sign = (self.0[0] >> 2) & 0x1;
         let value = [packed & 0x7fff, (packed >> 15) & 0x7fff, (self.0[2] as u32) >> 1];
@@ -639,7 +639,7 @@ impl Animation {
     /// This value is useful to allocate SoA runtime data structures.
     #[inline]
     pub fn num_soa_tracks(&self) -> usize {
-        ((self.num_tracks as usize) + 3) / 4
+        (self.num_tracks as usize).div_ceil(4)
     }
 
     /// Gets animation name.

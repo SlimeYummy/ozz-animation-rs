@@ -26,10 +26,10 @@ pub enum OzzError {
 
     /// Std io errors.
     #[error("IO error: {0}")]
-    IO(#[from] std::io::Error),
+    IO(std::io::ErrorKind),
     /// Std string errors.
-    #[error("Utf8 error: {0}")]
-    Utf8(#[from] std::str::Utf8Error),
+    #[error("Utf8 error: valid_up_to {0}")]
+    Utf8(u32),
 
     /// Read ozz archive tag error.
     #[error("Invalid tag")]
@@ -38,17 +38,24 @@ pub enum OzzError {
     #[error("Invalid version")]
     InvalidVersion,
 
-    /// Custom errors.
-    /// Ozz-animation-rs does not generate this error (except test & nodejs), but you can use it in your own code.
-    #[error("Custom error: {0}")]
-    Custom(Box<String>),
+    /// Unexcepted error.
+    #[error("Unexcepted error")]
+    Unexcepted,
+}
+
+impl From<std::io::Error> for OzzError {
+    fn from(err: std::io::Error) -> Self {
+        OzzError::IO(err.kind())
+    }
+}
+
+impl From<std::str::Utf8Error> for OzzError {
+    fn from(err: std::str::Utf8Error) -> Self {
+        OzzError::Utf8(err.valid_up_to() as u32)
+    }
 }
 
 impl OzzError {
-    pub fn custom<S: ToString>(s: S) -> OzzError {
-        OzzError::Custom(Box::new(s.to_string()))
-    }
-
     pub fn is_lock_poison(&self) -> bool {
         matches!(self, OzzError::LockPoison)
     }
@@ -73,8 +80,8 @@ impl OzzError {
         matches!(self, OzzError::InvalidVersion)
     }
 
-    pub fn is_custom(&self) -> bool {
-        matches!(self, OzzError::Custom(_))
+    pub fn is_unexcepted(&self) -> bool {
+        matches!(self, OzzError::Unexcepted)
     }
 }
 

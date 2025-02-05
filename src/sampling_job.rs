@@ -288,9 +288,9 @@ impl SamplingContext {
     /// * `max_tracks` - The maximum number of tracks that the context can handle.
     pub fn new(max_tracks: usize) -> SamplingContext {
         const ALIGN: usize = mem::size_of::<f32x4>();
-        let max_soa_tracks = (max_tracks + 3) / 4;
+        let max_soa_tracks = max_tracks.div_ceil(4);
         let max_tracks = max_soa_tracks * 4;
-        let max_outdated = (max_soa_tracks + 7) / 8;
+        let max_outdated = max_soa_tracks.div_ceil(8);
         let translation_size = mem::size_of::<InterpSoaFloat3>() * max_soa_tracks
             + mem::size_of::<i32>() * max_tracks
             + mem::size_of::<u8>() * max_outdated;
@@ -1227,7 +1227,7 @@ where
 
     #[inline]
     fn outdate_cache(outdated: &mut [u8], num_soa_tracks: usize) {
-        let num_outdated_flags = (num_soa_tracks + 7) / 8;
+        let num_outdated_flags = num_soa_tracks.div_ceil(8);
         let mut i = 0;
         while i < num_outdated_flags - 1 {
             outdated[i] = 0xFF;
@@ -1395,7 +1395,7 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
 
     #[inline]
     fn load(input: &[u8]) -> u32 {
-        input[0] as u32 | (input[1] as u32) << 8 | (input[2] as u32) << 16 | (input[3] as u32) << 24
+        input[0] as u32 | ((input[1] as u32) << 8) | ((input[2] as u32) << 16) | ((input[3] as u32) << 24)
     }
 
     let mut in_buf = &buffer[1..];

@@ -46,7 +46,6 @@
 //!
 
 #![feature(portable_simd)]
-
 #![allow(unexpected_cfgs)] // TODO: Upgrade rkyv to 0.8
 
 pub mod animation;
