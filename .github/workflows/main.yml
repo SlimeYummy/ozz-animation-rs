@@ -25,3 +25,11 @@ jobs:
       run: cargo build --release
     - name: Run tests
       run: cargo test --release
+      
+  build-demo:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cd ./demo && cargo build --release
