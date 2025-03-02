@@ -38,6 +38,10 @@ pub enum OzzError {
     #[error("Invalid version")]
     InvalidVersion,
 
+    /// Invalid repr.
+    #[error("Invalid repr")]
+    InvalidRepr,
+
     /// Unexcepted error.
     #[error("Unexcepted error")]
     Unexcepted,
@@ -78,6 +82,10 @@ impl OzzError {
 
     pub fn is_invalid_version(&self) -> bool {
         matches!(self, OzzError::InvalidVersion)
+    }
+
+    pub fn is_invalid_repr(&self) -> bool {
+        matches!(self, OzzError::InvalidRepr)
     }
 
     pub fn is_unexcepted(&self) -> bool {
@@ -445,4 +453,38 @@ pub type OzzArcBuf<T> = Arc<RwLock<Vec<T>>>;
 #[inline]
 pub fn ozz_arc_buf<T>(v: Vec<T>) -> OzzArcBuf<T> {
     Arc::new(RwLock::new(v))
+}
+
+#[cfg(feature = "rkyv")]
+pub(crate) trait SliceRkyvExt<T, D>
+where
+    T: rkyv::Archive,
+    T::Archived: rkyv::Deserialize<T, D>,
+    D: rkyv::rancor::Fallible + ?Sized,
+{
+    fn copy_from_deserialize(
+        &mut self,
+        deserializer: &mut D,
+        avec: &rkyv::vec::ArchivedVec<T::Archived>,
+    ) -> Result<(), D::Error>;
+}
+
+impl<T, D> SliceRkyvExt<T, D> for [T]
+where
+    T: rkyv::Archive,
+    T::Archived: rkyv::Deserialize<T, D>,
+    D: rkyv::rancor::Fallible + ?Sized,
+{
+    #[inline(always)]
+    fn copy_from_deserialize(
+        &mut self,
+        deserializer: &mut D,
+        avec: &rkyv::vec::ArchivedVec<T::Archived>,
+    ) -> Result<(), D::Error> {
+        use rkyv::Deserialize;
+        for (i, item) in avec.iter().enumerate() {
+            self[i] = item.deserialize(deserializer)?;
+        }
+        Ok(())
+    }
 }
