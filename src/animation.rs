@@ -857,40 +857,45 @@ impl Animation {
 }
 
 #[cfg(feature = "rkyv")]
+#[repr(C)]
+#[derive(rkyv::Portable)]
 pub struct ArchivedAnimation {
-    pub duration: f32,
-    pub num_tracks: u32,
+    pub duration: rkyv::primitive::ArchivedF32,
+    pub num_tracks: rkyv::primitive::ArchivedU32,
     pub name: rkyv::string::ArchivedString,
-    pub timepoints: rkyv::vec::ArchivedVec<f32>,
+    pub timepoints: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedF32>,
 
     pub translations: rkyv::vec::ArchivedVec<ArchivedFloat3Key>,
-    pub t_ratios: rkyv::vec::ArchivedVec<u16>,
-    pub t_previouses: rkyv::vec::ArchivedVec<u16>,
-    pub t_iframe_interval: f32,
+    pub t_ratios: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU16>,
+    pub t_previouses: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU16>,
+    pub t_iframe_interval: rkyv::primitive::ArchivedF32,
     pub t_iframe_entries: rkyv::vec::ArchivedVec<u8>,
-    pub t_iframe_desc: rkyv::vec::ArchivedVec<u32>,
+    pub t_iframe_desc: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU32>,
 
     pub rotations: rkyv::vec::ArchivedVec<ArchivedQuaternionKey>,
-    pub r_ratios: rkyv::vec::ArchivedVec<u16>,
-    pub r_previouses: rkyv::vec::ArchivedVec<u16>,
-    pub r_iframe_interval: f32,
+    pub r_ratios: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU16>,
+    pub r_previouses: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU16>,
+    pub r_iframe_interval: rkyv::primitive::ArchivedF32,
     pub r_iframe_entries: rkyv::vec::ArchivedVec<u8>,
-    pub r_iframe_desc: rkyv::vec::ArchivedVec<u32>,
+    pub r_iframe_desc: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU32>,
 
     pub scales: rkyv::vec::ArchivedVec<ArchivedFloat3Key>,
-    pub s_ratios: rkyv::vec::ArchivedVec<u16>,
-    pub s_previouses: rkyv::vec::ArchivedVec<u16>,
-    pub s_iframe_interval: f32,
+    pub s_ratios: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU16>,
+    pub s_previouses: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU16>,
+    pub s_iframe_interval: rkyv::primitive::ArchivedF32,
     pub s_iframe_entries: rkyv::vec::ArchivedVec<u8>,
-    pub s_iframe_desc: rkyv::vec::ArchivedVec<u32>,
+    pub s_iframe_desc: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU32>,
 }
 
 #[cfg(feature = "rkyv")]
 const _: () = {
-    use rkyv::ser::{ScratchSpace, Serializer};
+    use crate::base::SliceRkyvExt;
+    use rkyv::munge::munge;
+    use rkyv::rancor::{Fallible, Source};
+    use rkyv::ser::{Allocator, Writer};
     use rkyv::string::{ArchivedString, StringResolver};
     use rkyv::vec::{ArchivedVec, VecResolver};
-    use rkyv::{from_archived, out_field, Archive, Deserialize, Fallible, Serialize};
+    use rkyv::{Archive, Deserialize, Place, Serialize};
 
     pub struct AnimationResolver {
         name: StringResolver,
@@ -919,58 +924,67 @@ const _: () = {
         type Archived = ArchivedAnimation;
         type Resolver = AnimationResolver;
 
-        unsafe fn resolve(&self, pos: usize, resolver: AnimationResolver, out: *mut ArchivedAnimation) {
-            let (fp, fo) = out_field!(out.duration);
-            f32::resolve(&self.duration, pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.num_tracks);
-            u32::resolve(&self.num_tracks, pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.name);
-            String::resolve(&self.name, pos + fp, resolver.name, fo);
-            let (fp, fo) = out_field!(out.timepoints);
-            ArchivedVec::resolve_from_slice(self.timepoints(), pos + fp, resolver.timepoints, fo);
+        fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+            munge!(
+                let ArchivedAnimation {
+                    duration,
+                    num_tracks,
+                    name,
+                    timepoints,
+                    translations,
+                    t_ratios,
+                    t_previouses,
+                    t_iframe_interval,
+                    t_iframe_entries,
+                    t_iframe_desc,
+                    rotations,
+                    r_ratios,
+                    r_previouses,
+                    r_iframe_interval,
+                    r_iframe_entries,
+                    r_iframe_desc,
+                    scales,
+                    s_ratios,
+                    s_previouses,
+                    s_iframe_interval,
+                    s_iframe_entries,
+                    s_iframe_desc,
+                } = out
+            );
 
-            let (fp, fo) = out_field!(out.translations);
-            ArchivedVec::resolve_from_slice(self.translations(), pos + fp, resolver.translations, fo);
-            let (fp, fo) = out_field!(out.t_ratios);
-            ArchivedVec::resolve_from_slice(self.t_ratios(), pos + fp, resolver.t_ratios, fo);
-            let (fp, fo) = out_field!(out.t_previouses);
-            ArchivedVec::resolve_from_slice(self.t_previouses(), pos + fp, resolver.t_previouses, fo);
-            let (fp, fo) = out_field!(out.t_iframe_interval);
-            f32::resolve(&self.t_iframe_interval, pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.t_iframe_entries);
-            ArchivedVec::resolve_from_slice(self.t_iframe_entries(), pos + fp, resolver.t_iframe_entries, fo);
-            let (fp, fo) = out_field!(out.t_iframe_desc);
-            ArchivedVec::resolve_from_slice(self.t_iframe_desc(), pos + fp, resolver.t_iframe_desc, fo);
+            self.duration.resolve((), duration);
+            self.num_tracks.resolve((), num_tracks);
+            self.name.resolve(resolver.name, name);
+            ArchivedVec::resolve_from_slice(self.timepoints(), resolver.timepoints, timepoints);
 
-            let (fp, fo) = out_field!(out.rotations);
-            ArchivedVec::resolve_from_slice(self.rotations(), pos + fp, resolver.rotations, fo);
-            let (fp, fo) = out_field!(out.r_ratios);
-            ArchivedVec::resolve_from_slice(self.r_ratios(), pos + fp, resolver.r_ratios, fo);
-            let (fp, fo) = out_field!(out.r_previouses);
-            ArchivedVec::resolve_from_slice(self.r_previouses(), pos + fp, resolver.r_previouses, fo);
-            let (fp, fo) = out_field!(out.r_iframe_interval);
-            f32::resolve(&self.r_iframe_interval, pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.r_iframe_entries);
-            ArchivedVec::resolve_from_slice(self.r_iframe_entries(), pos + fp, resolver.r_iframe_entries, fo);
-            let (fp, fo) = out_field!(out.r_iframe_desc);
-            ArchivedVec::resolve_from_slice(self.r_iframe_desc(), pos + fp, resolver.r_iframe_desc, fo);
+            ArchivedVec::resolve_from_slice(self.translations(), resolver.translations, translations);
+            ArchivedVec::resolve_from_slice(self.t_ratios(), resolver.t_ratios, t_ratios);
+            ArchivedVec::resolve_from_slice(self.t_previouses(), resolver.t_previouses, t_previouses);
+            self.t_iframe_interval.resolve((), t_iframe_interval);
+            ArchivedVec::resolve_from_slice(self.t_iframe_entries(), resolver.t_iframe_entries, t_iframe_entries);
+            ArchivedVec::resolve_from_slice(self.t_iframe_desc(), resolver.t_iframe_desc, t_iframe_desc);
 
-            let (fp, fo) = out_field!(out.scales);
-            ArchivedVec::resolve_from_slice(self.scales(), pos + fp, resolver.scales, fo);
-            let (fp, fo) = out_field!(out.s_ratios);
-            ArchivedVec::resolve_from_slice(self.s_ratios(), pos + fp, resolver.s_ratios, fo);
-            let (fp, fo) = out_field!(out.s_previouses);
-            ArchivedVec::resolve_from_slice(self.s_previouses(), pos + fp, resolver.s_previouses, fo);
-            let (fp, fo) = out_field!(out.s_iframe_interval);
-            f32::resolve(&self.s_iframe_interval, pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.s_iframe_entries);
-            ArchivedVec::resolve_from_slice(self.s_iframe_entries(), pos + fp, resolver.s_iframe_entries, fo);
-            let (fp, fo) = out_field!(out.s_iframe_desc);
-            ArchivedVec::resolve_from_slice(self.s_iframe_desc(), pos + fp, resolver.s_iframe_desc, fo);
+            ArchivedVec::resolve_from_slice(self.rotations(), resolver.rotations, rotations);
+            ArchivedVec::resolve_from_slice(self.r_ratios(), resolver.r_ratios, r_ratios);
+            ArchivedVec::resolve_from_slice(self.r_previouses(), resolver.r_previouses, r_previouses);
+            self.r_iframe_interval.resolve((), r_iframe_interval);
+            ArchivedVec::resolve_from_slice(self.r_iframe_entries(), resolver.r_iframe_entries, r_iframe_entries);
+            ArchivedVec::resolve_from_slice(self.r_iframe_desc(), resolver.r_iframe_desc, r_iframe_desc);
+
+            ArchivedVec::resolve_from_slice(self.scales(), resolver.scales, scales);
+            ArchivedVec::resolve_from_slice(self.s_ratios(), resolver.s_ratios, s_ratios);
+            ArchivedVec::resolve_from_slice(self.s_previouses(), resolver.s_previouses, s_previouses);
+            self.s_iframe_interval.resolve((), s_iframe_interval);
+            ArchivedVec::resolve_from_slice(self.s_iframe_entries(), resolver.s_iframe_entries, s_iframe_entries);
+            ArchivedVec::resolve_from_slice(self.s_iframe_desc(), resolver.s_iframe_desc, s_iframe_desc);
         }
     }
 
-    impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for Animation {
+    impl<S> Serialize<S> for Animation
+    where
+        S: Fallible + Allocator + Writer + ?Sized,
+        S::Error: Source,
+    {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
             Ok(AnimationResolver {
                 name: ArchivedString::serialize_from_str(&self.name, serializer)?,
@@ -996,73 +1010,77 @@ const _: () = {
 
     impl<D: Fallible + ?Sized> Deserialize<Animation, D> for ArchivedAnimation {
         #[inline]
-        fn deserialize(&self, _: &mut D) -> Result<Animation, D::Error> {
-            let archived = from_archived!(self);
+        fn deserialize(&self, deserializer: &mut D) -> Result<Animation, D::Error> {
             let mut animation = Animation::new(AnimationMeta {
                 version: Animation::version(),
-                duration: archived.duration,
-                num_tracks: archived.num_tracks,
-                name: archived.name.to_string(),
-                timepoints_count: archived.timepoints.len() as u32,
-                translations_count: archived.translations.len() as u32,
-                t_iframe_entries_count: archived.t_iframe_entries.len() as u32,
-                t_iframe_desc_count: archived.t_iframe_desc.len() as u32,
-                rotations_count: archived.rotations.len() as u32,
-                r_iframe_entries_count: archived.r_iframe_entries.len() as u32,
-                r_iframe_desc_count: archived.r_iframe_desc.len() as u32,
-                scales_count: archived.scales.len() as u32,
-                s_iframe_entries_count: archived.s_iframe_entries.len() as u32,
-                s_iframe_desc_count: archived.s_iframe_desc.len() as u32,
+                duration: self.duration.into(),
+                num_tracks: self.num_tracks.into(),
+                name: self.name.to_string(),
+                timepoints_count: self.timepoints.len() as u32,
+                translations_count: self.translations.len() as u32,
+                t_iframe_entries_count: self.t_iframe_entries.len() as u32,
+                t_iframe_desc_count: self.t_iframe_desc.len() as u32,
+                rotations_count: self.rotations.len() as u32,
+                r_iframe_entries_count: self.r_iframe_entries.len() as u32,
+                r_iframe_desc_count: self.r_iframe_desc.len() as u32,
+                scales_count: self.scales.len() as u32,
+                s_iframe_entries_count: self.s_iframe_entries.len() as u32,
+                s_iframe_desc_count: self.s_iframe_desc.len() as u32,
             });
 
             animation
                 .timepoints_mut()
-                .copy_from_slice(archived.timepoints.as_slice());
-
-            for (idx, t) in archived.translations.iter().enumerate() {
-                animation.translations_mut()[idx] = Float3Key(t.0);
-            }
-            animation.t_ratios_mut().copy_from_slice(archived.t_ratios.as_slice());
+                .copy_from_deserialize(deserializer, &self.timepoints)?;
+            animation
+                .translations_mut()
+                .copy_from_deserialize(deserializer, &self.translations)?;
+            animation
+                .t_ratios_mut()
+                .copy_from_deserialize(deserializer, &self.t_ratios)?;
             animation
                 .t_previouses_mut()
-                .copy_from_slice(archived.t_previouses.as_slice());
+                .copy_from_deserialize(deserializer, &self.t_previouses)?;
             animation
                 .t_iframe_entries_mut()
-                .copy_from_slice(archived.t_iframe_entries.as_slice());
+                .copy_from_deserialize(deserializer, &self.t_iframe_entries)?;
             animation
                 .t_iframe_desc_mut()
-                .copy_from_slice(archived.t_iframe_desc.as_slice());
-            animation.t_iframe_interval = archived.t_iframe_interval;
+                .copy_from_deserialize(deserializer, &self.t_iframe_desc)?;
+            animation.t_iframe_interval = self.t_iframe_interval.to_native();
 
-            for (idx, r) in archived.rotations.iter().enumerate() {
-                animation.rotations_mut()[idx] = QuaternionKey(r.0);
-            }
-            animation.r_ratios_mut().copy_from_slice(archived.r_ratios.as_slice());
+            animation
+                .rotations_mut()
+                .copy_from_deserialize(deserializer, &self.rotations)?;
+            animation
+                .r_ratios_mut()
+                .copy_from_deserialize(deserializer, &self.r_ratios)?;
             animation
                 .r_previouses_mut()
-                .copy_from_slice(archived.r_previouses.as_slice());
+                .copy_from_deserialize(deserializer, &self.r_previouses)?;
             animation
                 .r_iframe_entries_mut()
-                .copy_from_slice(archived.r_iframe_entries.as_slice());
+                .copy_from_deserialize(deserializer, &self.r_iframe_entries)?;
             animation
                 .r_iframe_desc_mut()
-                .copy_from_slice(archived.r_iframe_desc.as_slice());
-            animation.r_iframe_interval = archived.r_iframe_interval;
+                .copy_from_deserialize(deserializer, &self.r_iframe_desc)?;
+            animation.r_iframe_interval = self.r_iframe_interval.to_native();
 
-            for (idx, s) in archived.scales.iter().enumerate() {
-                animation.scales_mut()[idx] = Float3Key(s.0);
-            }
-            animation.s_ratios_mut().copy_from_slice(archived.s_ratios.as_slice());
+            animation
+                .scales_mut()
+                .copy_from_deserialize(deserializer, &self.scales)?;
+            animation
+                .s_ratios_mut()
+                .copy_from_deserialize(deserializer, &self.s_ratios)?;
             animation
                 .s_previouses_mut()
-                .copy_from_slice(archived.s_previouses.as_slice());
+                .copy_from_deserialize(deserializer, &self.s_previouses)?;
             animation
                 .s_iframe_entries_mut()
-                .copy_from_slice(archived.s_iframe_entries.as_slice());
+                .copy_from_deserialize(deserializer, &self.s_iframe_entries)?;
             animation
                 .s_iframe_desc_mut()
-                .copy_from_slice(archived.s_iframe_desc.as_slice());
-            animation.s_iframe_interval = archived.s_iframe_interval;
+                .copy_from_deserialize(deserializer, &self.s_iframe_desc)?;
+            animation.s_iframe_interval = self.s_iframe_interval.to_native();
 
             Ok(animation)
         }
@@ -1241,16 +1259,12 @@ mod tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_rkyv_animation() {
-        use rkyv::ser::Serializer;
-        use rkyv::Deserialize;
+        use rkyv::rancor::Error;
 
         let animation = Animation::from_path("./resource/playback/animation.ozz").unwrap();
-        let mut serializer = rkyv::ser::serializers::AllocSerializer::<30720>::default();
-        serializer.serialize_value(&animation).unwrap();
-        let buf = serializer.into_serializer().into_inner();
-        let archived = unsafe { rkyv::archived_root::<Animation>(&buf) };
-        let mut deserializer = rkyv::Infallible;
-        let animation2: Animation = archived.deserialize(&mut deserializer).unwrap();
+        let buf = rkyv::to_bytes::<Error>(&animation).unwrap();
+        let archived = unsafe { rkyv::access_unchecked::<ArchivedAnimation>(&buf) };
+        let animation2: Animation = rkyv::deserialize::<_, Error>(archived).unwrap();
 
         assert_eq!(animation.duration(), animation2.duration());
         assert_eq!(animation.num_tracks(), animation2.num_tracks());

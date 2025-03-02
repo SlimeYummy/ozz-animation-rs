@@ -66,22 +66,29 @@ pub fn compare_with_cpp(folder: &str, name: &str, data: &[Mat4], diff: f32) -> R
 #[cfg(not(feature = "wasm"))]
 pub fn compare_with_rkyv<T>(folder: &str, name: &str, data: &T) -> Result<(), Box<dyn Error>>
 where
-    T: PartialEq + rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<30720>>,
-    T::Archived: rkyv::Deserialize<T, rkyv::Infallible>,
+    T: PartialEq
+        + for<'a> rkyv::Serialize<
+            rkyv::api::high::HighSerializer<
+                rkyv::util::AlignedVec,
+                rkyv::ser::allocator::ArenaHandle<'a>,
+                rkyv::rancor::Error,
+            >,
+        >,
+    T::Archived: rkyv::Deserialize<T, rkyv::api::high::HighDeserializer<rkyv::rancor::Error>>,
 {
     use miniz_oxide::deflate::compress_to_vec;
     use miniz_oxide::inflate::decompress_to_vec;
+    use rkyv::rancor::Error;
     use rkyv::ser::Serializer;
-    use rkyv::{AlignedVec, Deserialize};
+    use rkyv::util::AlignedVec;
+    use rkyv::Deserialize;
 
     fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
     fs::create_dir_all(format!("./output/{}", folder)).unwrap();
 
     let to_expected = env::var("SAVE_TO_EXPECTED").is_ok();
 
-    let mut serializer = rkyv::ser::serializers::AllocSerializer::<30720>::default();
-    serializer.serialize_value(data)?;
-    let current_buf = serializer.into_serializer().into_inner();
+    let current_buf = rkyv::to_bytes(data)?;
     let wbuf = compress_to_vec(&current_buf, 6);
     let path = if to_expected {
         format!("./expected/{0}/{1}.rkyv", folder, name)
@@ -98,12 +105,11 @@ where
         let mut rbuf = Vec::with_capacity(size as usize);
         file.read_to_end(&mut rbuf)?;
         let unaligned_buf = decompress_to_vec(&rbuf).map_err(|e| e.to_string())?;
-        let mut expected_buf = AlignedVec::new();
+        let mut expected_buf = AlignedVec::<32>::new();
         expected_buf.extend_from_slice(&unaligned_buf);
 
-        let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
-        let mut deserializer = rkyv::Infallible;
-        let expected = archived.deserialize(&mut deserializer)?;
+        let archived = unsafe { rkyv::access_unchecked::<T::Archived>(&expected_buf) };
+        let expected = rkyv::deserialize::<_, Error>(archived)?;
         if data != &expected {
             return Err(format!("compare_with_rkyv({})", path).into());
         }
@@ -115,21 +121,31 @@ where
 #[cfg(all(feature = "wasm", feature = "nodejs"))]
 pub fn compare_with_rkyv<T>(folder: &str, name: &str, data: &T) -> Result<(), Box<dyn Error>>
 where
-    T: PartialEq + rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<30720>>,
-    T::Archived: rkyv::Deserialize<T, rkyv::Infallible>,
+    T: PartialEq
+        + for<'a> rkyv::Serialize<
+            rkyv::api::high::HighSerializer<
+                rkyv::util::AlignedVec,
+                rkyv::ser::allocator::ArenaHandle<'a>,
+                rkyv::rancor::Error,
+            >,
+        >,
+    T::Archived: rkyv::Deserialize<T, rkyv::api::high::HighDeserializer<rkyv::rancor::Error>>,
 {
+    use miniz_oxide::deflate::compress_to_vec;
     use miniz_oxide::inflate::decompress_to_vec;
-    use rkyv::{AlignedVec, Deserialize};
+    use rkyv::rancor::Error;
+    use rkyv::ser::Serializer;
+    use rkyv::util::AlignedVec;
+    use rkyv::Deserialize;
 
     let path = format!("./expected/{0}/{1}.rkyv", folder, name);
     let rbuf = nodejs::read_file(&path).map_err(|e| String::from(e.to_string()))?;
     let unaligned_buf = decompress_to_vec(&rbuf).map_err(|e| e.to_string())?;
-    let mut expected_buf = AlignedVec::new();
+    let mut expected_buf = AlignedVec::<32>::new();
     expected_buf.extend_from_slice(&unaligned_buf);
 
-    let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
-    let mut deserializer = rkyv::Infallible::default();
-    let expected = archived.deserialize(&mut deserializer)?;
+    let archived = unsafe { rkyv::access_unchecked::<T::Archived>(&expected_buf) };
+    let expected = rkyv::deserialize::<_, Error>(archived)?;
     if data != &expected {
         return Err(format!("compare_with_rkyv({})", path).into());
     }
@@ -145,8 +161,14 @@ pub fn compare_with_rkyv<T>(_folder: &str, _name: &str, _data: &T) -> Result<(),
 #[cfg(not(feature = "wasm"))]
 pub fn save_rkyv<T>(folder: &str, name: &str, data: &T, to_expected: bool) -> Result<(), Box<dyn Error>>
 where
-    T: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<30720>>,
-    T::Archived: rkyv::Deserialize<T, rkyv::Infallible>,
+    T: for<'a> rkyv::Serialize<
+        rkyv::api::high::HighSerializer<
+            rkyv::util::AlignedVec,
+            rkyv::ser::allocator::ArenaHandle<'a>,
+            rkyv::rancor::Error,
+        >,
+    >,
+    T::Archived: rkyv::Deserialize<T, rkyv::api::high::HighDeserializer<rkyv::rancor::Error>>,
 {
     use miniz_oxide::deflate::compress_to_vec;
     use rkyv::ser::Serializer;
@@ -154,9 +176,7 @@ where
     fs::create_dir_all(format!("./expected/{}", folder)).unwrap();
     fs::create_dir_all(format!("./output/{}", folder)).unwrap();
 
-    let mut serializer = rkyv::ser::serializers::AllocSerializer::<30720>::default();
-    serializer.serialize_value(data)?;
-    let current_buf = serializer.into_serializer().into_inner();
+    let current_buf = rkyv::to_bytes(data)?;
     let wbuf = compress_to_vec(&current_buf, 6);
     let path = if to_expected {
         format!("./expected/{0}/{1}.rkyv", folder, name)
@@ -177,11 +197,19 @@ pub fn save_rkyv<T>(_folder: &str, _name: &str, _data: &T, _to_expected: bool) -
 #[cfg(not(feature = "wasm"))]
 pub fn load_rkyv<T>(folder: &str, name: &str) -> Result<T, Box<dyn Error>>
 where
-    T: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<30720>>,
-    T::Archived: rkyv::Deserialize<T, rkyv::Infallible>,
+    T: for<'a> rkyv::Serialize<
+        rkyv::api::high::HighSerializer<
+            rkyv::util::AlignedVec,
+            rkyv::ser::allocator::ArenaHandle<'a>,
+            rkyv::rancor::Error,
+        >,
+    >,
+    T::Archived: rkyv::Deserialize<T, rkyv::api::high::HighDeserializer<rkyv::rancor::Error>>,
 {
     use miniz_oxide::inflate::decompress_to_vec;
-    use rkyv::{AlignedVec, Deserialize};
+    use rkyv::rancor::Error;
+    use rkyv::util::AlignedVec;
+    use rkyv::Deserialize;
 
     let path = format!("./expected/{0}/{1}.rkyv", folder, name);
     let mut file = File::open(&path)?;
@@ -189,12 +217,11 @@ where
     let mut rbuf = Vec::with_capacity(size as usize);
     file.read_to_end(&mut rbuf)?;
     let unaligned_buf = decompress_to_vec(&rbuf).map_err(|e| e.to_string())?;
-    let mut expected_buf = AlignedVec::new();
+    let mut expected_buf = AlignedVec::<32>::new();
     expected_buf.extend_from_slice(&unaligned_buf);
 
-    let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
-    let mut deserializer = rkyv::Infallible;
-    let data = archived.deserialize(&mut deserializer)?;
+    let archived = unsafe { rkyv::access_unchecked::<T::Archived>(&expected_buf) };
+    let data = rkyv::deserialize::<_, Error>(archived)?;
     Ok(data)
 }
 
@@ -202,21 +229,28 @@ where
 #[cfg(all(feature = "wasm", feature = "nodejs"))]
 pub fn load_rkyv<T>(folder: &str, name: &str) -> Result<T, Box<dyn Error>>
 where
-    T: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<30720>>,
-    T::Archived: rkyv::Deserialize<T, rkyv::Infallible>,
+    T: for<'a> rkyv::Serialize<
+        rkyv::api::high::HighSerializer<
+            rkyv::util::AlignedVec,
+            rkyv::ser::allocator::ArenaHandle<'a>,
+            rkyv::rancor::Error,
+        >,
+    >,
+    T::Archived: rkyv::Deserialize<T, rkyv::api::high::HighDeserializer<rkyv::rancor::Error>>,
 {
     use miniz_oxide::inflate::decompress_to_vec;
-    use rkyv::{AlignedVec, Deserialize};
+    use rkyv::rancor::Error;
+    use rkyv::util::AlignedVec;
+    use rkyv::Deserialize;
 
     let path = format!("./expected/{0}/{1}.rkyv", folder, name);
     let rbuf = nodejs::read_file(&path).map_err(|e| String::from(e.to_string()))?;
     let unaligned_buf = decompress_to_vec(&rbuf).map_err(|e| e.to_string())?;
-    let mut expected_buf = AlignedVec::new();
+    let mut expected_buf = AlignedVec::<32>::new();
     expected_buf.extend_from_slice(&unaligned_buf);
 
-    let archived = unsafe { rkyv::archived_root::<T>(&expected_buf) };
-    let mut deserializer = rkyv::Infallible::default();
-    let data = archived.deserialize(&mut deserializer)?;
+    let archived = unsafe { rkyv::access_unchecked::<T::Archived>(&expected_buf) };
+    let data = rkyv::deserialize::<_, Error>(archived)?;
     Ok(data)
 }
 

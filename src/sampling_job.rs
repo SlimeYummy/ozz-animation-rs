@@ -26,17 +26,20 @@ pub struct InterpSoaFloat3 {
 
 #[cfg(feature = "rkyv")]
 const _: () = {
-    use bytecheck::CheckBytes;
-    use rkyv::{from_archived, to_archived, Archive, Deserialize, Fallible, Serialize};
-    use std::io::{Error, ErrorKind};
+    use rkyv::bytecheck::CheckBytes;
+    use rkyv::rancor::{fail, Fallible, Source};
+    use rkyv::traits::NoUndef;
+    use rkyv::{Archive, Deserialize, Place, Portable, Serialize};
+
+    unsafe impl NoUndef for InterpSoaFloat3 {}
+    unsafe impl Portable for InterpSoaFloat3 {}
 
     impl Archive for InterpSoaFloat3 {
         type Archived = InterpSoaFloat3;
         type Resolver = ();
 
-        #[inline]
-        unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
-            out.write(to_archived!(*self as Self));
+        fn resolve(&self, _: Self::Resolver, out: Place<Self::Archived>) {
+            out.write(*self)
         }
     }
 
@@ -50,19 +53,21 @@ const _: () = {
     impl<D: Fallible + ?Sized> Deserialize<InterpSoaFloat3, D> for InterpSoaFloat3 {
         #[inline]
         fn deserialize(&self, _: &mut D) -> Result<InterpSoaFloat3, D::Error> {
-            Ok(from_archived!(*self))
+            Ok(*self)
         }
     }
 
-    impl<C: ?Sized> CheckBytes<C> for InterpSoaFloat3 {
-        type Error = Error;
-
+    unsafe impl<C> CheckBytes<C> for InterpSoaFloat3
+    where
+        C: Fallible + ?Sized,
+        C::Error: Source,
+    {
         #[inline]
-        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+        unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
             if value as usize % mem::align_of::<InterpSoaFloat3>() != 0 {
-                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+                fail!(OzzError::InvalidRepr)
             }
-            Ok(&*value)
+            Ok(())
         }
     }
 };
@@ -79,17 +84,21 @@ pub struct InterpSoaQuaternion {
 
 #[cfg(feature = "rkyv")]
 const _: () = {
-    use bytecheck::CheckBytes;
-    use rkyv::{from_archived, to_archived, Archive, Deserialize, Fallible, Serialize};
-    use std::io::{Error, ErrorKind};
+    use rkyv::bytecheck::CheckBytes;
+    use rkyv::rancor::{fail, Fallible, Source};
+    use rkyv::traits::NoUndef;
+    use rkyv::{Archive, Deserialize, Place, Portable, Serialize};
+
+    unsafe impl NoUndef for InterpSoaQuaternion {}
+    unsafe impl Portable for InterpSoaQuaternion {}
 
     impl Archive for InterpSoaQuaternion {
         type Archived = InterpSoaQuaternion;
         type Resolver = ();
 
         #[inline]
-        unsafe fn resolve(&self, _: usize, _: Self::Resolver, out: *mut Self::Archived) {
-            out.write(to_archived!(*self as Self));
+        fn resolve(&self, _: Self::Resolver, out: Place<Self::Archived>) {
+            out.write(*self)
         }
     }
 
@@ -103,19 +112,21 @@ const _: () = {
     impl<D: Fallible + ?Sized> Deserialize<InterpSoaQuaternion, D> for InterpSoaQuaternion {
         #[inline]
         fn deserialize(&self, _: &mut D) -> Result<InterpSoaQuaternion, D::Error> {
-            Ok(from_archived!(*self))
+            Ok(*self)
         }
     }
 
-    impl<C: ?Sized> CheckBytes<C> for InterpSoaQuaternion {
-        type Error = Error;
-
+    unsafe impl<C> CheckBytes<C> for InterpSoaQuaternion
+    where
+        C: Fallible + ?Sized,
+        C::Error: Source,
+    {
         #[inline]
-        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+        unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
             if value as usize % mem::align_of::<InterpSoaQuaternion>() != 0 {
-                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+                fail!(OzzError::InvalidRepr)
             }
-            Ok(&*value)
+            Ok(())
         }
     }
 };
@@ -639,34 +650,37 @@ impl SamplingContext {
 }
 
 #[cfg(feature = "rkyv")]
+#[repr(C)]
+#[derive(rkyv::Portable)]
 pub struct ArchivedSamplingContext {
-    pub max_tracks: u32,
-    pub animation_id: u64,
-    pub ratio: f32,
+    pub animation_id: rkyv::primitive::ArchivedU64,
+    pub max_tracks: rkyv::primitive::ArchivedU32,
+    pub ratio: rkyv::primitive::ArchivedF32,
 
     pub translations: rkyv::vec::ArchivedVec<InterpSoaFloat3>,
-    pub translation_entries: rkyv::vec::ArchivedVec<u32>,
+    pub translation_entries: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU32>,
     pub translation_outdated: rkyv::vec::ArchivedVec<u8>,
-    pub translation_next: u32,
+    pub translation_next: rkyv::primitive::ArchivedU32,
 
     pub rotations: rkyv::vec::ArchivedVec<InterpSoaQuaternion>,
-    pub rotation_entries: rkyv::vec::ArchivedVec<u32>,
+    pub rotation_entries: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU32>,
     pub rotation_outdated: rkyv::vec::ArchivedVec<u8>,
-    pub rotation_next: u32,
+    pub rotation_next: rkyv::primitive::ArchivedU32,
 
     pub scales: rkyv::vec::ArchivedVec<InterpSoaFloat3>,
-    pub scale_entries: rkyv::vec::ArchivedVec<u32>,
+    pub scale_entries: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedU32>,
     pub scale_outdated: rkyv::vec::ArchivedVec<u8>,
-    pub scale_next: u32,
+    pub scale_next: rkyv::primitive::ArchivedU32,
 }
 
 #[cfg(feature = "rkyv")]
 const _: () = {
-    use bytecheck::CheckBytes;
-    use rkyv::ser::{ScratchSpace, Serializer};
+    use crate::base::SliceRkyvExt;
+    use rkyv::munge::munge;
+    use rkyv::rancor::{Fallible, Source};
+    use rkyv::ser::{Allocator, Writer, WriterExt};
     use rkyv::vec::{ArchivedVec, VecResolver};
-    use rkyv::{from_archived, out_field, Archive, Deserialize, Fallible, Serialize};
-    use std::io::{Error, ErrorKind};
+    use rkyv::{Archive, Deserialize, Place, Serialize};
 
     pub struct SamplingContextResolver {
         translations: VecResolver,
@@ -686,50 +700,61 @@ const _: () = {
         type Archived = ArchivedSamplingContext;
         type Resolver = SamplingContextResolver;
 
-        unsafe fn resolve(&self, pos: usize, resolver: SamplingContextResolver, out: *mut ArchivedSamplingContext) {
-            let (fp, fo) = out_field!(out.max_tracks);
-            usize::resolve(&self.max_tracks(), pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.animation_id);
-            u64::resolve(&self.animation_id(), pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.ratio);
-            f32::resolve(&self.ratio(), pos + fp, (), fo);
+        fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+            munge!(
+                let ArchivedSamplingContext {
+                    max_tracks,
+                    animation_id,
+                    ratio,
+                    translations,
+                    translation_entries,
+                    translation_outdated,
+                    translation_next,
+                    rotations,
+                    rotation_entries,
+                    rotation_outdated,
+                    rotation_next,
+                    scales,
+                    scale_entries,
+                    scale_outdated,
+                    scale_next,
+                } = out
+            );
 
-            let (fp, fo) = out_field!(out.translations);
-            ArchivedVec::resolve_from_slice(self.translations(), pos + fp, resolver.translations, fo);
-            let (fp, fo) = out_field!(out.rotations);
-            ArchivedVec::resolve_from_slice(self.rotations(), pos + fp, resolver.rotations, fo);
-            let (fp, fo) = out_field!(out.scales);
-            ArchivedVec::resolve_from_slice(self.scales(), pos + fp, resolver.scales, fo);
+            self.animation_id().resolve((), animation_id);
+            self.max_tracks().resolve((), max_tracks);
+            self.ratio().resolve((), ratio);
 
-            let (fp, fo) = out_field!(out.translation_entries);
-            ArchivedVec::resolve_from_slice(self.translation_entries(), pos + fp, resolver.translation_entries, fo);
-            let (fp, fo) = out_field!(out.rotation_entries);
-            ArchivedVec::resolve_from_slice(self.rotation_entries(), pos + fp, resolver.rotation_entries, fo);
-            let (fp, fo) = out_field!(out.scale_entries);
-            ArchivedVec::resolve_from_slice(self.scale_entries(), pos + fp, resolver.scale_entries, fo);
-
-            let (fp, fo) = out_field!(out.translation_outdated);
+            ArchivedVec::resolve_from_slice(self.translations(), resolver.translations, translations);
+            ArchivedVec::resolve_from_slice(
+                self.translation_entries(),
+                resolver.translation_entries,
+                translation_entries,
+            );
             ArchivedVec::resolve_from_slice(
                 self.translation_outdated(),
-                pos + fp,
                 resolver.translation_outdateds,
-                fo,
+                translation_outdated,
             );
-            let (fp, fo) = out_field!(out.rotation_outdated);
-            ArchivedVec::resolve_from_slice(self.rotation_outdated(), pos + fp, resolver.rotation_outdateds, fo);
-            let (fp, fo) = out_field!(out.scale_outdated);
-            ArchivedVec::resolve_from_slice(self.scale_outdated(), pos + fp, resolver.scale_outdateds, fo);
+            self.translation_next().resolve((), translation_next);
 
-            let (fp, fo) = out_field!(out.translation_next);
-            usize::resolve(&self.translation_next(), pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.rotation_next);
-            usize::resolve(&self.rotation_next(), pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.scale_next);
-            usize::resolve(&self.scale_next(), pos + fp, (), fo);
+            ArchivedVec::resolve_from_slice(self.rotations(), resolver.rotations, rotations);
+            ArchivedVec::resolve_from_slice(self.rotation_entries(), resolver.rotation_entries, rotation_entries);
+            ArchivedVec::resolve_from_slice(self.rotation_outdated(), resolver.rotation_outdateds, rotation_outdated);
+            self.rotation_next().resolve((), rotation_next);
+
+            ArchivedVec::resolve_from_slice(self.scales(), resolver.scales, scales);
+            ArchivedVec::resolve_from_slice(self.scale_entries(), resolver.scale_entries, scale_entries);
+            ArchivedVec::resolve_from_slice(self.scale_outdated(), resolver.scale_outdateds, scale_outdated);
+            self.scale_next().resolve((), scale_next);
         }
     }
 
-    impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for SamplingContext {
+    impl<S> Serialize<S> for SamplingContext
+    where
+        S: Fallible + Allocator + Writer + ?Sized,
+        S::Error: Source,
+    {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
             serializer.align_for::<InterpSoaFloat3>()?;
             Ok(SamplingContextResolver {
@@ -748,46 +773,45 @@ const _: () = {
 
     impl<D: Fallible + ?Sized> Deserialize<SamplingContext, D> for ArchivedSamplingContext {
         #[inline]
-        fn deserialize(&self, _: &mut D) -> Result<SamplingContext, D::Error> {
-            let archived = from_archived!(self);
-            let mut context = SamplingContext::new(archived.max_tracks as usize);
-            context.set_animation_id(archived.animation_id);
-            context.set_ratio(archived.ratio);
-            context.translations_mut().copy_from_slice(&archived.translations);
-            context.rotations_mut().copy_from_slice(&archived.rotations);
-            context.scales_mut().copy_from_slice(&archived.scales);
+        fn deserialize(&self, deserializer: &mut D) -> Result<SamplingContext, D::Error> {
+            let mut context = SamplingContext::new(self.max_tracks.to_native() as usize);
+            context.set_animation_id(self.animation_id.to_native());
+            context.set_ratio(self.ratio.to_native());
+            context.translations_mut().copy_from_slice(&self.translations);
+            context.rotations_mut().copy_from_slice(&self.rotations);
+            context.scales_mut().copy_from_slice(&self.scales);
             context
                 .translation_entries_mut()
-                .copy_from_slice(&archived.translation_entries);
+                .copy_from_deserialize(deserializer, &self.translation_entries)?;
             context
                 .rotation_entries_mut()
-                .copy_from_slice(&archived.rotation_entries);
-            context.scale_entries_mut().copy_from_slice(&archived.scale_entries);
+                .copy_from_deserialize(deserializer, &self.rotation_entries)?;
+            context
+                .scale_entries_mut()
+                .copy_from_deserialize(deserializer, &self.scale_entries)?;
             context
                 .translation_outdated_mut()
-                .copy_from_slice(&archived.translation_outdated);
-            context
-                .rotation_outdated_mut()
-                .copy_from_slice(&archived.rotation_outdated);
-            context.scale_outdated_mut().copy_from_slice(&archived.scale_outdated);
-            context.set_translation_next(archived.translation_next as usize);
-            context.set_rotation_next(archived.rotation_next as usize);
-            context.set_scale_next(archived.scale_next as usize);
+                .copy_from_slice(&self.translation_outdated);
+            context.rotation_outdated_mut().copy_from_slice(&self.rotation_outdated);
+            context.scale_outdated_mut().copy_from_slice(&self.scale_outdated);
+            context.set_translation_next(self.translation_next.to_native() as usize);
+            context.set_rotation_next(self.rotation_next.to_native() as usize);
+            context.set_scale_next(self.scale_next.to_native() as usize);
             Ok(context)
         }
     }
 
-    impl<C: ?Sized> CheckBytes<C> for ArchivedSamplingContext {
-        type Error = Error;
+    // impl<C: ?Sized> CheckBytes<C> for ArchivedSamplingContext {
+    //     type Error = Error;
 
-        #[inline]
-        unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
-            if value as usize % mem::align_of::<f32x4>() != 0 {
-                return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
-            }
-            Ok(&*value)
-        }
-    }
+    //     #[inline]
+    //     unsafe fn check_bytes<'a>(value: *const Self, _: &mut C) -> Result<&'a Self, Self::Error> {
+    //         if value as usize % mem::align_of::<f32x4>() != 0 {
+    //             return Err(Error::new(ErrorKind::InvalidData, "must be aligned to 16 bytes"));
+    //         }
+    //         Ok(&*value)
+    //     }
+    // }
 };
 
 #[cfg(feature = "serde")]
@@ -1886,7 +1910,7 @@ mod sampling_tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_rkyv() {
-        use rkyv::Deserialize;
+        use rkyv::rancor::Error;
 
         let animation = Rc::new(Animation::from_path("./resource/playback/animation.ozz").unwrap());
         let aligned_tracks = animation.num_aligned_tracks();
@@ -1899,24 +1923,24 @@ mod sampling_tests {
         job.run().unwrap();
 
         let ctx: SamplingContext = job.context().unwrap().clone();
-        let bytes = rkyv::to_bytes::<_, 4096>(&ctx).unwrap();
-        let archived = rkyv::check_archived_root::<SamplingContext>(&bytes[..]).unwrap();
+        let buf = rkyv::to_bytes::<Error>(&ctx).unwrap();
+        let archived = unsafe { rkyv::access_unchecked::<ArchivedSamplingContext>(&buf) };
         assert_eq!(archived.animation_id, ctx.animation_id());
         assert_eq!(archived.ratio, ctx.ratio());
         assert_eq!(&archived.translations, ctx.translations());
         assert_eq!(&archived.translation_entries, ctx.translation_entries());
         assert_eq!(&archived.translation_outdated, ctx.translation_outdated());
-        assert_eq!(archived.translation_next as usize, ctx.translation_next());
+        assert_eq!(archived.translation_next, ctx.translation_next() as u32);
         assert_eq!(&archived.rotations, ctx.rotations());
         assert_eq!(&archived.rotation_entries, ctx.rotation_entries());
         assert_eq!(&archived.rotation_outdated, ctx.rotation_outdated());
-        assert_eq!(archived.rotation_next as usize, ctx.rotation_next());
+        assert_eq!(archived.rotation_next, ctx.rotation_next() as u32);
         assert_eq!(&archived.scales, ctx.scales());
         assert_eq!(&archived.scale_entries, ctx.scale_entries());
         assert_eq!(&archived.scale_outdated, ctx.scale_outdated());
-        assert_eq!(archived.scale_next as usize, ctx.scale_next());
+        assert_eq!(archived.scale_next, ctx.scale_next() as u32);
 
-        let ctx_de: SamplingContext = archived.deserialize(&mut rkyv::Infallible).unwrap();
+        let ctx_de: SamplingContext = rkyv::deserialize::<_, Error>(archived).unwrap();
         assert_eq!(ctx_de.size(), ctx.size());
         assert_eq!(ctx_de.animation_id(), ctx.animation_id());
         assert_eq!(ctx_de.ratio(), ctx.ratio());

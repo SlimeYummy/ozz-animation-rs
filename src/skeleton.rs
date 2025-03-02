@@ -310,19 +310,23 @@ impl Skeleton {
 }
 
 #[cfg(feature = "rkyv")]
+#[repr(C)]
+#[derive(rkyv::Portable)]
 pub struct ArchivedSkeleton {
-    pub num_joints: u32,
+    pub num_joints: rkyv::primitive::ArchivedU32,
     pub joint_rest_poses: rkyv::vec::ArchivedVec<SoaTransform>,
-    pub joint_names: rkyv::vec::ArchivedVec<rkyv::collections::util::Entry<rkyv::string::ArchivedString, i16>>,
-    pub joint_parents: rkyv::vec::ArchivedVec<i16>,
+    pub joint_names: rkyv::vec::ArchivedVec<rkyv::string::ArchivedString>,
+    pub joint_parents: rkyv::vec::ArchivedVec<rkyv::primitive::ArchivedI16>,
 }
 
 #[cfg(feature = "rkyv")]
 const _: () = {
-    use rkyv::collections::util::Entry;
-    use rkyv::ser::{ScratchSpace, Serializer};
+    use crate::base::SliceRkyvExt;
+    use rkyv::munge::munge;
+    use rkyv::rancor::{Fallible, Source};
+    use rkyv::ser::{Allocator, Writer, WriterExt};
     use rkyv::vec::{ArchivedVec, VecResolver};
-    use rkyv::{from_archived, out_field, Archive, Deserialize, Fallible, Serialize};
+    use rkyv::{Archive, Deserialize, Place, Serialize};
 
     pub struct SkeletonResolver {
         joint_rest_poses: VecResolver,
@@ -334,27 +338,63 @@ const _: () = {
         type Archived = ArchivedSkeleton;
         type Resolver = SkeletonResolver;
 
-        unsafe fn resolve(&self, pos: usize, resolver: SkeletonResolver, out: *mut ArchivedSkeleton) {
-            let (fp, fo) = out_field!(out.num_joints);
-            u32::resolve(&self.num_joints, pos + fp, (), fo);
-            let (fp, fo) = out_field!(out.joint_rest_poses);
-            ArchivedVec::resolve_from_slice(self.joint_rest_poses(), pos + fp, resolver.joint_rest_poses, fo);
-            let (fp, fo) = out_field!(out.joint_names);
-            ArchivedVec::resolve_from_len(self.joint_names().len(), pos + fp, resolver.joint_names, fo);
-            let (fp, fo) = out_field!(out.joint_parents);
-            ArchivedVec::resolve_from_slice(self.joint_parents(), pos + fp, resolver.joint_parents, fo);
+        fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+            munge!(
+                let ArchivedSkeleton {
+                    num_joints,
+                    joint_rest_poses,
+                    joint_names,
+                    joint_parents,
+                } = out
+            );
+            self.num_joints.resolve((), num_joints);
+            ArchivedVec::resolve_from_slice(self.joint_rest_poses(), resolver.joint_rest_poses, joint_rest_poses);
+            ArchivedVec::resolve_from_len(self.joint_names().len(), resolver.joint_names, joint_names);
+            ArchivedVec::resolve_from_slice(self.joint_parents(), resolver.joint_parents, joint_parents);
         }
     }
 
-    impl<S: Serializer + ScratchSpace + ?Sized> Serialize<S> for Skeleton {
+    impl<S> Serialize<S> for Skeleton
+    where
+        S: Fallible + Allocator + Writer + ?Sized,
+        S::Error: Source,
+    {
         fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+            #[derive(Clone)]
+            struct JointNamesIter<'t> {
+                joint_names: &'t JointHashMap,
+                counter: i16,
+            }
+
+            impl<'t> Iterator for JointNamesIter<'t> {
+                type Item = &'t String;
+
+                fn next(&mut self) -> Option<Self::Item> {
+                    if self.counter < self.joint_names.len() as i16 {
+                        let name = self.joint_names.get_by_right(&self.counter).unwrap();
+                        self.counter += 1;
+                        Some(name)
+                    } else {
+                        None
+                    }
+                }
+            }
+
+            impl<'t> ExactSizeIterator for JointNamesIter<'t> {
+                fn len(&self) -> usize {
+                    self.joint_names.len()
+                }
+            }
+
+            let joint_names_iter = JointNamesIter {
+                joint_names: self.joint_names(),
+                counter: 0,
+            };
+
             serializer.align_for::<SoaTransform>()?;
             Ok(SkeletonResolver {
                 joint_rest_poses: ArchivedVec::serialize_from_slice(self.joint_rest_poses(), serializer)?,
-                joint_names: ArchivedVec::serialize_from_iter(
-                    self.joint_names().iter().map(|(key, value)| Entry { key, value }),
-                    serializer,
-                )?,
+                joint_names: ArchivedVec::serialize_from_iter::<String, _, _>(joint_names_iter, serializer)?,
                 joint_parents: ArchivedVec::serialize_from_slice(self.joint_parents(), serializer)?,
             })
         }
@@ -362,30 +402,29 @@ const _: () = {
 
     impl<D: Fallible + ?Sized> Deserialize<Skeleton, D> for ArchivedSkeleton {
         #[inline]
-        fn deserialize(&self, _: &mut D) -> Result<Skeleton, D::Error> {
-            let archived = from_archived!(self);
+        fn deserialize(&self, deserializer: &mut D) -> Result<Skeleton, D::Error> {
             let mut skeleton = Skeleton::new(SkeletonMeta {
                 version: Skeleton::version(),
-                num_joints: archived.num_joints,
+                num_joints: self.num_joints.to_native(),
                 joint_names: BiHashMap::default(),
                 joint_parents: Vec::new(),
             });
             skeleton
                 .joint_rest_poses_mut()
-                .copy_from_slice(archived.joint_rest_poses.as_slice());
+                .copy_from_slice(self.joint_rest_poses.as_slice());
 
             skeleton.joint_names = JointHashMap::with_capacity_and_hashers(
-                archived.joint_names.len(),
+                self.joint_names.len(),
                 DeterministicState::new(),
                 DeterministicState::new(),
             );
-            for entry in archived.joint_names.iter() {
-                skeleton.joint_names.insert(entry.key.to_string(), entry.value);
+            for (idx, joint) in self.joint_names.iter().enumerate() {
+                skeleton.joint_names.insert(joint.to_string(), idx as i16);
             }
 
             skeleton
                 .joint_parents_mut()
-                .copy_from_slice(archived.joint_parents.as_slice());
+                .copy_from_deserialize(deserializer, &self.joint_parents)?;
             Ok(skeleton)
         }
     }
@@ -491,16 +530,12 @@ mod tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_rkyv_skeleton() {
-        use rkyv::ser::Serializer;
-        use rkyv::Deserialize;
+        use rkyv::rancor::Error;
 
         let skeleton = Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap();
-        let mut serializer = rkyv::ser::serializers::AllocSerializer::<30720>::default();
-        serializer.serialize_value(&skeleton).unwrap();
-        let buf = serializer.into_serializer().into_inner();
-        let archived = unsafe { rkyv::archived_root::<Skeleton>(&buf) };
-        let mut deserializer = rkyv::Infallible;
-        let skeleton2: Skeleton = archived.deserialize(&mut deserializer).unwrap();
+        let buf = rkyv::to_bytes::<Error>(&skeleton).unwrap();
+        let archived = unsafe { rkyv::access_unchecked::<ArchivedSkeleton>(&buf) };
+        let skeleton2: Skeleton = rkyv::deserialize::<_, Error>(archived).unwrap();
 
         assert_eq!(skeleton.joint_rest_poses(), skeleton2.joint_rest_poses());
         assert_eq!(skeleton.joint_parents(), skeleton2.joint_parents());
