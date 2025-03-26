@@ -350,6 +350,18 @@ mod track_triggering_tests {
 
     #[test]
     #[wasm_bindgen_test]
+    fn test_const() {
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        let track = Track::from_raw(&[46.0], &[0.0], &[0]).unwrap();
+        job.set_track(&track);
+        job.set_from(0.0);
+        job.set_to(1.0);
+        job.set_threshold(0.0);
+        assert!(job.run().unwrap().count() == 0);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
     fn test_no_range() {
         let track = Track::from_raw(&[0.0, 2.0, 0.0], &[0.0, 0.5, 1.0], &[7]).unwrap();
 

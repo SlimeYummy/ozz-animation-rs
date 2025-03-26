@@ -7,7 +7,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::base::{OzzError, OzzObj};
-use crate::math::f32_clamp_or_max;
 use crate::track::{Track, TrackValue};
 
 /// Track sampling job implementation.
@@ -81,7 +80,7 @@ where
     /// This is a ratio rather than a ratio because tracks have no duration.
     #[inline]
     pub fn set_ratio(&mut self, ratio: f32) {
-        self.ratio = f32_clamp_or_max(ratio, 0.0f32, 1.0f32);
+        self.ratio = ratio;
     }
 
     /// Gets **output** result of `TrackSamplingJob`.
@@ -113,28 +112,31 @@ where
     pub fn run(&mut self) -> Result<(), OzzError> {
         let track = self.track.as_ref().ok_or(OzzError::InvalidJob)?.obj();
 
-        if track.key_count() == 0 {
+        if track.ratios().len() == 0 {
             self.result = V::default();
-            return Ok(());
-        }
-
-        let id1 = track
-            .ratios()
-            .iter()
-            .position(|&x| self.ratio < x)
-            .unwrap_or(track.key_count());
-        let id0 = id1.saturating_sub(1);
-
-        let id0_step = (track.steps()[id0 / 8] & (1 << (id0 & 7))) != 0;
-        if id0_step || id1 == track.key_count() {
-            self.result = track.values()[id0];
+        } else if track.ratios().len() == 1 || self.ratio < 0.0 {
+            self.result = *track.values().first().unwrap();
+        } else if self.ratio > 1.0 {
+            self.result = *track.values().last().unwrap();
         } else {
-            let tk0 = track.ratios()[id0];
-            let tk1 = track.ratios()[id1];
-            let t = (self.ratio - tk0) / (tk1 - tk0);
-            let v0 = track.values()[id0];
-            let v1 = track.values()[id1];
-            self.result = V::lerp(v0, v1, t);
+            let id1 = track
+                .ratios()
+                .iter()
+                .position(|&x| self.ratio < x)
+                .unwrap_or(track.key_count());
+            let id0 = id1.saturating_sub(1);
+
+            let id0_step = (track.steps()[id0 / 8] & (1 << (id0 & 7))) != 0;
+            if id0_step || id1 == track.key_count() {
+                self.result = track.values()[id0];
+            } else {
+                let tk0 = track.ratios()[id0];
+                let tk1 = track.ratios()[id1];
+                let t = (self.ratio - tk0) / (tk1 - tk0);
+                let v0 = track.values()[id0];
+                let v1 = track.values()[id1];
+                self.result = V::lerp(v0, v1, t);
+            }
         }
         Ok(())
     }
@@ -173,6 +175,24 @@ mod track_sampling_tests {
             job.result(),
             result
         );
+    }
+    
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_default() {
+        let mut job = TrackSamplingJob::<f32>::default();
+        let track = Rc::new(Track::default());
+        job.set_track(track.clone());
+        execute_test(&mut job, 0.0, 0.0);
+    }
+    
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_constant() {
+        let mut job = TrackSamplingJob::<f32>::default();
+        let track = Rc::new(Track::from_raw(&[46.0], &[0.0], &[0]).unwrap());
+        job.set_track(track.clone());
+        execute_test(&mut job, 0.5, 46.0);
     }
 
     #[test]
