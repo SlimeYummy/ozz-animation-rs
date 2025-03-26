@@ -7,7 +7,6 @@
 #![allow(dead_code)]
 
 use glam::{Mat4, Quat, Vec3, Vec3A, Vec4};
-#[cfg(feature = "glam-ext")]
 use glam_ext::Transform3A;
 use static_assertions::const_assert_eq;
 use std::fmt::Debug;
@@ -523,7 +522,6 @@ impl SoaTransform {
     }
 }
 
-#[cfg(feature = "glam-ext")]
 impl SoaTransform {
     #[inline]
     pub const fn splat_transform(transform: Transform3A) -> SoaTransform {

@@ -228,7 +228,7 @@ where
 
     /// Gets mutable layers of `BlendingJob`.
     ///
-    /// Job input layers, can be empty or nullptr. The range of layers that must be blended.
+    /// Job input layers, can be empty. The range of layers that must be blended.
     #[inline]
     pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
         &mut self.layers
@@ -242,7 +242,7 @@ where
 
     /// Gets mutable additive layers of `BlendingJob`.
     ///
-    /// Job input additive layers, can be empty or nullptr. The range of layers that must be added to the output.
+    /// Job input additive layers, can be empty. The range of layers that must be added to the output.
     #[inline]
     pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
         &mut self.additive_layers
