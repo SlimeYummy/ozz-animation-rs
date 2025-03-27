@@ -176,7 +176,7 @@ mod track_sampling_tests {
             result
         );
     }
-    
+
     #[test]
     #[wasm_bindgen_test]
     fn test_default() {
@@ -185,7 +185,7 @@ mod track_sampling_tests {
         job.set_track(track.clone());
         execute_test(&mut job, 0.0, 0.0);
     }
-    
+
     #[test]
     #[wasm_bindgen_test]
     fn test_constant() {

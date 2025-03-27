@@ -1393,13 +1393,23 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
     assert!(buffer.len() >= 5, "Input buffer is too small.");
     assert!(output.len() == 4, "Output size must be 4");
 
-    #[inline]
+    #[inline(always)]
     fn load(input: &[u8]) -> u32 {
-        input[0] as u32 | ((input[1] as u32) << 8) | ((input[2] as u32) << 16) | ((input[3] as u32) << 24)
+        // In C++ code (ozz-animation), load() access to input overflows near the end of the buffer.
+        // But the code logic ensures that this doesn't cause problems.
+        // Here, we're completely following the logic of the original C++ library.
+        let p = input.as_ptr();
+        unsafe {
+            let i0 = *p as u32;
+            let i1 = (*p.add(1) as u32) << 8;
+            let i2 = (*p.add(2) as u32) << 16;
+            let i3 = (*p.add(3) as u32) << 24;
+            i0 | i1 | i2 | i3
+        }
     }
 
-    let mut in_buf = &buffer[1..];
     let prefix = buffer[0];
+    let mut in_buf = &buffer[1..];
 
     const MASK: [u32; 4] = [0xff, 0xffff, 0xffffff, 0xffffffff];
     let k0 = (prefix & 0x3) as usize;

@@ -297,6 +297,9 @@ pub(crate) struct AnimationRaw {
     pub s_iframe_desc: Vec<u32>,
 }
 
+unsafe impl Send for Animation {}
+unsafe impl Sync for Animation {}
+
 impl Animation {
     /// `Animation` resource file tag for `Archive`.
     #[inline]
@@ -312,10 +315,10 @@ impl Animation {
 
     /// Reads an `AnimationMeta` from an `Archive`.
     pub fn read_meta(archive: &mut Archive<impl Read>) -> Result<AnimationMeta, OzzError> {
-        if archive.tag() != Self::tag() {
+        if archive.read_tag()? != Self::tag() {
             return Err(OzzError::InvalidTag);
         }
-        if archive.version() != Self::version() {
+        if archive.read_version()? != Self::version() {
             return Err(OzzError::InvalidVersion);
         }
 
@@ -340,7 +343,7 @@ impl Animation {
         }
 
         Ok(AnimationMeta {
-            version: archive.version(),
+            version: Self::version(),
             duration,
             num_tracks,
             name,

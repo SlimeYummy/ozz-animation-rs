@@ -35,6 +35,9 @@ pub struct Skeleton {
     joint_parents: *mut i16,
 }
 
+unsafe impl Send for Skeleton {}
+unsafe impl Sync for Skeleton {}
+
 impl Drop for Skeleton {
     fn drop(&mut self) {
         if !self.joint_rest_poses.is_null() {
@@ -80,10 +83,10 @@ impl Skeleton {
 
     /// Reads a `SkeletonMeta` from a reader.
     pub fn read_meta(archive: &mut Archive<impl Read>, with_joints: bool) -> Result<SkeletonMeta, OzzError> {
-        if archive.tag() != Self::tag() {
+        if archive.read_tag()? != Self::tag() {
             return Err(OzzError::InvalidTag);
         }
-        if archive.version() != Self::version() {
+        if archive.read_version()? != Self::version() {
             return Err(OzzError::InvalidVersion);
         }
 

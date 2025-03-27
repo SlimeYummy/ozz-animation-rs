@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{Cursor, Read};
 #[cfg(not(feature = "wasm"))]
 use std::path::Path;
-use std::{mem, slice, str};
+use std::{mem, slice};
 
 use crate::base::OzzError;
 use crate::endian::{Endian, SwapEndian};
@@ -19,8 +19,6 @@ use crate::endian::{Endian, SwapEndian};
 pub struct Archive<R: Read> {
     read: R,
     endian_swap: bool,
-    tag: String,
-    version: u32,
 }
 
 impl<R: Read> Archive<R> {
@@ -30,52 +28,56 @@ impl<R: Read> Archive<R> {
         read.read_exact(&mut endian_tag)?;
         let file_endian = Endian::from_tag(endian_tag[0]);
         let native_endian = Endian::native();
-
-        let mut archive = Archive {
+        Ok(Archive {
             read,
             endian_swap: file_endian != native_endian,
-            tag: String::new(),
-            version: 0,
-        };
+        })
+    }
 
-        let tag = archive.read::<String>()?;
-        archive.tag = tag;
-
-        let version = archive.read::<u32>()?;
-        archive.version = version;
-        Ok(archive)
+    /// Does the endian need to be swapped.
+    #[inline]
+    pub fn endian_swap(&self) -> bool {
+        self.endian_swap
     }
 
     /// Reads `T` from the archive.
+    #[inline]
     pub fn read<T: ArchiveRead<T>>(&mut self) -> Result<T, OzzError> {
         T::read(self)
     }
 
     /// Reads `Vec<T>` from the archive.
     /// * `count` - The number of elements to read.
+    #[inline]
     pub fn read_vec<T: ArchiveRead<T>>(&mut self, count: usize) -> Result<Vec<T>, OzzError> {
         T::read_vec(self, count)
     }
 
     /// Reads `[T]` from the archive into slice.
     /// * `buffer` - The buffer to read into.
+    #[inline]
     pub fn read_slice<T: ArchiveRead<T>>(&mut self, buffer: &mut [T]) -> Result<(), OzzError> {
         T::read_slice(self, buffer)
     }
 
-    /// Does the endian need to be swapped.
-    pub fn endian_swap(&self) -> bool {
-        self.endian_swap
+    /// Reads the tag of the archive.
+    #[inline]
+    pub fn read_tag(&mut self) -> Result<String, OzzError> {
+        self.read::<String>()
     }
 
-    /// Gets the tag of the archive.
-    pub fn tag(&self) -> &str {
-        &self.tag
+    /// Reads the version of the archive.
+    #[inline]
+    pub fn read_version(&mut self) -> Result<u32, OzzError> {
+        self.read::<u32>()
     }
 
-    /// Gets the version of the archive.
-    pub fn version(&self) -> u32 {
-        self.version
+    /// Reads the tag and version of the archive.
+    #[inline]
+    pub fn read_tag_version(&mut self) -> Result<(String, u32), OzzError> {
+        let tag = self.read::<String>()?;
+        let version = self.read::<u32>()?;
+        Ok((tag, version))
     }
 }
 
@@ -244,9 +246,9 @@ mod tests {
     #[test]
     #[wasm_bindgen_test]
     fn test_archive_new() {
-        let archive = Archive::from_path("./resource/playback/animation.ozz").unwrap();
+        let mut archive = Archive::from_path("./resource/playback/animation.ozz").unwrap();
         assert!(!archive.endian_swap);
-        assert_eq!(archive.tag, "ozz-animation");
-        assert_eq!(archive.version, 7);
+        assert_eq!(archive.read_tag().unwrap(), "ozz-animation");
+        assert_eq!(archive.read_version().unwrap(), 7);
     }
 }
