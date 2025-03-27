@@ -57,6 +57,7 @@ pub mod ik_aim_job;
 pub mod ik_two_bone_job;
 pub mod local_to_model_job;
 pub mod math;
+pub mod motion_blending_job;
 #[cfg(all(feature = "wasm", feature = "nodejs"))]
 pub mod nodejs;
 pub mod sampling_job;
@@ -77,6 +78,9 @@ pub use ik_aim_job::IKAimJob;
 pub use ik_two_bone_job::IKTwoBoneJob;
 pub use local_to_model_job::{LocalToModelJob, LocalToModelJobArc, LocalToModelJobRc, LocalToModelJobRef};
 pub use math::{SoaQuat, SoaTransform, SoaVec3};
+pub use motion_blending_job::{
+    MotionBlendingJob, MotionBlendingJobArc, MotionBlendingJobRc, MotionBlendingJobRef, MotionBlendingLayer,
+};
 pub use sampling_job::{
     InterpSoaFloat3, InterpSoaQuaternion, SamplingContext, SamplingJob, SamplingJobArc, SamplingJobRc, SamplingJobRef,
 };
