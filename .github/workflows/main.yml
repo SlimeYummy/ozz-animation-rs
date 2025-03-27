@@ -32,4 +32,4 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build
-      run: cd ./demo && cargo build --release
+      run: cd ./demo && cargo build
