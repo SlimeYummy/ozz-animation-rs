@@ -154,10 +154,10 @@ impl<V: TrackValue> Track<V> {
 
     /// Reads an `Track` from an `Archive`.
     pub fn from_archive(archive: &mut Archive<impl Read>) -> Result<Track<V>, OzzError> {
-        if archive.tag() != Self::tag() {
+        if archive.read_tag()? != Self::tag() {
             return Err(OzzError::InvalidTag);
         }
-        if archive.version() != Self::version() {
+        if archive.read_version()? != Self::version() {
             return Err(OzzError::InvalidVersion);
         }
 
