@@ -19,7 +19,7 @@ struct TestData {
 #[wasm_bindgen_test]
 fn test_playback() {
     run_playback(5..=5, |_, data| {
-        common::compare_with_cpp("playback", "playback", &data.l2m_out, 3e-5).unwrap()
+        common::compare_with_cpp("playback", "playback", &data.l2m_out, 1e-5).unwrap()
     });
 }
 

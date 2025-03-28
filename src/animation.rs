@@ -1203,18 +1203,18 @@ mod tests {
         assert_eq!(animation.translations_ctrl().previouses.first().unwrap(), &0);
         assert_eq!(animation.translations_ctrl().previouses.last().unwrap(), &1);
         assert_eq!(animation.translations_ctrl().iframe_interval, 1.0);
-        assert!(animation.translations_ctrl().iframe_entries.is_empty());
-        assert!(animation.translations_ctrl().iframe_desc.is_empty());
+        assert_eq!(animation.translations_ctrl().iframe_entries.len(), 85);
+        assert_eq!(animation.translations_ctrl().iframe_desc.len(), 2);
 
-        assert_eq!(animation.rotations_ctrl().ratios.len(), 1699);
+        assert_eq!(animation.rotations_ctrl().ratios.len(), 1748);
         assert_eq!(animation.rotations_ctrl().ratios.first().unwrap(), &0);
         assert_eq!(animation.rotations_ctrl().ratios.last().unwrap(), &251);
-        assert_eq!(animation.rotations_ctrl().previouses.len(), 1699);
+        assert_eq!(animation.rotations_ctrl().previouses.len(), 1748);
         assert_eq!(animation.rotations_ctrl().previouses.first().unwrap(), &0);
         assert_eq!(animation.rotations_ctrl().previouses.last().unwrap(), &6);
         assert_eq!(animation.rotations_ctrl().iframe_interval, 1.0);
-        assert!(animation.rotations_ctrl().iframe_entries.is_empty());
-        assert!(animation.rotations_ctrl().iframe_desc.is_empty());
+        assert_eq!(animation.rotations_ctrl().iframe_entries.len(), 137);
+        assert_eq!(animation.rotations_ctrl().iframe_desc.len(), 2);
 
         assert_eq!(animation.scales_ctrl().ratios.len(), 136);
         assert_eq!(animation.scales_ctrl().ratios.first().unwrap(), &0);
@@ -1230,9 +1230,9 @@ mod tests {
         assert_eq!(animation.translations().first().unwrap().0, [0, 15400, 43950]);
         assert_eq!(animation.translations().last().unwrap().0, [3659, 15400, 43933]);
 
-        assert_eq!(animation.rotations().len(), 1699);
+        assert_eq!(animation.rotations().len(), 1748);
         assert_eq!(animation.rotations().first().unwrap().0, [39974, 18396, 53990]);
-        assert_eq!(animation.rotations().last().unwrap().0, [65531, 65533, 30456]);
+        assert_eq!(animation.rotations().last().unwrap().0, [63955, 2225, 31299]);
 
         assert_eq!(animation.scales().len(), 136);
         assert_eq!(animation.scales().first().unwrap().0, [15360, 15360, 15360]);
