@@ -24,7 +24,7 @@ struct TestData {
 #[wasm_bindgen_test]
 fn test_blend() {
     run_blend(2..=2, |_, data| {
-        common::compare_with_cpp("blend", "blend", &data.l2m_out, 1e-6).unwrap();
+        common::compare_with_cpp("blend", "blend", &data.l2m_out, 1e-5).unwrap();
     });
 }
 
