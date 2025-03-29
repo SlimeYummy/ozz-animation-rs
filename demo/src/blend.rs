@@ -17,9 +17,6 @@ pub struct OzzBlend {
     spine_trans: Vec<OzzTransform>,
 }
 
-unsafe impl Send for OzzBlend {}
-unsafe impl Sync for OzzBlend {}
-
 impl OzzBlend {
     pub async fn new() -> Box<dyn OzzExample> {
         let ((mut ar_skeleton, mut ar_animation1), (mut ar_animation2, mut ar_animation3)) = try_zip(
@@ -40,7 +37,7 @@ impl OzzBlend {
         let animation2 = Arc::new(Animation::from_archive(&mut ar_animation2).unwrap());
         let animation3 = Arc::new(Animation::from_archive(&mut ar_animation3).unwrap());
 
-        let mut ob = OzzBlend {
+        let mut o = OzzBlend {
             skeleton: skeleton.clone(),
             sample_job1: SamplingJob::default(),
             sample_job2: SamplingJob::default(),
@@ -52,40 +49,40 @@ impl OzzBlend {
             spine_trans: Vec::new(),
         };
 
-        ob.sample_job1.set_animation(animation1.clone());
-        ob.sample_job1
+        o.sample_job1.set_animation(animation1.clone());
+        o.sample_job1
             .set_context(SamplingContext::new(animation1.num_tracks()));
         let sample_out1 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
-        ob.sample_job1.set_output(sample_out1.clone());
+        o.sample_job1.set_output(sample_out1.clone());
 
-        ob.sample_job2.set_animation(animation2.clone());
-        ob.sample_job2
+        o.sample_job2.set_animation(animation2.clone());
+        o.sample_job2
             .set_context(SamplingContext::new(animation2.num_tracks()));
         let sample_out2 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
-        ob.sample_job2.set_output(sample_out2.clone());
+        o.sample_job2.set_output(sample_out2.clone());
 
-        ob.sample_job3.set_animation(animation3.clone());
-        ob.sample_job3
+        o.sample_job3.set_animation(animation3.clone());
+        o.sample_job3
             .set_context(SamplingContext::new(animation3.num_tracks()));
         let sample_out3 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
-        ob.sample_job3.set_output(sample_out3.clone());
+        o.sample_job3.set_output(sample_out3.clone());
 
-        ob.blending_job.set_skeleton(skeleton.clone());
+        o.blending_job.set_skeleton(skeleton.clone());
         let blending_out = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
-        ob.blending_job.set_output(blending_out.clone());
-        ob.blending_job
+        o.blending_job.set_output(blending_out.clone());
+        o.blending_job
             .layers_mut()
             .push(BlendingLayer::new(sample_out1.clone()));
-        ob.blending_job
+        o.blending_job
             .layers_mut()
             .push(BlendingLayer::new(sample_out2.clone()));
-        ob.blending_job
+        o.blending_job
             .layers_mut()
             .push(BlendingLayer::new(sample_out3.clone()));
 
-        ob.l2m_job.set_skeleton(skeleton.clone());
-        ob.l2m_job.set_input(blending_out.clone());
-        ob.l2m_job.set_output(ob.models.clone());
+        o.l2m_job.set_skeleton(skeleton.clone());
+        o.l2m_job.set_input(blending_out.clone());
+        o.l2m_job.set_output(o.models.clone());
 
         let mut bone_count = 0;
         let mut spine_count = 0;
@@ -101,9 +98,9 @@ impl OzzBlend {
             }
         }
 
-        ob.bone_trans.reserve(bone_count);
-        ob.spine_trans.reserve(spine_count);
-        Box::new(ob)
+        o.bone_trans.reserve(bone_count);
+        o.spine_trans.reserve(spine_count);
+        Box::new(o)
     }
 }
 

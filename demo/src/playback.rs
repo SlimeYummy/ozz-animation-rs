@@ -14,9 +14,6 @@ pub struct OzzPlayback {
     spine_trans: Vec<OzzTransform>,
 }
 
-unsafe impl Send for OzzPlayback {}
-unsafe impl Sync for OzzPlayback {}
-
 impl OzzPlayback {
     pub async fn new() -> Box<dyn OzzExample> {
         let (mut ar_skeleton, mut ar_animation) = try_zip(
@@ -29,7 +26,7 @@ impl OzzPlayback {
         let skeleton = Arc::new(Skeleton::from_archive(&mut ar_skeleton).unwrap());
         let animation = Arc::new(Animation::from_archive(&mut ar_animation).unwrap());
 
-        let mut oc = OzzPlayback {
+        let mut o = OzzPlayback {
             skeleton: skeleton.clone(),
             sample_job: SamplingJob::default(),
             l2m_job: LocalToModelJob::default(),
@@ -38,14 +35,14 @@ impl OzzPlayback {
             spine_trans: Vec::new(),
         };
 
-        oc.sample_job.set_animation(animation.clone());
-        oc.sample_job.set_context(SamplingContext::new(animation.num_tracks()));
+        o.sample_job.set_animation(animation.clone());
+        o.sample_job.set_context(SamplingContext::new(animation.num_tracks()));
         let sample_out = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
-        oc.sample_job.set_output(sample_out.clone());
+        o.sample_job.set_output(sample_out.clone());
 
-        oc.l2m_job.set_skeleton(skeleton.clone());
-        oc.l2m_job.set_input(sample_out.clone());
-        oc.l2m_job.set_output(oc.models.clone());
+        o.l2m_job.set_skeleton(skeleton.clone());
+        o.l2m_job.set_input(sample_out.clone());
+        o.l2m_job.set_output(o.models.clone());
 
         let mut bone_count = 0;
         let mut spine_count = 0;
@@ -61,9 +58,9 @@ impl OzzPlayback {
             }
         }
 
-        oc.bone_trans.reserve(bone_count);
-        oc.spine_trans.reserve(spine_count);
-        Box::new(oc)
+        o.bone_trans.reserve(bone_count);
+        o.spine_trans.reserve(spine_count);
+        Box::new(o)
     }
 }
 
