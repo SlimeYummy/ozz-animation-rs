@@ -1195,44 +1195,6 @@ mod blending_tests {
         }
     }
 
-    // fn new_layers3() -> Vec<BlendingLayer<f32>> {
-    //     let mut input1 = vec![SoaTransform::<f32>::default(); 4];
-    //     input1[0].translation = Vec3::new(0.0, 4.0, 8.0);
-    //     input1[1].translation = Vec3::new(1.0, 5.0, 9.0);
-    //     input1[2].translation = Vec3::new(2.0, 6.0, 10.0);
-    //     input1[3].translation = Vec3::new(3.0, 7.0, 11.0);
-    //     input1[0].rotation = Quat::new(0.70710677, 0.70710677, 0.0, 0.0);
-    //     input1[1].rotation = Quat::identity();
-    //     input1[2].rotation = Quat::new(-0.70710677, 0.0, 0.70710677, 0.0);
-    //     input1[3].rotation = Quat::new(0.9238795, 0.382683432, 0.0, 0.0);
-    //     input1[0].scale = Vec3::new(12.0, 16.0, 20.0);
-    //     input1[1].scale = Vec3::new(13.0, 17.0, 21.0);
-    //     input1[2].scale = Vec3::new(14.0, 18.0, 22.0);
-    //     input1[3].scale = Vec3::new(15.0, 19.0, 23.0);
-
-    //     let input2 = input1
-    //         .iter()
-    //         .map(|x| SoaTransform {
-    //             translation: x.translation.neg(),
-    //             rotation: x.rotation.conjugate(),
-    //             scale: x.scale.neg(),
-    //         })
-    //         .collect::<Vec<_>>();
-
-    //     return vec![
-    //         BlendingLayer {
-    //             input: make_buf(input1),
-    //             weight: 0.0,
-    //             joint_weights: Vec::new(),
-    //         },
-    //         BlendingLayer {
-    //             input: make_buf(input2),
-    //             weight: 0.0,
-    //             joint_weights: Vec::new(),
-    //         },
-    //     ];
-    // }
-
     #[test]
     #[wasm_bindgen_test]
     fn test_additive_weight() {
