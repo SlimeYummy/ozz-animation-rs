@@ -20,6 +20,7 @@ The library supports almost all runtime features supported by C++ version ozz, i
 - Two bone IK
 - Aim (Look-at) IK
 - User channels
+- Root motion (motion blending)
 - Skinning
 - Multi-threading
 - SIMD (SSE2 + NEON)
@@ -97,6 +98,7 @@ With the release of ozz-animation versions, .ozz files and some APIs will also b
 
 |ozz-animation-rs|ozz-animation(C++)|
 |--|--|
+|0.11.x|0.16.x|
 |0.10.x|0.15.x|
 |0.9.x|0.14.x|
 
