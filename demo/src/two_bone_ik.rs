@@ -19,16 +19,13 @@ pub struct OzzTwoBoneIK {
     spine_trans: Vec<OzzTransform>,
 }
 
-unsafe impl Send for OzzTwoBoneIK {}
-unsafe impl Sync for OzzTwoBoneIK {}
-
 impl OzzTwoBoneIK {
     pub async fn new() -> Box<dyn OzzExample> {
         let mut ar_skeleton = load_archive("/two_bone_ik/skeleton.ozz").await.unwrap();
 
         let skeleton = Arc::new(Skeleton::from_archive(&mut ar_skeleton).unwrap());
 
-        let mut oc = OzzTwoBoneIK {
+        let mut o = OzzTwoBoneIK {
             skeleton: skeleton.clone(),
             l2m_job1: LocalToModelJob::default(),
             ik_job: IKTwoBoneJob::default(),
@@ -40,13 +37,13 @@ impl OzzTwoBoneIK {
             spine_trans: Vec::new(),
         };
 
-        oc.l2m_job1.set_skeleton(skeleton.clone());
-        oc.l2m_job1.set_input(oc.locals.clone());
-        oc.l2m_job1.set_output(oc.models1.clone());
+        o.l2m_job1.set_skeleton(skeleton.clone());
+        o.l2m_job1.set_input(o.locals.clone());
+        o.l2m_job1.set_output(o.models1.clone());
 
-        oc.l2m_job2.set_skeleton(skeleton.clone());
-        oc.l2m_job2.set_input(oc.locals.clone());
-        oc.l2m_job2.set_output(oc.models2.clone());
+        o.l2m_job2.set_skeleton(skeleton.clone());
+        o.l2m_job2.set_input(o.locals.clone());
+        o.l2m_job2.set_output(o.models2.clone());
 
         let mut bone_count = 0;
         let mut spine_count = 0;
@@ -62,9 +59,9 @@ impl OzzTwoBoneIK {
             }
         }
 
-        oc.bone_trans.reserve(bone_count);
-        oc.spine_trans.reserve(spine_count);
-        Box::new(oc)
+        o.bone_trans.reserve(bone_count);
+        o.spine_trans.reserve(spine_count);
+        Box::new(o)
     }
 }
 
