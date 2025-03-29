@@ -1,6 +1,7 @@
 mod base;
 mod blend;
 mod playback;
+mod root_motion;
 mod two_bone_ik;
 
 use bevy::pbr::NotShadowCaster;
@@ -13,6 +14,7 @@ use bevy::tasks::{self, AsyncComputeTaskPool, Task};
 use crate::base::*;
 use crate::blend::OzzBlend;
 use crate::playback::OzzPlayback;
+use crate::root_motion::OzzRootMotion;
 use crate::two_bone_ik::OzzTwoBoneIK;
 
 const BONE_COUNT: usize = 256;
@@ -37,12 +39,14 @@ enum OzzType {
     Playback,
     Blend,
     TwoBoneIK,
+    RootMotion,
 }
 
-const OZZ_TYPES: [(OzzType, &str); 3] = [
+const OZZ_TYPES: [(OzzType, &str); 4] = [
     (OzzType::Playback, "Playback"),
     (OzzType::Blend, "Blend"),
     (OzzType::TwoBoneIK, "TwoBoneIK"),
+    (OzzType::RootMotion, "RootMotion"),
 ];
 
 impl OzzComponent {
@@ -52,6 +56,7 @@ impl OzzComponent {
             OzzType::Playback => thread_pool.spawn(OzzPlayback::new()),
             OzzType::Blend => thread_pool.spawn(OzzBlend::new()),
             OzzType::TwoBoneIK => thread_pool.spawn(OzzTwoBoneIK::new()),
+            OzzType::RootMotion => thread_pool.spawn(OzzRootMotion::new()),
         };
         self.task = Some(task);
         self.example = None;
