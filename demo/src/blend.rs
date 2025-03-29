@@ -50,20 +50,17 @@ impl OzzBlend {
         };
 
         o.sample_job1.set_animation(animation1.clone());
-        o.sample_job1
-            .set_context(SamplingContext::new(animation1.num_tracks()));
+        o.sample_job1.set_context(SamplingContext::new(animation1.num_tracks()));
         let sample_out1 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         o.sample_job1.set_output(sample_out1.clone());
 
         o.sample_job2.set_animation(animation2.clone());
-        o.sample_job2
-            .set_context(SamplingContext::new(animation2.num_tracks()));
+        o.sample_job2.set_context(SamplingContext::new(animation2.num_tracks()));
         let sample_out2 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         o.sample_job2.set_output(sample_out2.clone());
 
         o.sample_job3.set_animation(animation3.clone());
-        o.sample_job3
-            .set_context(SamplingContext::new(animation3.num_tracks()));
+        o.sample_job3.set_context(SamplingContext::new(animation3.num_tracks()));
         let sample_out3 = Arc::new(RwLock::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
         o.sample_job3.set_output(sample_out3.clone());
 
