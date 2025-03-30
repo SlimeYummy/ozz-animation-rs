@@ -180,8 +180,6 @@ impl ArchiveRead<QuaternionKey> for QuaternionKey {
 /// time, then by track number.
 ///
 #[derive(Debug)]
-// #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Animation {
     size: usize,
     duration: f32,

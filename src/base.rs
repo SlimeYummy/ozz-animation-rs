@@ -206,10 +206,6 @@ pub trait OzzBuf<T: Debug + Clone> {
     fn buf(&self) -> Result<Self::Buf<'_>, OzzError>;
 }
 
-// pub trait OzzAsSlice<'t, T: Debug + Clone> {
-//     fn slice(&'t self) -> Result<&'t [T], OzzError>;
-// }
-
 /// Represents a reference to the ozz mutable buffers.
 /// `T` usually is `SoaTransform`, `Mat4`, .etc.
 ///
