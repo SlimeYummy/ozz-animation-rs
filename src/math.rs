@@ -795,7 +795,7 @@ impl AosMat4 {
         let mut det = c0 * minor0;
         det = simd_swizzle!(det, I4E) + det;
         det = simd_swizzle!(det, IB1) + det; // first
-        let invertible: i32x4 = det.simd_ne(ZERO).to_int(); // first
+        let invertible: i32x4 = det.simd_ne(ZERO).to_simd(); // first
 
         let det_recip = det.recip(); // first
                                      // det_recip = (det_recip + det_recip) - det_recip * det_recip * det; // first
@@ -948,7 +948,7 @@ pub(crate) fn simd_f16_to_f32(half4: [u16; 4]) -> f32x4 {
     let expmant = MASK_NO_SIGN & int4;
     let shifted = expmant << 13;
     let scaled = fx4(shifted) * MAGIC;
-    let was_infnan = i32x4::simd_ge(expmant, WAS_INFNAN).to_int();
+    let was_infnan = i32x4::simd_ge(expmant, WAS_INFNAN).to_simd();
     let sign = (int4 ^ expmant) << 16;
     let infnanexp = was_infnan & EXP_INFNAN;
     let sign_inf = sign | infnanexp;
@@ -1062,7 +1062,7 @@ pub(crate) fn fx4_sign(v: f32x4) -> i32x4 {
     // In some case, x86_64 and aarch64 may produce different sign NaN (+/-NaN) in same command.
     // So the result of `NaN & SIGN` may be different.
     // For cross-platform deterministic, we want to make sure the sign of NaN is always 0(+).
-    v.simd_lt(ZERO).to_int() & SIGN
+    v.simd_lt(ZERO).to_simd() & SIGN
 }
 
 #[inline(always)]
@@ -1357,7 +1357,7 @@ pub(crate) fn quat_mul(a: f32x4, b: f32x4) -> f32x4 {
 
 #[inline]
 pub(crate) fn quat_positive_w(q: f32x4) -> f32x4 {
-    let s = fx4_splat_w(q).simd_lt(ZERO).to_int() & SIGN;
+    let s = fx4_splat_w(q).simd_lt(ZERO).to_simd() & SIGN;
     fx4_xor(q, s)
 }
 

@@ -160,7 +160,7 @@ impl<V: TrackValue> Track<V> {
             name: String::new(),
         })
     }
-    
+
     /// Reads a `TrackMeta` from a reader.
     pub fn read_meta(archive: &mut Archive<impl Read>) -> Result<TrackMeta, OzzError> {
         let tag = archive.read_tag()?;

@@ -63,18 +63,17 @@ where
 
     let mut layer_lower = BlendingLayer::new(sample_out_lower.clone());
     layer_lower.weight = 0.5;
-    layer_lower.joint_weights = vec![Vec4::splat(1.0); skeleton.num_soa_joints()];
+    layer_lower.joint_weights = Some(vec![Vec4::splat(1.0); skeleton.num_soa_joints()]);
 
     let mut layer_upper = BlendingLayer::new(sample_out_upper.clone());
     layer_upper.weight = 0.5;
-    layer_upper.joint_weights = vec![Vec4::splat(0.0); skeleton.num_soa_joints()];
+    layer_upper.joint_weights = Some(vec![Vec4::splat(0.0); skeleton.num_soa_joints()]);
 
     let upper_root = skeleton.joint_by_name("Spine1").unwrap();
-    println!(">>>>>>>>>>>>> {}", upper_root);
     skeleton.iter_depth_first(upper_root, |joint, _| {
         let joint = joint as usize;
-        layer_lower.joint_weights[joint / 4][joint % 4] = 0.5;
-        layer_upper.joint_weights[joint / 4][joint % 4] = 0.5;
+        layer_lower.joint_weights.as_mut().unwrap()[joint / 4][joint % 4] = 0.5;
+        layer_upper.joint_weights.as_mut().unwrap()[joint / 4][joint % 4] = 0.5;
     });
 
     blending_job.layers_mut().push(layer_lower);
