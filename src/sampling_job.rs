@@ -1104,6 +1104,16 @@ where
         self.output = None;
     }
 
+    /// Takes output of `SamplingJob`.
+    pub fn take_output(&mut self) -> Option<O> {
+        self.output.take()
+    }
+
+    /// Replaces output of `BlendingJob`.
+    pub fn replace_output(&mut self, output: O) -> Option<O> {
+        self.output.replace(output)
+    }
+
     /// Validates `SamplingJob` parameters.
     pub fn validate(&self) -> bool {
         (|| {
@@ -1158,7 +1168,7 @@ where
 
     #[inline]
     fn step_context(ctx: &mut SamplingContext, animation: &Animation, ratio: f32) -> f32 {
-        let animation_id = animation as *const _ as u64;
+        let animation_id = animation.as_id();
         if ctx.animation_id() != animation_id {
             ctx.set_animation_id(animation_id);
             ctx.set_translation_next(0);
