@@ -21,6 +21,7 @@ where
 {
     track: Option<T>,
     ratio: f32,
+    cached_index: u32,
     result: V,
 }
 
@@ -37,6 +38,7 @@ where
         TrackSamplingJob {
             track: None,
             ratio: 0.0,
+            cached_index: u32::MAX,
             result: V::default(),
         }
     }
@@ -83,6 +85,23 @@ where
         self.ratio = ratio;
     }
 
+    /// Gets cached index of `TrackSamplingJob`.
+    ///
+    /// Cached index is used to speed up sampling process.
+    #[inline]
+    pub fn cached_index(&self) -> u32 {
+        self.cached_index
+    }
+
+    /// Sets cached index of `TrackSamplingJob`.
+    ///
+    /// Cached index is used to speed up sampling process.
+    /// Especially, you can set cached_index to zero when ratio looped (1.0 -> 0.0) to avoid a full search.
+    #[inline]
+    pub fn set_cached_index(&mut self, cached_index: u32) {
+        self.cached_index = cached_index;
+    }
+
     /// Gets **output** result of `TrackSamplingJob`.
     #[inline]
     pub fn result(&self) -> V {
@@ -119,11 +138,34 @@ where
         } else if self.ratio > 1.0 {
             self.result = *track.values().last().unwrap();
         } else {
-            let id1 = track
-                .ratios()
-                .iter()
-                .position(|&x| self.ratio < x)
-                .unwrap_or(track.key_count());
+            let ratios = track.ratios();
+            let len = ratios.len();
+            let cached_id1 = self.cached_index as usize;
+
+            let id1 = if cached_id1 >= track.key_count() {
+                // Invalid index, fall back to common search
+                track
+                    .ratios()
+                    .iter()
+                    .position(|&x| self.ratio < x)
+                    .unwrap_or(track.key_count())
+            } else {
+                let cached_id0 = cached_id1.saturating_sub(1);
+                if self.ratio < ratios[cached_id0] {
+                    // Left search
+                    (0..cached_id0)
+                        .rev()
+                        .find(|&idx| self.ratio >= ratios[idx])
+                        .map_or(0, |idx| idx + 1)
+                } else if self.ratio >= ratios[cached_id1] {
+                    // Right search
+                    (cached_id1..len)
+                        .find(|&idx| self.ratio < ratios[idx])
+                        .unwrap_or(track.key_count())
+                } else {
+                    cached_id1
+                }
+            };
             let id0 = id1.saturating_sub(1);
 
             let id0_step = (track.steps()[id0 / 8] & (1 << (id0 & 7))) != 0;
@@ -137,6 +179,8 @@ where
                 let v1 = track.values()[id1];
                 self.result = V::lerp(v0, v1, t);
             }
+
+            self.cached_index = id1 as u32;
         }
         Ok(())
     }
@@ -349,5 +393,54 @@ mod track_sampling_tests {
         execute_test(&mut job, 0.8, Quat::from_xyzw(0.38268333, 0.0, 0.0, 0.92387962));
         execute_test(&mut job, 0.9, Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
         execute_test(&mut job, 1.0, Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_cached_index() {
+        fn execute_cache_test<V, T>(
+            job: &mut TrackSamplingJob<V, T>,
+            ratio: f32,
+            expected_result: V,
+            expected_cache: u32,
+        ) where
+            V: TrackValue,
+            T: OzzObj<Track<V>>,
+        {
+            job.set_ratio(ratio);
+            job.run().unwrap();
+            assert!(
+                V::abs_diff_eq(job.result(), expected_result, 1e-5),
+                "ratio={}: {:?} != {:?}",
+                ratio,
+                job.result(),
+                expected_result
+            );
+            assert_eq!(job.cached_index, expected_cache, "ratio={}: cached_index", ratio);
+        }
+
+        let mut job = TrackSamplingJob::<f32>::default();
+        assert_eq!(job.cached_index, u32::MAX);
+
+        let track = Rc::new(
+            Track::from_raw(
+                &[10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+                &[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                &[0x00],
+            )
+            .unwrap(),
+        );
+        job.set_track(track.clone());
+
+        execute_cache_test(&mut job, 0.3, 25.0, 2);
+        execute_cache_test(&mut job, 0.35, 27.5, 2);
+        execute_cache_test(&mut job, 0.5, 35.0, 3);
+        execute_cache_test(&mut job, 0.9, 55.0, 5);
+        execute_cache_test(&mut job, 0.1, 15.0, 1);
+        execute_cache_test(&mut job, 0.0, 10.0, 1);
+        execute_cache_test(&mut job, 0.4, 30.0, 3);
+        execute_cache_test(&mut job, 1.0, 60.0, 6);
+        execute_cache_test(&mut job, 0.3, 25.0, 2);
+        execute_cache_test(&mut job, 0.45, 32.5, 3);
     }
 }
