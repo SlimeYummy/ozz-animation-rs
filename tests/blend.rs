@@ -65,7 +65,7 @@ where
     let sample_out3 = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job3.set_output(sample_out3.clone());
 
-    let mut blending_job = BlendingJob::default();
+    let mut blending_job: BlendingJob = BlendingJob::default();
     blending_job.set_skeleton(skeleton.clone());
     let blending_out = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     blending_job.set_output(blending_out.clone());

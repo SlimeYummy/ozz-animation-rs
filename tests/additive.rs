@@ -71,19 +71,19 @@ where
 
     let mut layer_base = BlendingLayer::new(sample_out_base.clone());
     layer_base.weight = 0.0;
-    layer_base.joint_weights = vec![Vec4::splat(1.0); skeleton.num_soa_joints()];
+    layer_base.joint_weights = Some(vec![Vec4::splat(1.0); skeleton.num_soa_joints()]);
     layer_base.transform = sample_out_base.clone();
 
     let left_hand = skeleton.joint_by_name("Lefthand").unwrap();
     skeleton.iter_depth_first(left_hand, |joint, _| {
         let joint = joint as usize;
-        layer_base.joint_weights[joint / 4][joint % 4] = 0.0;
+        layer_base.joint_weights.as_mut().unwrap()[joint / 4][joint % 4] = 0.0;
     });
 
     let right_hand = skeleton.joint_by_name("RightHand").unwrap();
     skeleton.iter_depth_first(right_hand, |joint, _| {
         let joint = joint as usize;
-        layer_base.joint_weights[joint / 4][joint % 4] = 0.0;
+        layer_base.joint_weights.as_mut().unwrap()[joint / 4][joint % 4] = 0.0;
     });
 
     blending_job.layers_mut().push(layer_base);

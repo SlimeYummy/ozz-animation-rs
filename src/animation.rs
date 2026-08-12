@@ -311,6 +311,12 @@ impl Animation {
         7
     }
 
+    /// Converts the `Animation` reference to a unique ID (runtime only).
+    #[inline]
+    pub fn as_id(&self) -> u64 {
+        self as *const _ as u64
+    }
+
     /// Reads an `AnimationMeta` from an `Archive`.
     pub fn read_meta(archive: &mut Archive<impl Read>) -> Result<AnimationMeta, OzzError> {
         if archive.read_tag()? != Self::tag() {
@@ -359,7 +365,10 @@ impl Animation {
     }
 
     /// Reads an `Animation` from an `Archive`.
-    pub fn from_archive_with_meta(archive: &mut Archive<impl Read>, meta: AnimationMeta) -> Result<Animation, OzzError> {
+    pub fn from_archive_with_meta(
+        archive: &mut Archive<impl Read>,
+        meta: AnimationMeta,
+    ) -> Result<Animation, OzzError> {
         let mut animation = Animation::new(meta);
 
         archive.read_slice(animation.timepoints_mut())?;
@@ -1114,9 +1123,8 @@ const _: () = {
 #[allow(clippy::excessive_precision)]
 #[cfg(test)]
 mod tests {
-    use wasm_bindgen_test::*;
-
     use super::*;
+    use wasm_bindgen_test::*;
 
     #[test]
     #[wasm_bindgen_test]

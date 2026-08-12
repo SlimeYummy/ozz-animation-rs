@@ -1,5 +1,5 @@
 //!
-//! Animation data structure definition.
+//! Archive data structure definition.
 //!
 
 use glam::{Quat, Vec2, Vec3, Vec4};
