@@ -202,6 +202,16 @@ where
         self.output = None;
     }
 
+    /// Takes output of `LocalToModelJob`.
+    pub fn take_output(&mut self) -> Option<O> {
+        self.output.take()
+    }
+
+    /// Replaces output of `BlendingJob`.
+    pub fn replace_output(&mut self, output: O) -> Option<O> {
+        self.output.replace(output)
+    }
+
     /// Validates `LocalToModelJob` parameters.
     pub fn validate(&self) -> bool {
         (|| {

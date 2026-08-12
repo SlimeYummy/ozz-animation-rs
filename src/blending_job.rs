@@ -17,7 +17,7 @@ const ONE: f32x4 = f32x4::from_array([1.0; 4]);
 
 /// Defines a layer of blending input data (local space transforms) and parameters (weights).
 #[derive(Debug, Clone)]
-pub struct BlendingLayer<I: OzzBuf<SoaTransform>> {
+pub struct BlendingLayer<I: OzzBuf<SoaTransform>, W: OzzObj<Vec<Vec4>> = Vec<Vec4>> {
     /// Buffer to store local space transforms, that are usually outputted from a `SamplingJob`.
     pub transform: I,
 
@@ -33,36 +33,45 @@ pub struct BlendingLayer<I: OzzBuf<SoaTransform>> {
     /// range of values for joint weights should be 0.0-1.0.
     /// Negative weight values are considered as 0, but positive ones aren't clamped because they could
     /// exceed 1.0 if all layers contains valid joint weights.
-    pub joint_weights: Vec<Vec4>,
+    pub joint_weights: Option<W>,
 }
 
-impl<I: OzzBuf<SoaTransform>> BlendingLayer<I> {
-    pub fn new(transform: I) -> BlendingLayer<I> {
+impl<I: OzzBuf<SoaTransform>, W: OzzObj<Vec<Vec4>>> BlendingLayer<I, W> {
+    pub fn new(transform: I) -> BlendingLayer<I, W> {
         BlendingLayer {
             transform,
             weight: 0.0,
-            joint_weights: Vec::new(),
+            joint_weights: None,
         }
     }
 
-    pub fn with_weight(transform: I, weight: f32) -> BlendingLayer<I> {
+    pub fn with_weight(transform: I, weight: f32) -> BlendingLayer<I, W> {
         BlendingLayer {
             transform,
             weight,
-            joint_weights: Vec::new(),
+            joint_weights: None,
         }
     }
 
-    pub fn with_joint_weights(transform: I, joint_weights: Vec<Vec4>) -> BlendingLayer<I> {
+    pub fn with_joint_weights(transform: I, weight: f32, joint_weights: W) -> BlendingLayer<I, W> {
         BlendingLayer {
             transform,
-            weight: 0.0,
-            joint_weights,
+            weight,
+            joint_weights: Some(joint_weights),
         }
     }
 
+    #[inline]
+    fn joint_weights(&self) -> &[Vec4] {
+        match &self.joint_weights {
+            Some(weights) => weights.obj(),
+            None => &[],
+        }
+    }
+
+    #[inline]
     fn joint_weight(&self, idx: usize) -> f32x4 {
-        fx4_from_vec4(self.joint_weights[idx])
+        fx4_from_vec4(self.joint_weights()[idx])
     }
 }
 
@@ -113,17 +122,22 @@ impl BlendingContext {
 /// blend operations in a single pass.
 ///
 #[derive(Debug)]
-pub struct BlendingJob<S = Rc<Skeleton>, I = Rc<RefCell<Vec<SoaTransform>>>, O = Rc<RefCell<Vec<SoaTransform>>>>
-where
+pub struct BlendingJob<
+    S = Rc<Skeleton>,
+    I = Rc<RefCell<Vec<SoaTransform>>>,
+    O = Rc<RefCell<Vec<SoaTransform>>>,
+    W = Vec<Vec4>,
+> where
     S: OzzObj<Skeleton>,
     I: OzzBuf<SoaTransform>,
     O: OzzMutBuf<SoaTransform>,
+    W: OzzObj<Vec<Vec4>>,
 {
     skeleton: Option<S>,
     context: Option<BlendingContext>,
     threshold: f32,
-    layers: Vec<BlendingLayer<I>>,
-    additive_layers: Vec<BlendingLayer<I>>,
+    layers: Vec<BlendingLayer<I, W>>,
+    additive_layers: Vec<BlendingLayer<I, W>>,
     output: Option<O>,
 }
 
@@ -131,13 +145,14 @@ pub type BlendingJobRef<'t> = BlendingJob<&'t Skeleton, &'t [SoaTransform], &'t 
 pub type BlendingJobRc = BlendingJob<Rc<Skeleton>, Rc<RefCell<Vec<SoaTransform>>>, Rc<RefCell<Vec<SoaTransform>>>>;
 pub type BlendingJobArc = BlendingJob<Arc<Skeleton>, Arc<RwLock<Vec<SoaTransform>>>, Arc<RwLock<Vec<SoaTransform>>>>;
 
-impl<S, I, O> Default for BlendingJob<S, I, O>
+impl<S, I, O, W> Default for BlendingJob<S, I, O, W>
 where
     S: OzzObj<Skeleton>,
     I: OzzBuf<SoaTransform>,
     O: OzzMutBuf<SoaTransform>,
+    W: OzzObj<Vec<Vec4>>,
 {
-    fn default() -> BlendingJob<S, I, O> {
+    fn default() -> BlendingJob<S, I, O, W> {
         BlendingJob {
             skeleton: None,
             context: Some(BlendingContext::default()),
@@ -149,11 +164,12 @@ where
     }
 }
 
-impl<S, I, O> BlendingJob<S, I, O>
+impl<S, I, O, W> BlendingJob<S, I, O, W>
 where
     S: OzzObj<Skeleton>,
     I: OzzBuf<SoaTransform>,
     O: OzzMutBuf<SoaTransform>,
+    W: OzzObj<Vec<Vec4>>,
 {
     /// Gets skeleton of `BlendingJob`.
     #[inline]
@@ -222,7 +238,7 @@ where
 
     /// Gets layers of `BlendingJob`.
     #[inline]
-    pub fn layers(&self) -> &[BlendingLayer<I>] {
+    pub fn layers(&self) -> &[BlendingLayer<I, W>] {
         &self.layers
     }
 
@@ -230,13 +246,13 @@ where
     ///
     /// Job input layers, can be empty. The range of layers that must be blended.
     #[inline]
-    pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
+    pub fn layers_mut(&mut self) -> &mut Vec<BlendingLayer<I, W>> {
         &mut self.layers
     }
 
     /// Gets additive layers of `BlendingJob`.
     #[inline]
-    pub fn additive_layers(&self) -> &[BlendingLayer<I>] {
+    pub fn additive_layers(&self) -> &[BlendingLayer<I, W>] {
         &self.additive_layers
     }
 
@@ -244,7 +260,7 @@ where
     ///
     /// Job input additive layers, can be empty. The range of layers that must be added to the output.
     #[inline]
-    pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I>> {
+    pub fn additive_layers_mut(&mut self) -> &mut Vec<BlendingLayer<I, W>> {
         &mut self.additive_layers
     }
 
@@ -268,6 +284,16 @@ where
         self.output = None;
     }
 
+    /// Takes output of `BlendingJob`.
+    pub fn take_output(&mut self) -> Option<O> {
+        self.output.take()
+    }
+
+    /// Replaces output of `BlendingJob`.
+    pub fn replace_output(&mut self, output: O) -> Option<O> {
+        self.output.replace(output)
+    }
+
     /// Validates `BlendingJob` parameters.
     pub fn validate(&self) -> bool {
         (|| {
@@ -280,15 +306,15 @@ where
 
             for layer in &self.layers {
                 ok &= layer.transform.buf().ok()?.len() >= skeleton.num_soa_joints();
-                if !layer.joint_weights.is_empty() {
-                    ok &= layer.joint_weights.len() >= skeleton.num_soa_joints();
+                if !layer.joint_weights().is_empty() {
+                    ok &= layer.joint_weights().len() >= skeleton.num_soa_joints();
                 }
             }
 
             for layer in &self.additive_layers {
                 ok &= layer.transform.buf().ok()?.len() >= skeleton.num_soa_joints();
-                if !layer.joint_weights.is_empty() {
-                    ok &= layer.joint_weights.len() >= skeleton.num_soa_joints();
+                if !layer.joint_weights().is_empty() {
+                    ok &= layer.joint_weights().len() >= skeleton.num_soa_joints();
                 }
             }
 
@@ -327,7 +353,7 @@ where
     fn blend_layers(
         skeleton: &Skeleton,
         ctx: &mut BlendingContext,
-        layers: &[BlendingLayer<I>],
+        layers: &[BlendingLayer<I, W>],
         output: &mut [SoaTransform],
     ) -> Result<(), OzzError> {
         let num_soa_joints = skeleton.num_soa_joints();
@@ -337,7 +363,7 @@ where
             if transform.len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
-            if !layer.joint_weights.is_empty() && layer.joint_weights.len() < skeleton.num_soa_joints() {
+            if !layer.joint_weights().is_empty() && layer.joint_weights().len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
 
@@ -347,7 +373,7 @@ where
             ctx.accumulated_weight += layer.weight;
             let layer_weight = f32x4::splat(layer.weight);
 
-            if !layer.joint_weights.is_empty() {
+            if !layer.joint_weights().is_empty() {
                 ctx.num_partial_passes += 1;
 
                 if ctx.num_passes == 0 {
@@ -431,7 +457,7 @@ where
 
     fn add_layers(
         skeleton: &Skeleton,
-        layers: &[BlendingLayer<I>],
+        layers: &[BlendingLayer<I, W>],
         output: &mut [SoaTransform],
     ) -> Result<(), OzzError> {
         let joint_rest_poses = skeleton.joint_rest_poses();
@@ -441,14 +467,14 @@ where
             if transform.len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
-            if !layer.joint_weights.is_empty() && layer.joint_weights.len() < skeleton.num_soa_joints() {
+            if !layer.joint_weights().is_empty() && layer.joint_weights().len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
 
             if layer.weight > 0.0 {
                 let layer_weight = f32x4::splat(layer.weight);
 
-                if !layer.joint_weights.is_empty() {
+                if !layer.joint_weights().is_empty() {
                     for idx in 0..joint_rest_poses.len() {
                         let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
                         let one_minus_weight = ONE - weight;
@@ -463,7 +489,7 @@ where
             } else if layer.weight < 0.0 {
                 let layer_weight = f32x4::splat(-layer.weight);
 
-                if !layer.joint_weights.is_empty() {
+                if !layer.joint_weights().is_empty() {
                     for idx in 0..joint_rest_poses.len() {
                         let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
                         let one_minus_weight = ONE - weight;
@@ -559,7 +585,7 @@ mod blending_tests {
         let default_layer = BlendingLayer {
             transform: make_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
-            joint_weights: Vec::new(),
+            joint_weights: None as Option<Vec<Vec4>>,
         };
 
         // empty/default job
@@ -587,7 +613,7 @@ mod blending_tests {
         job.layers_mut().push(BlendingLayer {
             transform: make_buf(vec![]),
             weight: 0.5,
-            joint_weights: Vec::new(),
+            joint_weights: None,
         });
         job.set_output(make_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
@@ -615,7 +641,7 @@ mod blending_tests {
         job.layers_mut().push(BlendingLayer {
             transform: make_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
-            joint_weights: vec![Vec4::splat(0.5); 1],
+            joint_weights: Some(vec![Vec4::splat(0.5); 1]),
         });
         job.set_output(make_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
@@ -663,12 +689,12 @@ mod blending_tests {
         assert!(job.run().is_ok());
 
         // invalid layer input range, too small
-        let mut job = BlendingJob::default();
+        let mut job: BlendingJob = BlendingJob::default();
         job.set_skeleton(skeleton.clone());
         job.additive_layers_mut().push(BlendingLayer {
             transform: make_buf(vec![SoaTransform::default(); 3]),
             weight: 0.5,
-            joint_weights: Vec::new(),
+            joint_weights: None,
         });
         job.set_output(make_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(!job.validate());
@@ -680,7 +706,7 @@ mod blending_tests {
         job.additive_layers_mut().push(BlendingLayer {
             transform: make_buf(vec![SoaTransform::default(); num_bind_pose]),
             weight: 0.5,
-            joint_weights: vec![Vec4::splat(0.5); num_bind_pose],
+            joint_weights: Some(vec![Vec4::splat(0.5); num_bind_pose]),
         });
         job.set_output(make_buf(vec![SoaTransform::default(); num_bind_pose]));
         assert!(job.validate());
@@ -697,12 +723,12 @@ mod blending_tests {
             BlendingLayer {
                 transform: make_buf(input1),
                 weight: 0.0,
-                joint_weights: weights1,
+                joint_weights: Some(weights1),
             },
             BlendingLayer {
                 transform: make_buf(input2),
                 weight: 0.0,
-                joint_weights: weights2,
+                joint_weights: Some(weights2),
             },
         ]
     }
@@ -1045,12 +1071,12 @@ mod blending_tests {
             BlendingLayer {
                 transform: make_buf(input1),
                 weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: None,
             },
             BlendingLayer {
                 transform: make_buf(input2),
                 weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: None,
             },
         ];
 
@@ -1118,7 +1144,7 @@ mod blending_tests {
         }
 
         {
-            layers[1].joint_weights = vec![Vec4::new(1.0, -1.0, 2.0, 0.1)];
+            layers[1].joint_weights = Some(vec![Vec4::new(1.0, -1.0, 2.0, 0.1)]);
 
             execute_test(
                 &skeleton,
@@ -1149,12 +1175,12 @@ mod blending_tests {
             BlendingLayer {
                 transform: make_buf(input1),
                 weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: None,
             },
             BlendingLayer {
                 transform: make_buf(input2),
                 weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: None,
             },
         ];
 
@@ -1225,7 +1251,7 @@ mod blending_tests {
         let mut layers = vec![BlendingLayer {
             transform: make_buf(input1.clone()),
             weight: 0.0,
-            joint_weights: Vec::new(),
+            joint_weights: None,
         }];
 
         {
@@ -1296,12 +1322,12 @@ mod blending_tests {
             BlendingLayer {
                 transform: make_buf(input1.clone()),
                 weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: None,
             },
             BlendingLayer {
                 transform: make_buf(input2),
                 weight: 0.0,
-                joint_weights: Vec::new(),
+                joint_weights: None,
             },
         ];
 
@@ -1391,7 +1417,7 @@ mod blending_tests {
         let mut layers = vec![BlendingLayer {
             transform: make_buf(input1.clone()),
             weight: 0.0,
-            joint_weights: vec![Vec4::new(1.0, 0.5, 0.0, -1.0)],
+            joint_weights: Some(vec![Vec4::new(1.0, 0.5, 0.0, -1.0)]),
         }];
 
         {
