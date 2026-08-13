@@ -1,5 +1,5 @@
 use ozz_animation_rs::*;
-use rand::{thread_rng, Rng};
+use rand::{rng, RngExt};
 use std::cell::RefCell;
 use std::env;
 use std::rc::Rc;
@@ -101,9 +101,9 @@ fn execute_contexts(name: &str, skel_path: &str, anim_path: &str) {
     let sample_out = Rc::new(RefCell::new(vec![SoaTransform::default(); skeleton.num_soa_joints()]));
     sample_job.set_output(sample_out.clone());
 
-    let mut rng = thread_rng();
+    let mut rng = rng();
     let rands = (0..TIMES)
-        .map(|_| rng.gen_range(-10..=N + 10).clamp(0, N))
+        .map(|_| rng.random_range(-10..=N + 10).clamp(0, N))
         .map(|n| (n as usize, (n as f32) / (N as f32)))
         .collect::<Vec<(usize, f32)>>();
 
