@@ -33,7 +33,7 @@ thiserror = "2"
 wasm-bindgen = { version = "0.2", optional = true }
 
 [dev-dependencies]
-getrandom = { version = "0.2", features = ["js"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
 miniz_oxide = "0.8"
 rand = { version = "0.10", features = ["thread_rng"] }
 serde_json = "1.0"
