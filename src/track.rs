@@ -150,7 +150,7 @@ impl<V: TrackValue> Track<V> {
     #[cfg(test)]
     pub(crate) fn from_raw(values: &[V], ratios: &[f32], steps: &[u8]) -> Result<Track<V>, OzzError> {
         if values.len() != ratios.len() || values.len().div_ceil(8) != steps.len() {
-            return Err(OzzError::Unexcepted);
+            return Err(OzzError::Unexpected);
         }
         Ok(Track {
             key_count: values.len() as u32,

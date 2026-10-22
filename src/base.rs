@@ -8,15 +8,22 @@ use std::fmt::Debug;
 use std::hash::BuildHasher;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 use thiserror::Error;
 
 /// Ozz error type.
 #[derive(Error, Debug)]
 pub enum OzzError {
-    /// Lock poisoned, only happens when using `Arc<RWLock<T>>` as `OzzBuf<T>`.
+    /// The buffer() is already borrowed or locked.
+    ///
+    /// Happens when using `Rc<RefCell<T>>` (already borrowed) or
+    /// `Arc<RwLock<T>>` (currently locked) as an `OzzBuf<T>` / `OzzMutBuf<T>`.
+    #[error("Buffer already borrowed")]
+    BorrowError,
+    /// Lock poisoned, only happens when using `Arc<RwLock<T>>` as `OzzBuf<T>`.
     #[error("Lock poisoned")]
     LockPoison,
+
     /// Validates job failed.
     #[error("Invalid job")]
     InvalidJob,
@@ -38,13 +45,19 @@ pub enum OzzError {
     #[error("Invalid version")]
     InvalidVersion,
 
+    /// Resource data failed validation (native `.ozz` archive, rkyv or serde).
+    #[error("Invalid resource")]
+    InvalidResource,
+
     /// Invalid repr.
     #[error("Invalid repr")]
     InvalidRepr,
 
-    /// Unexcepted error.
-    #[error("Unexcepted error")]
-    Unexcepted,
+    /// Unexpected error.
+    ///
+    /// The variant name is kept for backward compatibility, it is misspelled.
+    #[error("Unexpected error")]
+    Unexpected,
 }
 
 impl From<std::io::Error> for OzzError {
@@ -62,6 +75,10 @@ impl From<std::str::Utf8Error> for OzzError {
 impl OzzError {
     pub fn is_lock_poison(&self) -> bool {
         matches!(self, OzzError::LockPoison)
+    }
+
+    pub fn is_borrow_error(&self) -> bool {
+        matches!(self, OzzError::BorrowError)
     }
 
     pub fn is_invalid_job(&self) -> bool {
@@ -84,12 +101,16 @@ impl OzzError {
         matches!(self, OzzError::InvalidVersion)
     }
 
+    pub fn is_invalid_resource(&self) -> bool {
+        matches!(self, OzzError::InvalidResource)
+    }
+
     pub fn is_invalid_repr(&self) -> bool {
         matches!(self, OzzError::InvalidRepr)
     }
 
     pub fn is_unexcepted(&self) -> bool {
-        matches!(self, OzzError::Unexcepted)
+        matches!(self, OzzError::Unexpected)
     }
 }
 
@@ -217,8 +238,10 @@ pub trait OzzBuf<T: Debug + Clone> {
 /// Represents a reference to the ozz mutable buffers.
 /// `T` usually is `SoaTransform`, `Mat4`, .etc.
 ///
-/// We use `OzzBuf` to support `&mut [T]`, `Vec<T>`, `Rc<RefCell<Vec<T>>>`, `Arc<RwLock<Vec<T>>>` at same time.
+/// We use `OzzMutBuf` to support `&mut [T]`, `Vec<T>`, `Rc<RefCell<Vec<T>>>`, `Arc<RwLock<Vec<T>>>` at same time.
 /// Or you can implement this trait to support your own writable buffer types.
+///
+/// See [`OzzBuf`] for the input/output aliasing caveat.
 pub trait OzzMutBuf<T: Debug + Clone>
 where
     Self: OzzBuf<T>,
@@ -334,7 +357,10 @@ impl<T: 'static + Debug + Clone> OzzBuf<T> for Rc<RefCell<Vec<T>>> {
 
     #[inline(always)]
     fn buf(&self) -> Result<ObCellRef<'_, T>, OzzError> {
-        Ok(ObCellRef(self.borrow()))
+        match self.try_borrow() {
+            Ok(guard) => Ok(ObCellRef(guard)),
+            Err(_) => Err(OzzError::BorrowError),
+        }
     }
 }
 
@@ -354,7 +380,10 @@ impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Rc<RefCell<Vec<T>>> {
 
     #[inline(always)]
     fn mut_buf(&mut self) -> Result<ObCellRefMut<'_, T>, OzzError> {
-        Ok(ObCellRefMut(self.borrow_mut()))
+        match self.try_borrow_mut() {
+            Ok(guard) => Ok(ObCellRefMut(guard)),
+            Err(_) => Err(OzzError::BorrowError),
+        }
     }
 }
 
@@ -385,9 +414,10 @@ impl<T: 'static + Debug + Clone> OzzBuf<T> for Arc<RwLock<Vec<T>>> {
 
     #[inline(always)]
     fn buf(&self) -> Result<ObRwLockReadGuard<'_, T>, OzzError> {
-        match self.read() {
+        match self.try_read() {
             Ok(guard) => Ok(ObRwLockReadGuard(guard)),
-            Err(_) => Err(OzzError::LockPoison),
+            Err(TryLockError::Poisoned(_)) => Err(OzzError::LockPoison),
+            Err(TryLockError::WouldBlock) => Err(OzzError::BorrowError),
         }
     }
 }
@@ -408,9 +438,10 @@ impl<T: 'static + Debug + Clone> OzzMutBuf<T> for Arc<RwLock<Vec<T>>> {
 
     #[inline(always)]
     fn mut_buf(&mut self) -> Result<ObRwLockWriteGuard<'_, T>, OzzError> {
-        match self.write() {
+        match self.try_write() {
             Ok(guard) => Ok(ObRwLockWriteGuard(guard)),
-            Err(_) => Err(OzzError::LockPoison),
+            Err(TryLockError::Poisoned(_)) => Err(OzzError::LockPoison),
+            Err(TryLockError::WouldBlock) => Err(OzzError::BorrowError),
         }
     }
 }
@@ -457,6 +488,7 @@ where
     T: rkyv::Archive,
     T::Archived: rkyv::Deserialize<T, D>,
     D: rkyv::rancor::Fallible + ?Sized,
+    D::Error: rkyv::rancor::Source,
 {
     fn copy_from_deserialize(
         &mut self,
@@ -465,11 +497,13 @@ where
     ) -> Result<(), D::Error>;
 }
 
+#[cfg(feature = "rkyv")]
 impl<T, D> SliceRkyvExt<T, D> for [T]
 where
     T: rkyv::Archive,
     T::Archived: rkyv::Deserialize<T, D>,
     D: rkyv::rancor::Fallible + ?Sized,
+    D::Error: rkyv::rancor::Source,
 {
     #[inline(always)]
     fn copy_from_deserialize(
@@ -477,7 +511,14 @@ where
         deserializer: &mut D,
         avec: &rkyv::vec::ArchivedVec<T::Archived>,
     ) -> Result<(), D::Error> {
+        use rkyv::rancor::fail;
         use rkyv::Deserialize;
+        // Archived data can be corrupted or hand-crafted: writing it into a slice
+        // with a different length used to panic (or silently keep stale values for
+        // shorter vecs), it must be rejected instead.
+        if avec.len() != self.len() {
+            fail!(OzzError::InvalidResource);
+        }
         for (i, item) in avec.iter().enumerate() {
             self[i] = item.deserialize(deserializer)?;
         }

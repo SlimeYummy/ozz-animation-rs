@@ -1022,7 +1022,10 @@ const _: () = {
         }
     }
 
-    impl<D: Fallible + ?Sized> Deserialize<Animation, D> for ArchivedAnimation {
+    impl<D: Fallible + ?Sized> Deserialize<Animation, D> for ArchivedAnimation
+    where
+        D::Error: Source,
+    {
         #[inline]
         fn deserialize(&self, deserializer: &mut D) -> Result<Animation, D::Error> {
             let mut animation = Animation::new(AnimationMeta {

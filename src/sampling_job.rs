@@ -771,7 +771,10 @@ const _: () = {
         }
     }
 
-    impl<D: Fallible + ?Sized> Deserialize<SamplingContext, D> for ArchivedSamplingContext {
+    impl<D: Fallible + ?Sized> Deserialize<SamplingContext, D> for ArchivedSamplingContext
+    where
+        D::Error: Source,
+    {
         #[inline]
         fn deserialize(&self, deserializer: &mut D) -> Result<SamplingContext, D::Error> {
             let mut context = SamplingContext::new(self.max_tracks.to_native() as usize);
