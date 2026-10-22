@@ -40,12 +40,6 @@ impl SwapEndian for i8 {
     }
 }
 
-impl SwapEndian for bool {
-    fn swap_endian(self) -> bool {
-        self
-    }
-}
-
 impl SwapEndian for u16 {
     fn swap_endian(self) -> u16 {
         self.swap_bytes()
@@ -91,19 +85,5 @@ impl SwapEndian for u64 {
 impl SwapEndian for i64 {
     fn swap_endian(self) -> i64 {
         self.swap_bytes()
-    }
-}
-
-impl<'t, T: Copy + SwapEndian> SwapEndian for &'t mut [T] {
-    fn swap_endian(self) -> &'t mut [T] {
-        self.iter_mut().for_each(|e| *e = e.swap_endian());
-        self
-    }
-}
-
-impl<T: Copy + SwapEndian> SwapEndian for Vec<T> {
-    fn swap_endian(mut self) -> Vec<T> {
-        self.iter_mut().for_each(|e| *e = e.swap_endian());
-        self
     }
 }
