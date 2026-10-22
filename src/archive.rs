@@ -129,7 +129,9 @@ pub trait ArchiveRead<T> {
     /// * `count` - The number of elements to read.
     #[inline]
     fn read_vec<R: Read>(archive: &mut Archive<R>, count: usize) -> Result<Vec<T>, OzzError> {
-        let mut buffer = Vec::with_capacity(count);
+        let mut buffer = Vec::new();
+        // `count` is untrusted: fail instead of aborting on huge allocations.
+        buffer.try_reserve_exact(count).map_err(|_| OzzError::InvalidResource)?;
         for _ in 0..count {
             buffer.push(Self::read(archive)?);
         }
@@ -167,7 +169,6 @@ macro_rules! primitive_reader {
     };
 }
 
-primitive_reader!(bool);
 primitive_reader!(u8);
 primitive_reader!(i8);
 primitive_reader!(u16);
@@ -178,6 +179,16 @@ primitive_reader!(u64);
 primitive_reader!(i64);
 primitive_reader!(f32);
 primitive_reader!(f64);
+
+impl ArchiveRead<bool> for bool {
+    fn read<R: Read>(archive: &mut Archive<R>) -> Result<bool, OzzError> {
+        match u8::read(archive)? {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(OzzError::InvalidRepr),
+        }
+    }
+}
 
 impl ArchiveRead<Vec2> for Vec2 {
     #[inline]
@@ -223,11 +234,16 @@ impl ArchiveRead<Quat> for Quat {
 impl ArchiveRead<String> for String {
     #[inline]
     fn read<R: Read>(archive: &mut Archive<R>) -> Result<String, OzzError> {
+        const MAX_LEN: usize = 1024 * 1024;
+
         let mut buffer = Vec::new();
         loop {
             let char = u8::read(archive)?;
             if char != 0 {
                 buffer.push(char);
+                if buffer.len() > MAX_LEN {
+                    return Err(OzzError::InvalidResource);
+                }
             } else {
                 break;
             }
