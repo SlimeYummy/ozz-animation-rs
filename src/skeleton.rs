@@ -405,7 +405,10 @@ const _: () = {
         }
     }
 
-    impl<D: Fallible + ?Sized> Deserialize<Skeleton, D> for ArchivedSkeleton {
+    impl<D: Fallible + ?Sized> Deserialize<Skeleton, D> for ArchivedSkeleton
+    where
+        D::Error: Source,
+    {
         #[inline]
         fn deserialize(&self, deserializer: &mut D) -> Result<Skeleton, D::Error> {
             let mut skeleton = Skeleton::new(SkeletonMeta {

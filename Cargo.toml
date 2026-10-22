@@ -6,7 +6,6 @@ edition = "2021"
 rust-version = "1.88"
 description = "A rust runtime library for ozz-animation with cross-platform deterministic."
 license = "MPL-2.0"
-homepage = "https://github.com/SlimeYummy/ozz-animation-rs"
 repository = "https://github.com/SlimeYummy/ozz-animation-rs"
 keywords = ["animation", "skeletal-animation", "fixed-point", "deterministic", "ozz-animation"]
 categories = ["game-development", "rendering::data-formats", "api-bindings", "wasm"]
