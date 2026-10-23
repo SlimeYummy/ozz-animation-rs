@@ -156,7 +156,7 @@ struct SamplingContextInner {
     max_tracks: usize,
     max_soa_tracks: usize,
     max_outdated: usize,
-    animation_id: u64,
+    animation_runtime_id: u64,
     ratio: f32,
 
     translations: *mut InterpSoaFloat3,
@@ -182,7 +182,7 @@ impl Default for SamplingContextInner {
             max_tracks: 0,
             max_soa_tracks: 0,
             max_outdated: 0,
-            animation_id: 0,
+            animation_runtime_id: 0,
             ratio: 0.0,
 
             translations: ptr::null_mut(),
@@ -217,7 +217,7 @@ impl Debug for SamplingContext {
         }
         f.debug_struct("SamplingContext")
             .field("mem", &self.0)
-            .field("animation_id", &self.animation_id())
+            .field("animation_runtime_id", &self.animation_runtime_id())
             .field("ratio", &self.ratio())
             .finish()
     }
@@ -226,7 +226,7 @@ impl Debug for SamplingContext {
 impl Clone for SamplingContext {
     fn clone(&self) -> Self {
         let mut ctx = SamplingContext::new(self.max_tracks());
-        ctx.set_animation_id(self.animation_id());
+        ctx.set_animation_runtime_id(self.animation_runtime_id());
         ctx.set_ratio(self.ratio());
 
         ctx.translations_mut().copy_from_slice(self.translations());
@@ -254,7 +254,7 @@ impl PartialEq for SamplingContext {
         self.max_tracks() == other.max_tracks()
             && self.max_soa_tracks() == other.max_soa_tracks()
             && self.max_outdated() == other.max_outdated()
-            && self.animation_id() == other.animation_id()
+            && self.animation_runtime_id() == other.animation_runtime_id()
             && self.ratio() == other.ratio()
             && self.translations() == other.translations()
             && self.translation_entries() == other.translation_entries()
@@ -329,7 +329,7 @@ impl SamplingContext {
             inner.max_soa_tracks = max_soa_tracks;
             inner.max_tracks = max_tracks;
             inner.max_outdated = max_outdated;
-            inner.animation_id = 0;
+            inner.animation_runtime_id = 0;
             inner.ratio = 0.0;
 
             inner.translations = ptr as *mut InterpSoaFloat3;
@@ -366,25 +366,25 @@ impl SamplingContext {
     /// * `animation` - The animation to sample. Use `animation.num_tracks()` as max_tracks.
     pub fn from_animation(animation: &Animation) -> SamplingContext {
         let mut ctx = SamplingContext::new(animation.num_tracks());
-        ctx.inner_mut().animation_id = animation as *const _ as u64;
+        ctx.inner_mut().animation_runtime_id = animation.runtime_id();
         ctx
     }
 
     /// Clear the `SamplingContext`.
     #[inline]
     pub fn clear(&mut self) {
-        self.set_animation_id(0);
+        self.set_animation_runtime_id(0);
         self.set_ratio(0.0);
         self.set_translation_next(0);
         self.set_rotation_next(0);
         self.set_scale_next(0);
     }
 
-    /// Clone the `SamplingContext` without the animation id. Usually used for serialization.
+    /// Clone the `SamplingContext` without the animation runtime id. Usually used for serialization.
     #[inline]
-    pub fn clone_without_animation_id(&self) -> SamplingContext {
+    pub fn clone_without_animation_runtime_id(&self) -> SamplingContext {
         let mut ctx = self.clone();
-        ctx.set_animation_id(0);
+        ctx.set_animation_runtime_id(0);
         ctx
     }
 
@@ -414,12 +414,12 @@ impl SamplingContext {
 
     /// The unique identifier of the animation that the context is sampling.
     #[inline]
-    pub fn animation_id(&self) -> u64 {
-        self.inner().animation_id
+    pub fn animation_runtime_id(&self) -> u64 {
+        self.inner().animation_runtime_id
     }
 
-    fn set_animation_id(&mut self, animation_id: u64) {
-        self.inner_mut().animation_id = animation_id;
+    fn set_animation_runtime_id(&mut self, animation_runtime_id: u64) {
+        self.inner_mut().animation_runtime_id = animation_runtime_id;
     }
 
     /// The current time ratio in the animation.
@@ -653,7 +653,7 @@ impl SamplingContext {
 #[repr(C)]
 #[derive(rkyv::Portable)]
 pub struct ArchivedSamplingContext {
-    pub animation_id: rkyv::primitive::ArchivedU64,
+    pub animation_runtime_id: rkyv::primitive::ArchivedU64,
     pub max_tracks: rkyv::primitive::ArchivedU32,
     pub ratio: rkyv::primitive::ArchivedF32,
 
@@ -704,7 +704,7 @@ const _: () = {
             munge!(
                 let ArchivedSamplingContext {
                     max_tracks,
-                    animation_id,
+                    animation_runtime_id,
                     ratio,
                     translations,
                     translation_entries,
@@ -721,7 +721,7 @@ const _: () = {
                 } = out
             );
 
-            self.animation_id().resolve((), animation_id);
+            self.animation_runtime_id().resolve((), animation_runtime_id);
             self.max_tracks().resolve((), max_tracks);
             self.ratio().resolve((), ratio);
 
@@ -778,7 +778,7 @@ const _: () = {
         #[inline]
         fn deserialize(&self, deserializer: &mut D) -> Result<SamplingContext, D::Error> {
             let mut context = SamplingContext::new(self.max_tracks.to_native() as usize);
-            context.set_animation_id(self.animation_id.to_native());
+            context.set_animation_runtime_id(self.animation_runtime_id.to_native());
             context.set_ratio(self.ratio.to_native());
             context.translations_mut().copy_from_slice(&self.translations);
             context.rotations_mut().copy_from_slice(&self.rotations);
@@ -830,7 +830,7 @@ const _: () = {
             map.serialize_entry("max_tracks", &self.max_tracks())?;
             map.serialize_entry("max_soa_tracks", &self.max_soa_tracks())?;
             map.serialize_entry("max_outdated", &self.max_outdated())?;
-            map.serialize_entry("animation_id", &self.animation_id())?;
+            map.serialize_entry("animation_runtime_id", &self.animation_runtime_id())?;
             map.serialize_entry("ratio", &self.ratio())?;
             map.serialize_entry("translations", self.translations())?;
             map.serialize_entry("rotations", self.rotations())?;
@@ -880,7 +880,7 @@ const _: () = {
 
             while let Some(key) = map.next_key()? {
                 match key {
-                    "animation_id" => ctx.set_animation_id(map.next_value()?),
+                    "animation_runtime_id" => ctx.set_animation_runtime_id(map.next_value()?),
                     "ratio" => ctx.set_ratio(map.next_value()?),
                     "translations" => {
                         ctx.translations_mut()
@@ -1171,9 +1171,9 @@ where
 
     #[inline]
     fn step_context(ctx: &mut SamplingContext, animation: &Animation, ratio: f32) -> f32 {
-        let animation_id = animation.as_id();
-        if ctx.animation_id() != animation_id {
-            ctx.set_animation_id(animation_id);
+        let animation_runtime_id = animation.runtime_id();
+        if ctx.animation_runtime_id() != animation_runtime_id {
+            ctx.set_animation_runtime_id(animation_runtime_id);
             ctx.set_translation_next(0);
             ctx.set_rotation_next(0);
             ctx.set_scale_next(0);
@@ -1592,7 +1592,7 @@ mod sampling_tests {
     }
 
     fn execute_test<const S: usize>(animation: AnimationRaw, frames: Vec<Frame<S>>) {
-        let animation = Rc::new(Animation::from_raw(&animation));
+        let animation = Rc::new(Animation::from_raw(&animation).unwrap());
         let mut job = SamplingJob::default();
         job.set_animation(animation);
         job.set_context(SamplingContext::new(S));
@@ -1878,8 +1878,8 @@ mod sampling_tests {
             s_previouses: empty_previouses(),
             ..Default::default()
         };
-        let animation1 = Rc::new(Animation::from_raw(&animation_raw));
-        let animation2 = Rc::new(Animation::from_raw(&animation_raw));
+        let animation1 = Rc::new(Animation::from_raw(&animation_raw).unwrap());
+        let animation2 = Rc::new(Animation::from_raw(&animation_raw).unwrap());
 
         let mut job = SamplingJob::default();
         job.set_animation(animation1.clone());
@@ -1938,7 +1938,7 @@ mod sampling_tests {
         let ctx: SamplingContext = job.context().unwrap().clone();
         let buf = rkyv::to_bytes::<Error>(&ctx).unwrap();
         let archived = unsafe { rkyv::access_unchecked::<ArchivedSamplingContext>(&buf) };
-        assert_eq!(archived.animation_id, ctx.animation_id());
+        assert_eq!(archived.animation_runtime_id, ctx.animation_runtime_id());
         assert_eq!(archived.ratio, ctx.ratio());
         assert_eq!(&archived.translations, ctx.translations());
         assert_eq!(&archived.translation_entries, ctx.translation_entries());
@@ -1955,7 +1955,7 @@ mod sampling_tests {
 
         let ctx_de: SamplingContext = rkyv::deserialize::<_, Error>(archived).unwrap();
         assert_eq!(ctx_de.size(), ctx.size());
-        assert_eq!(ctx_de.animation_id(), ctx.animation_id());
+        assert_eq!(ctx_de.animation_runtime_id(), ctx.animation_runtime_id());
         assert_eq!(ctx_de.ratio(), ctx.ratio());
         assert_eq!(ctx_de.translations(), ctx.translations());
         assert_eq!(ctx_de.translation_entries(), ctx.translation_entries());
@@ -1990,7 +1990,7 @@ mod sampling_tests {
         let ctx_de: SamplingContext = serde_json::from_str(&json).unwrap();
 
         assert_eq!(ctx_de.size(), ctx.size());
-        assert_eq!(ctx_de.animation_id(), ctx.animation_id());
+        assert_eq!(ctx_de.animation_runtime_id(), ctx.animation_runtime_id());
         assert_eq!(ctx_de.ratio(), ctx.ratio());
         assert_eq!(ctx_de.translation_entries(), ctx.translation_entries());
         assert_eq!(ctx_de.rotation_entries(), ctx.rotation_entries());
