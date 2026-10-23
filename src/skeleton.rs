@@ -4,6 +4,7 @@
 
 use bimap::BiHashMap;
 use std::alloc::{self, Layout};
+use std::hint::unlikely;
 use std::io::Read;
 use std::{mem, slice};
 
@@ -21,7 +22,7 @@ pub type JointHashMap = BiHashMap<String, i16, DeterministicState, Deterministic
 /// Joint names, rest-poses and hierarchy information are all stored in separate
 /// arrays of data (as opposed to joint structures for the SkeletonRaw), in order
 /// to closely match with the way runtime algorithms use them. Joint hierarchy is
-/// packed as an array of parent jont indices (16 bits), stored in depth-first
+/// packed as an array of parent joint indices (16 bits), stored in depth-first
 /// order. This is enough to traverse the whole joint hierarchy. Use
 /// iter_depth_first() to implement a depth-first traversal utility.
 ///
@@ -41,9 +42,11 @@ unsafe impl Sync for Skeleton {}
 impl Drop for Skeleton {
     fn drop(&mut self) {
         if !self.joint_rest_poses.is_null() {
-            unsafe {
-                let layout = Layout::from_size_align_unchecked(self.size, mem::align_of::<SoaTransform>());
-                alloc::dealloc(self.joint_rest_poses as *mut u8, layout);
+            if self.size != 0 {
+                unsafe {
+                    let layout = Layout::from_size_align_unchecked(self.size, mem::align_of::<SoaTransform>());
+                    alloc::dealloc(self.joint_rest_poses as *mut u8, layout);
+                }
             }
             self.joint_rest_poses = std::ptr::null_mut();
             self.joint_parents = std::ptr::null_mut();
@@ -62,6 +65,7 @@ pub struct SkeletonMeta {
 
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(not(feature = "serde"), allow(dead_code))]
 pub(crate) struct SkeletonRaw {
     pub joint_rest_poses: Vec<SoaTransform>,
     pub joint_parents: Vec<i16>,
@@ -82,6 +86,8 @@ impl Skeleton {
     }
 
     /// Reads a `SkeletonMeta` from a reader.
+    ///
+    /// `with_joints` also reads joint names and parents into the meta.
     pub fn read_meta(archive: &mut Archive<impl Read>, with_joints: bool) -> Result<SkeletonMeta, OzzError> {
         if archive.read_tag()? != Self::tag() {
             return Err(OzzError::InvalidTag);
@@ -91,6 +97,9 @@ impl Skeleton {
         }
 
         let num_joints: u32 = archive.read()?;
+        if num_joints > i16::MAX as u32 {
+            return Err(OzzError::InvalidResource);
+        }
         if num_joints == 0 || !with_joints {
             return Ok(SkeletonMeta {
                 version: Self::version(),
@@ -121,15 +130,27 @@ impl Skeleton {
     }
 
     /// Reads a `Skeleton` from a reader.
+    ///
+    /// Uses joint data from `meta` if present, otherwise reads it from the archive.
     pub fn from_archive_with_meta(archive: &mut Archive<impl Read>, meta: SkeletonMeta) -> Result<Skeleton, OzzError> {
-        let mut skeleton = Skeleton::new(meta);
+        let has_joints = !meta.joint_names.is_empty();
+        let mut skeleton = Skeleton::new(&meta);
 
-        let _char_count: u32 = archive.read()?;
-        for idx in 0..skeleton.num_joints() {
-            skeleton.joint_names.insert(archive.read::<String>()?, idx as i16);
+        if has_joints {
+            skeleton.joint_names = meta.joint_names;
+            skeleton.joint_parents_mut().copy_from_slice(&meta.joint_parents);
+        } else {
+            let _char_count: u32 = archive.read()?;
+            for idx in 0..skeleton.num_joints() {
+                skeleton.joint_names.insert(archive.read::<String>()?, idx as i16);
+            }
+            if skeleton.joint_names().len() != skeleton.num_joints() {
+                // Duplicate joint names collapse in the name map.
+                return Err(OzzError::InvalidResource);
+            }
+            archive.read_slice(skeleton.joint_parents_mut())?;
         }
 
-        archive.read_slice(skeleton.joint_parents_mut())?;
         archive.read_slice(skeleton.joint_rest_poses_mut())?;
         Ok(skeleton)
     }
@@ -154,8 +175,9 @@ impl Skeleton {
         Skeleton::from_archive(&mut archive)
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     pub(crate) fn from_raw(raw: &SkeletonRaw) -> Skeleton {
-        let mut skeleton = Skeleton::new(SkeletonMeta {
+        let mut skeleton = Skeleton::new(&SkeletonMeta {
             version: Self::version(),
             num_joints: raw.joint_parents.len() as u32,
             joint_names: BiHashMap::default(),
@@ -167,6 +189,7 @@ impl Skeleton {
         skeleton
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     pub(crate) fn to_raw(&self) -> SkeletonRaw {
         SkeletonRaw {
             joint_rest_poses: self.joint_rest_poses().to_vec(),
@@ -175,7 +198,7 @@ impl Skeleton {
         }
     }
 
-    fn new(meta: SkeletonMeta) -> Skeleton {
+    fn new(meta: &SkeletonMeta) -> Skeleton {
         let mut skeleton = Skeleton {
             size: 0,
             num_joints: meta.num_joints,
@@ -194,8 +217,16 @@ impl Skeleton {
             mem::size_of::<SoaTransform>() * skeleton.num_soa_joints() + mem::size_of::<i16>() * skeleton.num_joints();
 
         unsafe {
-            let layout = Layout::from_size_align_unchecked(skeleton.size, ALIGN);
-            let mut ptr = alloc::alloc(layout);
+            let mut ptr = if skeleton.size == 0 {
+                std::ptr::NonNull::<SoaTransform>::dangling().as_ptr() as *mut u8
+            } else {
+                let layout = Layout::from_size_align_unchecked(skeleton.size, ALIGN);
+                let ptr = alloc::alloc(layout);
+                if ptr.is_null() {
+                    alloc::handle_alloc_error(layout);
+                }
+                ptr
+            };
 
             skeleton.joint_rest_poses = ptr as *mut SoaTransform;
             ptr = ptr.add(mem::size_of::<SoaTransform>() * skeleton.num_soa_joints());
@@ -275,11 +306,15 @@ impl Skeleton {
 
     /// Test if a joint is a leaf.
     ///
-    /// * `joint` - `joint` must be in range [0, num joints].
+    /// * `joint` - Joint index, in range [0, num_joints). Out of range joints are not leaves.
     ///   Joint is a leaf if it's the last joint, or next joint's parent isn't `joint`.
     #[inline]
     pub fn is_leaf(&self, joint: impl OzzIndex) -> bool {
-        let next = joint.usize() + 1;
+        let idx = joint.usize();
+        if unlikely(idx >= self.num_joints()) {
+            return false;
+        }
+        let next = idx + 1;
         next == self.num_joints() || (self.joint_parents()[next] as i32 != joint.i32())
     }
 
@@ -328,7 +363,7 @@ pub struct ArchivedSkeleton {
 const _: () = {
     use crate::base::SliceRkyvExt;
     use rkyv::munge::munge;
-    use rkyv::rancor::{Fallible, Source};
+    use rkyv::rancor::{fail, Fallible, Source};
     use rkyv::ser::{Allocator, Writer, WriterExt};
     use rkyv::vec::{ArchivedVec, VecResolver};
     use rkyv::{Archive, Deserialize, Place, Serialize};
@@ -411,12 +446,22 @@ const _: () = {
     {
         #[inline]
         fn deserialize(&self, deserializer: &mut D) -> Result<Skeleton, D::Error> {
-            let mut skeleton = Skeleton::new(SkeletonMeta {
+            let num_joints = self.num_joints.to_native();
+            if num_joints > i16::MAX as u32 {
+                fail!(OzzError::InvalidResource);
+            }
+            let mut skeleton = Skeleton::new(&SkeletonMeta {
                 version: Skeleton::version(),
-                num_joints: self.num_joints.to_native(),
+                num_joints,
                 joint_names: BiHashMap::default(),
                 joint_parents: Vec::new(),
             });
+
+            if self.joint_rest_poses.len() != skeleton.joint_rest_poses_mut().len()
+                || self.joint_names.len() != num_joints as usize
+            {
+                fail!(OzzError::InvalidResource);
+            }
             skeleton
                 .joint_rest_poses_mut()
                 .copy_from_slice(self.joint_rest_poses.as_slice());
@@ -428,6 +473,11 @@ const _: () = {
             );
             for (idx, joint) in self.joint_names.iter().enumerate() {
                 skeleton.joint_names.insert(joint.to_string(), idx as i16);
+            }
+            if skeleton.joint_names.len() != num_joints as usize {
+                // Duplicate joint names collapse in the name map: same invariant
+                // as the native archive path.
+                fail!(OzzError::InvalidResource);
             }
 
             skeleton
@@ -452,6 +502,12 @@ const _: () = {
     impl<'de> Deserialize<'de> for Skeleton {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Skeleton, D::Error> {
             let raw = SkeletonRaw::deserialize(deserializer)?;
+            let num_joints = raw.joint_parents.len();
+            if raw.joint_rest_poses.len() != num_joints.div_ceil(4) || raw.joint_names.len() != num_joints {
+                return Err(serde::de::Error::custom(
+                    "skeleton rest poses/parents/names are inconsistent",
+                ));
+            }
             Ok(Skeleton::from_raw(&raw))
         }
     }
@@ -534,6 +590,33 @@ mod tests {
         assert_eq!(skeleton.joint_by_name("Bip01 R Toe0Nub"), Some(66));
     }
 
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_read_meta_with_joints() {
+        let expected = Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap();
+
+        // `read_meta(true)` already consumed names/parents; do not read them again.
+        let mut archive = crate::archive::Archive::from_path("./resource/playback/skeleton.ozz").unwrap();
+        let meta = Skeleton::read_meta(&mut archive, true).unwrap();
+        let skeleton = Skeleton::from_archive_with_meta(&mut archive, meta).unwrap();
+
+        assert_eq!(skeleton.joint_names(), expected.joint_names());
+        assert_eq!(skeleton.joint_parents(), expected.joint_parents());
+        assert_eq!(skeleton.joint_rest_poses(), expected.joint_rest_poses());
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_is_leaf_bounds() {
+        let skeleton = Skeleton::from_path("./resource/playback/skeleton.ozz").unwrap();
+        let num_joints = skeleton.num_joints();
+        assert!(skeleton.is_leaf(num_joints - 1), "last joint is a leaf");
+        // Out of range joints used to panic with an out-of-bounds index, they are
+        // simply not leaves.
+        assert!(!skeleton.is_leaf(num_joints));
+        assert!(!skeleton.is_leaf(num_joints + 10));
+    }
+
     #[cfg(feature = "rkyv")]
     #[test]
     #[wasm_bindgen_test]
@@ -557,8 +640,8 @@ mod tests {
         use serde_json;
 
         let skeleton = Skeleton::from_path("./resource/blend/skeleton.ozz").unwrap();
-        let josn = serde_json::to_vec(&skeleton).unwrap();
-        let skeleton2: Skeleton = serde_json::from_slice(&josn).unwrap();
+        let json = serde_json::to_vec(&skeleton).unwrap();
+        let skeleton2: Skeleton = serde_json::from_slice(&json).unwrap();
 
         assert_eq!(skeleton.joint_rest_poses(), skeleton2.joint_rest_poses());
         assert_eq!(skeleton.joint_parents(), skeleton2.joint_parents());
