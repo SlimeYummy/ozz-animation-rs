@@ -7,10 +7,11 @@ use std::alloc::{self, Layout};
 use std::io::Read;
 use std::simd::prelude::*;
 use std::simd::*;
-use std::{mem, slice};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::{mem, ptr, slice};
 
 use crate::archive::{Archive, ArchiveRead};
-use crate::base::{align_ptr, align_usize, OzzError};
+use crate::base::{align_ptr, OzzError};
 use crate::math::{f16_to_f32, fx4, ix4, simd_f16_to_f32, SoaQuat, SoaVec3, ONE, ZERO};
 
 /// Float3 key for `Animation` track.
@@ -123,11 +124,35 @@ impl QuaternionKey {
         let m3 = &MAPPING[largest3 as usize];
 
         let cmp_keys: [f32x4; 4] = [
-            f32x4::from_array([ value0[m0[0]] as f32, value1[m1[0]] as f32, value2[m2[0]] as f32, value3[m3[0]] as f32 ]),
-            f32x4::from_array([ value0[m0[1]] as f32, value1[m1[1]] as f32, value2[m2[1]] as f32, value3[m3[1]] as f32 ]),
-            f32x4::from_array([ value0[m0[2]] as f32, value1[m1[2]] as f32, value2[m2[2]] as f32, value3[m3[2]] as f32 ]),
-            f32x4::from_array([ value0[m0[3]] as f32, value1[m1[3]] as f32, value2[m2[3]] as f32, value3[m3[3]] as f32 ]),
-        ]; // TODO: simd int to float
+            i32x4::from_array([
+                value0[m0[0]] as i32,
+                value1[m1[0]] as i32,
+                value2[m2[0]] as i32,
+                value3[m3[0]] as i32,
+            ])
+            .cast::<f32>(),
+            i32x4::from_array([
+                value0[m0[1]] as i32,
+                value1[m1[1]] as i32,
+                value2[m2[1]] as i32,
+                value3[m3[1]] as i32,
+            ])
+            .cast::<f32>(),
+            i32x4::from_array([
+                value0[m0[2]] as i32,
+                value1[m1[2]] as i32,
+                value2[m2[2]] as i32,
+                value3[m3[2]] as i32,
+            ])
+            .cast::<f32>(),
+            i32x4::from_array([
+                value0[m0[3]] as i32,
+                value1[m1[3]] as i32,
+                value2[m2[3]] as i32,
+                value3[m3[3]] as i32,
+            ])
+            .cast::<f32>(),
+        ];
 
         let mut cpnt = [
             SCALE * cmp_keys[0] + OFFSET,
@@ -181,6 +206,7 @@ impl ArchiveRead<QuaternionKey> for QuaternionKey {
 ///
 #[derive(Debug)]
 pub struct Animation {
+    runtime_id: u32,
     size: usize,
     duration: f32,
     num_tracks: u32,
@@ -222,26 +248,28 @@ pub struct Animation {
 impl Drop for Animation {
     fn drop(&mut self) {
         if !self.timepoints.is_null() {
-            unsafe {
-                let layout = Layout::from_size_align_unchecked(self.size, mem::size_of::<f32>());
-                alloc::dealloc(self.timepoints as *mut u8, layout);
+            if self.size != 0 {
+                unsafe {
+                    let layout = Layout::from_size_align_unchecked(self.size, mem::size_of::<f32>());
+                    alloc::dealloc(self.timepoints as *mut u8, layout);
+                }
             }
-            self.timepoints = std::ptr::null_mut();
-            self.translations = std::ptr::null_mut();
-            self.t_ratios = std::ptr::null_mut();
-            self.t_previouses = std::ptr::null_mut();
-            self.t_iframe_entries = std::ptr::null_mut();
-            self.t_iframe_desc = std::ptr::null_mut();
-            self.rotations = std::ptr::null_mut();
-            self.r_ratios = std::ptr::null_mut();
-            self.r_previouses = std::ptr::null_mut();
-            self.r_iframe_entries = std::ptr::null_mut();
-            self.r_iframe_desc = std::ptr::null_mut();
-            self.scales = std::ptr::null_mut();
-            self.s_ratios = std::ptr::null_mut();
-            self.s_previouses = std::ptr::null_mut();
-            self.s_iframe_entries = std::ptr::null_mut();
-            self.s_iframe_desc = std::ptr::null_mut();
+            self.timepoints = ptr::null_mut();
+            self.translations = ptr::null_mut();
+            self.t_ratios = ptr::null_mut();
+            self.t_previouses = ptr::null_mut();
+            self.t_iframe_entries = ptr::null_mut();
+            self.t_iframe_desc = ptr::null_mut();
+            self.rotations = ptr::null_mut();
+            self.r_ratios = ptr::null_mut();
+            self.r_previouses = ptr::null_mut();
+            self.r_iframe_entries = ptr::null_mut();
+            self.r_iframe_desc = ptr::null_mut();
+            self.scales = ptr::null_mut();
+            self.s_ratios = ptr::null_mut();
+            self.s_previouses = ptr::null_mut();
+            self.s_iframe_entries = ptr::null_mut();
+            self.s_iframe_desc = ptr::null_mut();
         }
     }
 }
@@ -267,6 +295,7 @@ pub struct AnimationMeta {
 
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(not(feature = "serde"), allow(dead_code))]
 pub(crate) struct AnimationRaw {
     pub duration: f32,
     pub num_tracks: u32,
@@ -311,10 +340,10 @@ impl Animation {
         7
     }
 
-    /// Converts the `Animation` reference to a unique ID (runtime only).
+    /// Returns the runtime unique ID of this animation.
     #[inline]
-    pub fn as_id(&self) -> u64 {
-        self as *const _ as u64
+    pub fn runtime_id(&self) -> u64 {
+        self.runtime_id as u64
     }
 
     /// Reads an `AnimationMeta` from an `Archive`.
@@ -412,6 +441,7 @@ impl Animation {
         archive.read_slice(animation.s_iframe_desc_mut())?;
         animation.s_iframe_interval = archive.read()?;
         archive.read_slice(animation.scales_mut())?;
+        animation.validate_iframes()?;
         Ok(animation)
     }
 
@@ -435,7 +465,18 @@ impl Animation {
         Animation::from_archive(&mut archive)
     }
 
-    pub(crate) fn from_raw(raw: &AnimationRaw) -> Animation {
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
+    pub(crate) fn from_raw(raw: &AnimationRaw) -> Result<Animation, OzzError> {
+        if raw.t_ratios.len() != raw.translations.len()
+            || raw.t_previouses.len() != raw.translations.len()
+            || raw.r_ratios.len() != raw.rotations.len()
+            || raw.r_previouses.len() != raw.rotations.len()
+            || raw.s_ratios.len() != raw.scales.len()
+            || raw.s_previouses.len() != raw.scales.len()
+        {
+            return Err(OzzError::InvalidResource);
+        }
+
         let meta = AnimationMeta {
             version: Animation::version(),
             duration: raw.duration,
@@ -475,9 +516,11 @@ impl Animation {
         animation.s_iframe_interval = raw.s_iframe_interval;
         animation.s_iframe_entries_mut().copy_from_slice(&raw.s_iframe_entries);
         animation.s_iframe_desc_mut().copy_from_slice(&raw.s_iframe_desc);
-        animation
+        animation.validate_iframes()?;
+        Ok(animation)
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     pub(crate) fn to_raw(&self) -> AnimationRaw {
         AnimationRaw {
             duration: self.duration,
@@ -509,72 +552,84 @@ impl Animation {
     }
 
     fn new(meta: AnimationMeta) -> Animation {
+        static RUNTIME_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
+
         let mut animation = Animation {
+            runtime_id: RUNTIME_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             size: 0,
             duration: meta.duration,
             num_tracks: meta.num_tracks,
             name: meta.name,
-            timepoints: std::ptr::null_mut(),
+            timepoints: ptr::null_mut(),
             timepoints_count: meta.timepoints_count,
 
-            translations: std::ptr::null_mut(),
+            translations: ptr::null_mut(),
             translations_count: meta.translations_count,
-            t_ratios: std::ptr::null_mut(),
-            t_previouses: std::ptr::null_mut(),
+            t_ratios: ptr::null_mut(),
+            t_previouses: ptr::null_mut(),
             t_iframe_interval: 0.0,
-            t_iframe_entries: std::ptr::null_mut(),
+            t_iframe_entries: ptr::null_mut(),
             t_iframe_entries_count: meta.t_iframe_entries_count,
-            t_iframe_desc: std::ptr::null_mut(),
+            t_iframe_desc: ptr::null_mut(),
             t_iframe_desc_count: meta.t_iframe_desc_count,
 
-            rotations: std::ptr::null_mut(),
+            rotations: ptr::null_mut(),
             rotations_count: meta.rotations_count,
-            r_ratios: std::ptr::null_mut(),
-            r_previouses: std::ptr::null_mut(),
+            r_ratios: ptr::null_mut(),
+            r_previouses: ptr::null_mut(),
             r_iframe_interval: 0.0,
-            r_iframe_entries: std::ptr::null_mut(),
+            r_iframe_entries: ptr::null_mut(),
             r_iframe_entries_count: meta.r_iframe_entries_count,
-            r_iframe_desc: std::ptr::null_mut(),
+            r_iframe_desc: ptr::null_mut(),
             r_iframe_desc_count: meta.r_iframe_desc_count,
 
-            scales: std::ptr::null_mut(),
+            scales: ptr::null_mut(),
             scales_count: meta.scales_count,
-            s_ratios: std::ptr::null_mut(),
-            s_previouses: std::ptr::null_mut(),
+            s_ratios: ptr::null_mut(),
+            s_previouses: ptr::null_mut(),
             s_iframe_interval: 0.0,
-            s_iframe_entries: std::ptr::null_mut(),
+            s_iframe_entries: ptr::null_mut(),
             s_iframe_entries_count: meta.s_iframe_entries_count,
-            s_iframe_desc: std::ptr::null_mut(),
+            s_iframe_desc: ptr::null_mut(),
             s_iframe_desc_count: meta.s_iframe_desc_count,
         };
 
         const ALIGN: usize = mem::align_of::<f32>();
-        animation.size = (animation.timepoints_count as usize) * mem::size_of::<f32>();
+        let mut size: u64 = animation.timepoints_count as u64 * mem::size_of::<f32>() as u64;
 
-        animation.size += animation.translations_count as usize * mem::size_of::<Float3Key>() + // translations
-            animation.translations_count as usize * mem::size_of::<u16>() + // ratios
-            animation.translations_count as usize * mem::size_of::<u16>() + // previouses
-            animation.t_iframe_entries_count as usize * mem::size_of::<u8>(); // t_iframe_entries
-        animation.size = align_usize(animation.size, ALIGN);
-        animation.size += animation.t_iframe_desc_count as usize * mem::size_of::<u32>(); // t_iframe_desc
+        size += animation.translations_count as u64
+            * (mem::size_of::<Float3Key>() as u64 + 2 * mem::size_of::<u16>() as u64)
+            + animation.t_iframe_entries_count as u64;
+        size = size.div_ceil(ALIGN as u64) * ALIGN as u64;
+        size += animation.t_iframe_desc_count as u64 * mem::size_of::<u32>() as u64;
 
-        animation.size += animation.rotations_count as usize * mem::size_of::<QuaternionKey>() + // rotations
-            animation.rotations_count as usize * mem::size_of::<u16>() + // r_ratios
-            animation.rotations_count as usize * mem::size_of::<u16>() + // r_previouses
-            animation.r_iframe_entries_count as usize * mem::size_of::<u8>(); // r_iframe_entries
-        animation.size = align_usize(animation.size, ALIGN);
-        animation.size += animation.r_iframe_desc_count as usize * mem::size_of::<u32>(); // r_iframe_desc
+        size += animation.rotations_count as u64
+            * (mem::size_of::<QuaternionKey>() as u64 + 2 * mem::size_of::<u16>() as u64)
+            + animation.r_iframe_entries_count as u64;
+        size = size.div_ceil(ALIGN as u64) * ALIGN as u64;
+        size += animation.r_iframe_desc_count as u64 * mem::size_of::<u32>() as u64;
 
-        animation.size += animation.scales_count as usize * mem::size_of::<Float3Key>() + // scales
-            animation.scales_count as usize * mem::size_of::<u16>() + // s_ratios
-            animation.scales_count as usize * mem::size_of::<u16>() + // s_previouses
-            animation.s_iframe_entries_count as usize * mem::size_of::<u8>(); // s_iframe_entries
-        animation.size = align_usize(animation.size, ALIGN);
-        animation.size += animation.s_iframe_desc_count as usize * mem::size_of::<u32>(); // s_iframe_desc
+        size += animation.scales_count as u64 * (mem::size_of::<Float3Key>() as u64 + 2 * mem::size_of::<u16>() as u64)
+            + animation.s_iframe_entries_count as u64;
+        size = size.div_ceil(ALIGN as u64) * ALIGN as u64;
+        size += animation.s_iframe_desc_count as u64 * mem::size_of::<u32>() as u64;
+
+        if size > usize::MAX as u64 {
+            alloc::handle_alloc_error(Layout::new::<u8>());
+        }
+        animation.size = size as usize;
 
         unsafe {
-            let layout = Layout::from_size_align_unchecked(animation.size, mem::size_of::<f32>());
-            let mut ptr = alloc::alloc(layout);
+            let mut ptr = if animation.size == 0 {
+                ptr::NonNull::<f32>::dangling().as_ptr() as *mut u8
+            } else {
+                let layout = Layout::from_size_align_unchecked(animation.size, mem::size_of::<f32>());
+                let ptr = alloc::alloc(layout);
+                if ptr.is_null() {
+                    alloc::handle_alloc_error(layout);
+                }
+                ptr
+            };
 
             animation.timepoints = ptr as *mut f32;
             ptr = ptr.add(animation.timepoints_count as usize * mem::size_of::<f32>());
@@ -618,6 +673,24 @@ impl Animation {
             debug_assert_eq!(ptr, (animation.timepoints as *mut u8).add(animation.size));
         }
         animation
+    }
+
+    // Non-positive/non-finite intervals with snapshot data would make
+    // `SamplingJob::update_cache` compute an unbounded iframe index.
+    fn validate_iframes(&self) -> Result<(), OzzError> {
+        for (interval, desc) in [
+            (self.t_iframe_interval, self.t_iframe_desc()),
+            (self.r_iframe_interval, self.r_iframe_desc()),
+            (self.s_iframe_interval, self.s_iframe_desc()),
+        ] {
+            if desc.is_empty() {
+                continue;
+            }
+            if !interval.is_finite() || interval <= 0.0 || !desc.len().is_multiple_of(2) {
+                return Err(OzzError::InvalidResource);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -695,6 +768,7 @@ impl Animation {
         unsafe { slice::from_raw_parts_mut(self.t_ratios, self.translations_count as usize) }
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     #[inline]
     fn t_previouses(&self) -> &[u16] {
         unsafe { slice::from_raw_parts(self.t_previouses, self.translations_count as usize) }
@@ -705,6 +779,7 @@ impl Animation {
         unsafe { slice::from_raw_parts_mut(self.t_previouses, self.translations_count as usize) }
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     #[inline]
     fn t_iframe_entries(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(self.t_iframe_entries, self.t_iframe_entries_count as usize) }
@@ -746,6 +821,7 @@ impl Animation {
         unsafe { slice::from_raw_parts_mut(self.r_ratios, self.rotations_count as usize) }
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     #[inline]
     fn r_previouses(&self) -> &[u16] {
         unsafe { slice::from_raw_parts(self.r_previouses, self.rotations_count as usize) }
@@ -756,6 +832,7 @@ impl Animation {
         unsafe { slice::from_raw_parts_mut(self.r_previouses, self.rotations_count as usize) }
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     #[inline]
     fn r_iframe_entries(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(self.r_iframe_entries, self.r_iframe_entries_count as usize) }
@@ -797,6 +874,7 @@ impl Animation {
         unsafe { slice::from_raw_parts_mut(self.s_ratios, self.scales_count as usize) }
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     #[inline]
     fn s_previouses(&self) -> &[u16] {
         unsafe { slice::from_raw_parts(self.s_previouses, self.scales_count as usize) }
@@ -807,6 +885,7 @@ impl Animation {
         unsafe { slice::from_raw_parts_mut(self.s_previouses, self.scales_count as usize) }
     }
 
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     #[inline]
     fn s_iframe_entries(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(self.s_iframe_entries, self.s_iframe_entries_count as usize) }
@@ -905,7 +984,7 @@ pub struct ArchivedAnimation {
 const _: () = {
     use crate::base::SliceRkyvExt;
     use rkyv::munge::munge;
-    use rkyv::rancor::{Fallible, Source};
+    use rkyv::rancor::{fail, Fallible, Source};
     use rkyv::ser::{Allocator, Writer};
     use rkyv::string::{ArchivedString, StringResolver};
     use rkyv::vec::{ArchivedVec, VecResolver};
@@ -1099,6 +1178,9 @@ const _: () = {
                 .copy_from_deserialize(deserializer, &self.s_iframe_desc)?;
             animation.s_iframe_interval = self.s_iframe_interval.to_native();
 
+            if animation.validate_iframes().is_err() {
+                fail!(OzzError::InvalidResource);
+            }
             Ok(animation)
         }
     }
@@ -1118,7 +1200,7 @@ const _: () = {
     impl<'de> Deserialize<'de> for Animation {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Animation, D::Error> {
             let raw = AnimationRaw::deserialize(deserializer)?;
-            Ok(Animation::from_raw(&raw))
+            Animation::from_raw(&raw).map_err(|e| serde::de::Error::custom(e.to_string()))
         }
     }
 };

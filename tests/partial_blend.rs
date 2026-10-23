@@ -103,9 +103,9 @@ where
             &TestData {
                 ratio,
                 sample_out_lower: sample_out_lower.buf().unwrap().to_vec(),
-                sample_ctx_lower: sample_job_lower.context().unwrap().clone_without_animation_id(),
+                sample_ctx_lower: sample_job_lower.context().unwrap().clone_without_animation_runtime_id(),
                 sample_out_upper: sample_out_upper.buf().unwrap().to_vec(),
-                sample_ctx_upper: sample_job_upper.context().unwrap().clone_without_animation_id(),
+                sample_ctx_upper: sample_job_upper.context().unwrap().clone_without_animation_runtime_id(),
                 blending_out: blending_out.buf().unwrap().to_vec(),
                 l2m_out: l2m_out.buf().unwrap().to_vec(),
             },

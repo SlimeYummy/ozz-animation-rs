@@ -120,9 +120,9 @@ where
 
     tester1(&TestDataInit {
         sample_out_splay: sample_out_splay.buf().unwrap().to_vec(),
-        sample_ctx_splay: sample_job_splay.context().unwrap().clone_without_animation_id(),
+        sample_ctx_splay: sample_job_splay.context().unwrap().clone_without_animation_runtime_id(),
         sample_out_curl: sample_out_curl.buf().unwrap().to_vec(),
-        sample_ctx_curl: sample_job_curl.context().unwrap().clone_without_animation_id(),
+        sample_ctx_curl: sample_job_curl.context().unwrap().clone_without_animation_runtime_id(),
     });
 
     for i in range {
@@ -144,7 +144,7 @@ where
             &TestData {
                 ratio,
                 sample_out_base: sample_out_base.buf().unwrap().to_vec(),
-                sample_ctx_base: sample_job_base.context().unwrap().clone_without_animation_id(),
+                sample_ctx_base: sample_job_base.context().unwrap().clone_without_animation_runtime_id(),
                 blending_out: blending_out.buf().unwrap().to_vec(),
                 l2m_out: l2m_out.buf().unwrap().to_vec(),
             },

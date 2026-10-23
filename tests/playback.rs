@@ -67,7 +67,7 @@ where
             &TestData {
                 ratio,
                 sample_out: sample_out.buf().unwrap().to_vec(),
-                sample_ctx: sample_job.context().unwrap().clone_without_animation_id(),
+                sample_ctx: sample_job.context().unwrap().clone_without_animation_runtime_id(),
                 l2m_out: l2m_out.buf().unwrap().to_vec(),
             },
         );

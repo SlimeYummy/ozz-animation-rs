@@ -73,7 +73,7 @@ fn prepare_contexts(
             let ratio = (i as f32) / (N as f32);
             sample_job.set_ratio(ratio);
             sample_job.run().unwrap();
-            contexts.push(sample_job.context().unwrap().clone_without_animation_id());
+            contexts.push(sample_job.context().unwrap().clone_without_animation_runtime_id());
         }
         common::save_rkyv("context", name, &contexts, to_expected).unwrap();
         return (skeleton, animation, contexts);
@@ -114,7 +114,7 @@ fn execute_contexts(name: &str, skel_path: &str, anim_path: &str) {
         println!("name: {} idx: {} ratio: [{}, {}]", name, idx, prev_ratio, ratio);
         sample_job.set_ratio(ratio);
         sample_job.run().unwrap();
-        let context = sample_job.context().unwrap().clone_without_animation_id();
+        let context = sample_job.context().unwrap().clone_without_animation_runtime_id();
         if context != contexts[idx] {
             common::save_rkyv(
                 "context",
