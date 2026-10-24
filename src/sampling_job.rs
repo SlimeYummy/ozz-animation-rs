@@ -64,7 +64,7 @@ const _: () = {
     {
         #[inline]
         unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
-            if value as usize % mem::align_of::<InterpSoaFloat3>() != 0 {
+            if !(value as usize).is_multiple_of(mem::align_of::<InterpSoaFloat3>()) {
                 fail!(OzzError::InvalidRepr)
             }
             Ok(())
@@ -123,7 +123,7 @@ const _: () = {
     {
         #[inline]
         unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
-            if value as usize % mem::align_of::<InterpSoaQuaternion>() != 0 {
+            if !(value as usize).is_multiple_of(mem::align_of::<InterpSoaQuaternion>()) {
                 fail!(OzzError::InvalidRepr)
             }
             Ok(())
@@ -677,7 +677,7 @@ pub struct ArchivedSamplingContext {
 const _: () = {
     use crate::base::SliceRkyvExt;
     use rkyv::munge::munge;
-    use rkyv::rancor::{Fallible, Source};
+    use rkyv::rancor::{fail, Fallible, Source};
     use rkyv::ser::{Allocator, Writer, WriterExt};
     use rkyv::vec::{ArchivedVec, VecResolver};
     use rkyv::{Archive, Deserialize, Place, Serialize};
@@ -777,7 +777,22 @@ const _: () = {
     {
         #[inline]
         fn deserialize(&self, deserializer: &mut D) -> Result<SamplingContext, D::Error> {
-            let mut context = SamplingContext::new(self.max_tracks.to_native() as usize);
+            let max_tracks = self.max_tracks.to_native() as usize;
+            let max_soa_tracks = max_tracks.div_ceil(4);
+            let max_outdated = max_soa_tracks.div_ceil(8);
+            if self.translations.len() != max_soa_tracks
+                || self.rotations.len() != max_soa_tracks
+                || self.scales.len() != max_soa_tracks
+                || self.translation_entries.len() != max_tracks
+                || self.rotation_entries.len() != max_tracks
+                || self.scale_entries.len() != max_tracks
+                || self.translation_outdated.len() != max_outdated
+                || self.rotation_outdated.len() != max_outdated
+                || self.scale_outdated.len() != max_outdated
+            {
+                fail!(OzzError::InvalidResource);
+            }
+            let mut context = SamplingContext::new(max_tracks);
             context.set_animation_runtime_id(self.animation_runtime_id.to_native());
             context.set_ratio(self.ratio.to_native());
             context.translations_mut().copy_from_slice(&self.translations);
@@ -864,6 +879,18 @@ const _: () = {
         }
 
         fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<Self::Value, V::Error> {
+            fn checked_copy<T: Clone, E: de::Error>(dst: &mut [T], src: &[T]) -> Result<(), E> {
+                if dst.len() != src.len() {
+                    return Err(E::custom(format!(
+                        "sampling context buffer length mismatch: expected {}, got {}",
+                        dst.len(),
+                        src.len()
+                    )));
+                }
+                dst.clone_from_slice(src);
+                Ok(())
+            }
+
             let mut max_tracks: Option<usize> = None;
             while let Some(key) = map.next_key::<&str>()? {
                 if key == "max_tracks" {
@@ -883,40 +910,33 @@ const _: () = {
                     "animation_runtime_id" => ctx.set_animation_runtime_id(map.next_value()?),
                     "ratio" => ctx.set_ratio(map.next_value()?),
                     "translations" => {
-                        ctx.translations_mut()
-                            .copy_from_slice(&map.next_value::<Vec<InterpSoaFloat3>>()?);
+                        checked_copy(ctx.translations_mut(), &map.next_value::<Vec<InterpSoaFloat3>>()?)?;
                     }
                     "translation_entries" => {
-                        ctx.translation_entries_mut()
-                            .copy_from_slice(&map.next_value::<Vec<u32>>()?);
+                        checked_copy(ctx.translation_entries_mut(), &map.next_value::<Vec<u32>>()?)?;
                     }
                     "translation_outdated" => {
-                        ctx.translation_outdated_mut()
-                            .copy_from_slice(&map.next_value::<Vec<u8>>()?);
+                        checked_copy(ctx.translation_outdated_mut(), &map.next_value::<Vec<u8>>()?)?;
                     }
                     "translation_next" => ctx.set_translation_next(map.next_value()?),
                     "rotations" => {
-                        ctx.rotations_mut()
-                            .copy_from_slice(&map.next_value::<Vec<InterpSoaQuaternion>>()?);
+                        checked_copy(ctx.rotations_mut(), &map.next_value::<Vec<InterpSoaQuaternion>>()?)?;
                     }
                     "rotation_entries" => {
-                        ctx.rotation_entries_mut()
-                            .copy_from_slice(&map.next_value::<Vec<u32>>()?);
+                        checked_copy(ctx.rotation_entries_mut(), &map.next_value::<Vec<u32>>()?)?;
                     }
                     "rotation_outdated" => {
-                        ctx.rotation_outdated_mut()
-                            .copy_from_slice(&map.next_value::<Vec<u8>>()?);
+                        checked_copy(ctx.rotation_outdated_mut(), &map.next_value::<Vec<u8>>()?)?;
                     }
                     "rotation_next" => ctx.set_rotation_next(map.next_value()?),
                     "scales" => {
-                        ctx.scales_mut()
-                            .copy_from_slice(&map.next_value::<Vec<InterpSoaFloat3>>()?);
+                        checked_copy(ctx.scales_mut(), &map.next_value::<Vec<InterpSoaFloat3>>()?)?;
                     }
                     "scale_entries" => {
-                        ctx.scale_entries_mut().copy_from_slice(&map.next_value::<Vec<u32>>()?);
+                        checked_copy(ctx.scale_entries_mut(), &map.next_value::<Vec<u32>>()?)?;
                     }
                     "scale_outdated" => {
-                        ctx.scale_outdated_mut().copy_from_slice(&map.next_value::<Vec<u8>>()?);
+                        checked_copy(ctx.scale_outdated_mut(), &map.next_value::<Vec<u8>>()?)?;
                     }
                     "scale_next" => ctx.set_scale_next(map.next_value()?),
                     _ => {
@@ -1080,7 +1100,7 @@ where
     /// bounds.
     #[inline]
     pub fn set_ratio(&mut self, ratio: f32) {
-        self.ratio = f32_clamp_or_max(ratio, 0.0f32, 1.0f32);
+        self.ratio = ratio;
     }
 
     /// Gets output of `SamplingJob`.
@@ -1132,7 +1152,7 @@ where
     }
 
     /// Runs job's sampling task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         let anim = self.animation.as_ref().ok_or(OzzError::InvalidJob)?.obj();
         let ctx = self.context.as_mut().ok_or(OzzError::InvalidJob)?;
@@ -1148,24 +1168,25 @@ where
             return Ok(());
         }
 
-        let prev_ratio = Self::step_context(ctx.as_mut(), anim, self.ratio);
+        let ratio = f32_clamp_or_max(self.ratio, 0.0f32, 1.0f32);
+        let prev_ratio = Self::step_context(ctx.as_mut(), anim, ratio);
 
         let args = ctx.as_mut().translation_update_args(anim);
-        Self::update_cache(args, anim, &anim.translations_ctrl(), self.ratio, prev_ratio);
+        Self::update_cache(args, anim, &anim.translations_ctrl(), ratio, prev_ratio);
         let args = ctx.as_mut().translation_decompress_args();
         Self::decompress_float3(args, anim.timepoints(), &anim.translations_ctrl(), anim.translations());
 
         let args = ctx.as_mut().rotation_update_args(anim);
-        Self::update_cache(args, anim, &anim.rotations_ctrl(), self.ratio, prev_ratio);
+        Self::update_cache(args, anim, &anim.rotations_ctrl(), ratio, prev_ratio);
         let args = ctx.as_mut().rotation_decompress_args();
         Self::decompress_quat(args, anim.timepoints(), &anim.rotations_ctrl(), anim.rotations());
 
         let args = ctx.as_mut().scale_update_args(anim);
-        Self::update_cache(args, anim, &anim.scales_ctrl(), self.ratio, prev_ratio);
+        Self::update_cache(args, anim, &anim.scales_ctrl(), ratio, prev_ratio);
         let args = ctx.as_mut().scale_decompress_args();
         Self::decompress_float3(args, anim.timepoints(), &anim.scales_ctrl(), anim.scales());
 
-        Self::interpolates(anim, ctx.as_mut(), self.ratio, &mut output)?;
+        Self::interpolates(anim, ctx.as_mut(), ratio, &mut output)?;
         Ok(())
     }
 
@@ -1408,16 +1429,19 @@ where
         output: &mut [SoaTransform],
     ) -> Result<(), OzzError> {
         let ratio4 = f32x4::splat(ratio);
+        let translations = ctx.translations();
+        let rotations = ctx.rotations();
+        let scales = ctx.scales();
         for (idx, out) in output.iter_mut().enumerate().take(animation.num_soa_tracks()) {
-            let translation = &ctx.translations()[idx];
+            let translation = &translations[idx];
             let translation_ratio = (ratio4 - translation.ratio[0]) / (translation.ratio[1] - translation.ratio[0]);
             out.translation = SoaVec3::lerp(&translation.value[0], &translation.value[1], translation_ratio);
 
-            let rotation = &ctx.rotations()[idx];
+            let rotation = &rotations[idx];
             let rotation_ratio = (ratio4 - rotation.ratio[0]) / (rotation.ratio[1] - rotation.ratio[0]);
             out.rotation = SoaQuat::nlerp(&rotation.value[0], &rotation.value[1], rotation_ratio);
 
-            let scale = &ctx.scales()[idx];
+            let scale = &scales[idx];
             let scale_ratio = (ratio4 - scale.ratio[0]) / (scale.ratio[1] - scale.ratio[0]);
             out.scale = SoaVec3::lerp(&scale.value[0], &scale.value[1], scale_ratio);
         }
@@ -1432,17 +1456,14 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
 
     #[inline(always)]
     fn load(input: &[u8]) -> u32 {
-        // In C++ code (ozz-animation), load() access to input overflows near the end of the buffer.
-        // But the code logic ensures that this doesn't cause problems.
-        // Here, we're completely following the logic of the original C++ library.
-        let p = input.as_ptr();
-        unsafe {
-            let i0 = *p as u32;
-            let i1 = (*p.add(1) as u32) << 8;
-            let i2 = (*p.add(2) as u32) << 16;
-            let i3 = (*p.add(3) as u32) << 24;
-            i0 | i1 | i2 | i3
+        // Fast path: full 4-byte group (single unaligned load).
+        if let Some(bytes) = input.first_chunk::<4>() {
+            return u32::from_le_bytes(*bytes);
         }
+        // Tail: high bytes are masked out by the caller, read them as 0.
+        let mut buf = [0u8; 4];
+        buf[..input.len()].copy_from_slice(input);
+        u32::from_le_bytes(buf)
     }
 
     let prefix = buffer[0];
@@ -1465,7 +1486,7 @@ fn decode_gv4<'t>(buffer: &'t [u8], output: &mut [u32]) -> &'t [u8] {
 }
 
 fn decode_gv4_stream<'t>(buffer: &'t [u8], stream: &mut [u32]) -> &'t [u8] {
-    debug_assert!(stream.len() % 4 == 0, "Input stream must be multiple of 4");
+    debug_assert!(stream.len().is_multiple_of(4), "Input stream must be multiple of 4");
     debug_assert!(
         buffer.len() >= (stream.len() + stream.len() / 4),
         "Output buffer is too small"
