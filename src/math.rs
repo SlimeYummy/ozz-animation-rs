@@ -216,7 +216,7 @@ const _: () = {
     {
         #[inline]
         unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
-            if value as usize % mem::align_of::<SoaVec3>() != 0 {
+            if !(value as usize).is_multiple_of(mem::align_of::<SoaVec3>()) {
                 fail!(OzzError::InvalidRepr)
             }
             Ok(())
@@ -461,7 +461,7 @@ const _: () = {
     {
         #[inline]
         unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
-            if value as usize % mem::align_of::<SoaQuat>() != 0 {
+            if !(value as usize).is_multiple_of(mem::align_of::<SoaQuat>()) {
                 fail!(OzzError::InvalidRepr)
             }
             Ok(())
@@ -604,7 +604,7 @@ const _: () = {
     {
         #[inline]
         unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
-            if value as usize % mem::align_of::<SoaTransform>() != 0 {
+            if !(value as usize).is_multiple_of(mem::align_of::<SoaTransform>()) {
                 fail!(OzzError::InvalidRepr)
             }
             Ok(())
@@ -1161,7 +1161,7 @@ pub(crate) fn fx4_sin_cos(v: f32x4) -> (f32x4, f32x4) {
     // XXX11b	-cos(x')	 sin(x')
     //
     // So: sin_sign = bit2, cos_sign = bit1 ^ bit2, bit1 determines if we use sin or cos Taylor expansion
-    let quadrant_int: i32x4 = unsafe { quadrant.to_int_unchecked() };
+    let quadrant_int: i32x4 = quadrant.cast::<i32>();
     let bit1 = quadrant_int << 31;
     let bit2 = (quadrant_int << 30) & SIGN;
 
@@ -1552,6 +1552,21 @@ mod tests {
         }
 
         assert!(ma < 3.5e-7);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_sin_cos_non_finite() {
+        // Regression test: NaN/infinite inputs used to hit `to_int_unchecked` (UB),
+        // they must now produce defined results instead. Non-finite inputs make the
+        // quadrant argument reduction produce NaN, so both outputs must be NaN.
+        // (Huge but finite inputs may still produce huge/inf outputs: their quadrant
+        // saturates, which is defined-but-imprecise, same policy as the C++ version.)
+        for v in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let (sin, cos) = f32_sin_cos(v);
+            assert!(sin.is_nan(), "sin({v}) = {sin}");
+            assert!(cos.is_nan(), "cos({v}) = {cos}");
+        }
     }
 
     #[cfg(feature = "rkyv")]
