@@ -78,7 +78,7 @@ impl MotionBlendingJob {
     }
 
     /// Runs job's blending task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         self.output = Transform3A::IDENTITY;
 
