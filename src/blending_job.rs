@@ -68,11 +68,6 @@ impl<I: OzzBuf<SoaTransform>, W: OzzObj<Vec<Vec4>>> BlendingLayer<I, W> {
             None => &[],
         }
     }
-
-    #[inline]
-    fn joint_weight(&self, idx: usize) -> f32x4 {
-        fx4_from_vec4(self.joint_weights()[idx])
-    }
 }
 
 /// Blending context for storing intermediate blending data in `BlendingJob`.
@@ -324,7 +319,7 @@ where
     }
 
     /// Runs job's blending task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         let skeleton = self.skeleton.as_ref().ok_or(OzzError::InvalidJob)?.obj();
         let ctx = self.context.as_mut().ok_or(OzzError::InvalidJob)?;
@@ -360,10 +355,11 @@ where
 
         for layer in layers {
             let transform = layer.transform.buf()?;
+            let joint_weights = layer.joint_weights();
             if transform.len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
-            if !layer.joint_weights().is_empty() && layer.joint_weights().len() < skeleton.num_soa_joints() {
+            if !joint_weights.is_empty() && joint_weights.len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
 
@@ -373,18 +369,18 @@ where
             ctx.accumulated_weight += layer.weight;
             let layer_weight = f32x4::splat(layer.weight);
 
-            if !layer.joint_weights().is_empty() {
+            if !joint_weights.is_empty() {
                 ctx.num_partial_passes += 1;
 
                 if ctx.num_passes == 0 {
                     for idx in 0..num_soa_joints {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * fx4_from_vec4(joint_weights[idx]).simd_max(ZERO);
                         ctx.accumulated_weights[idx] = weight;
                         Self::blend_1st_pass(&transform[idx], weight, &mut output[idx]);
                     }
                 } else {
                     for idx in 0..num_soa_joints {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * fx4_from_vec4(joint_weights[idx]).simd_max(ZERO);
                         ctx.accumulated_weights[idx] += weight;
                         Self::blend_n_pass(&transform[idx], weight, &mut output[idx]);
                     }
@@ -416,7 +412,7 @@ where
             if bp_weight > 0.0 {
                 if ctx.num_passes == 0 {
                     ctx.accumulated_weight = 1.0;
-                    output.copy_from_slice(joint_rest_poses);
+                    output[..joint_rest_poses.len()].copy_from_slice(joint_rest_poses);
                 } else {
                     ctx.accumulated_weight = threshold;
                     let simd_bp_weight = f32x4::splat(bp_weight);
@@ -464,19 +460,20 @@ where
 
         for layer in layers {
             let transform = layer.transform.buf()?;
+            let joint_weights = layer.joint_weights();
             if transform.len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
-            if !layer.joint_weights().is_empty() && layer.joint_weights().len() < skeleton.num_soa_joints() {
+            if !joint_weights.is_empty() && joint_weights.len() < skeleton.num_soa_joints() {
                 return Err(OzzError::InvalidJob);
             }
 
             if layer.weight > 0.0 {
                 let layer_weight = f32x4::splat(layer.weight);
 
-                if !layer.joint_weights().is_empty() {
+                if !joint_weights.is_empty() {
                     for idx in 0..joint_rest_poses.len() {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * fx4_from_vec4(joint_weights[idx]).simd_max(ZERO);
                         let one_minus_weight = ONE - weight;
                         Self::blend_add_pass(&transform[idx], weight, one_minus_weight, &mut output[idx]);
                     }
@@ -489,9 +486,9 @@ where
             } else if layer.weight < 0.0 {
                 let layer_weight = f32x4::splat(-layer.weight);
 
-                if !layer.joint_weights().is_empty() {
+                if !joint_weights.is_empty() {
                     for idx in 0..joint_rest_poses.len() {
-                        let weight = layer_weight * layer.joint_weight(idx).simd_max(ZERO);
+                        let weight = layer_weight * fx4_from_vec4(joint_weights[idx]).simd_max(ZERO);
                         let one_minus_weight = ONE - weight;
                         Self::blend_sub_pass(&transform[idx], weight, one_minus_weight, &mut output[idx]);
                     }
@@ -709,6 +706,27 @@ mod blending_tests {
             joint_weights: Some(vec![Vec4::splat(0.5); num_bind_pose]),
         });
         job.set_output(make_buf(vec![SoaTransform::default(); num_bind_pose]));
+        assert!(job.validate());
+        assert!(job.run().is_ok());
+
+        // 1. no valid layers (all weights <= 0)
+        // 2. output buffer longer than rest pose buffer
+        let mut job: BlendingJob = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
+        job.set_output(make_buf(vec![SoaTransform::default(); skeleton.num_soa_joints() + 3]));
+        assert!(job.validate());
+        assert!(job.run().is_ok());
+
+        // 1. no valid layers (all weights <= 0)
+        // 2. output buffer longer than rest pose buffer
+        let mut job: BlendingJob = BlendingJob::default();
+        job.set_skeleton(skeleton.clone());
+        job.layers_mut().push(BlendingLayer {
+            transform: make_buf(vec![SoaTransform::default(); skeleton.num_soa_joints()]),
+            weight: 0.0,
+            joint_weights: None,
+        });
+        job.set_output(make_buf(vec![SoaTransform::default(); skeleton.num_soa_joints() + 3]));
         assert!(job.validate());
         assert!(job.run().is_ok());
     }
