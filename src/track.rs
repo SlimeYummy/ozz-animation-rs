@@ -124,8 +124,8 @@ pub struct TrackMeta {
 /// to access the cache coherently. Ratios are usually accessed/read alone from the jobs that
 /// all start by looking up the keyframes to interpolate indeed.
 #[derive(Debug, Default)]
-#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Track<V: TrackValue> {
     key_count: u32,
     ratios: Vec<f32>,
@@ -147,10 +147,9 @@ impl<V: TrackValue> Track<V> {
         1
     }
 
-    #[cfg(test)]
     pub(crate) fn from_raw(values: &[V], ratios: &[f32], steps: &[u8]) -> Result<Track<V>, OzzError> {
-        if values.len() != ratios.len() || values.len().div_ceil(8) != steps.len() {
-            return Err(OzzError::Unexpected);
+        if values.len() != ratios.len() || ratios.len().div_ceil(8) != steps.len() {
+            return Err(OzzError::InvalidResource);
         }
         Ok(Track {
             key_count: values.len() as u32,
@@ -186,7 +185,7 @@ impl<V: TrackValue> Track<V> {
 
         let ratios: Vec<f32> = archive.read_vec(meta.key_count as usize)?;
         let values: Vec<V> = archive.read_vec(meta.key_count as usize)?;
-        let steps: Vec<u8> = archive.read_vec((meta.key_count + 7) as usize / 8)?;
+        let steps: Vec<u8> = archive.read_vec(meta.key_count.div_ceil(8) as usize)?;
 
         let mut name = String::new();
         if meta.name_len != 0 {
@@ -194,13 +193,9 @@ impl<V: TrackValue> Track<V> {
             name = String::from_utf8(buf).map_err(|e| e.utf8_error())?;
         }
 
-        Ok(Track {
-            key_count: meta.key_count,
-            ratios,
-            values,
-            steps,
-            name,
-        })
+        let mut track = Self::from_raw(&values, &ratios, &steps)?;
+        track.name = name;
+        Ok(track)
     }
 
     /// Reads an `Track` from an `Archive`.
@@ -255,3 +250,73 @@ impl<V: TrackValue> Track<V> {
         &self.name
     }
 }
+
+#[cfg(feature = "rkyv")]
+const _: () = {
+    use rkyv::rancor::{fail, Fallible, Source};
+    use rkyv::Deserialize;
+
+    impl<D: Fallible + ?Sized, V: TrackValue> Deserialize<Track<V>, D> for ArchivedTrack<V>
+    where
+        V: rkyv::Archive,
+        <V as rkyv::Archive>::Archived: Deserialize<V, D>,
+        D::Error: Source,
+    {
+        #[inline]
+        fn deserialize(&self, deserializer: &mut D) -> Result<Track<V>, D::Error> {
+            let key_count = self.key_count.to_native() as usize;
+            if key_count != self.values.len()
+                || self.values.len() != self.ratios.len()
+                || self.ratios.len().div_ceil(8) != self.steps.len()
+            {
+                fail!(OzzError::InvalidResource);
+            }
+
+            let ratios: Vec<f32> = self.ratios.as_slice().iter().map(|v| v.to_native()).collect();
+            let steps: Vec<u8> = self.steps.as_slice().to_vec();
+            let values: Vec<V> = self
+                .values
+                .as_slice()
+                .iter()
+                .map(|v| v.deserialize(deserializer))
+                .collect::<Result<Vec<V>, D::Error>>()?;
+            Ok(Track {
+                key_count: key_count as u32,
+                ratios,
+                values,
+                steps,
+                name: self.name.as_str().to_string(),
+            })
+        }
+    }
+};
+
+#[cfg(feature = "serde")]
+const _: () = {
+    use serde::{Deserialize, Deserializer};
+
+    #[derive(Deserialize)]
+    struct TrackRaw<V> {
+        key_count: u32,
+        ratios: Vec<f32>,
+        values: Vec<V>,
+        steps: Vec<u8>,
+        name: String,
+    }
+
+    impl<'de, V: TrackValue> Deserialize<'de> for Track<V>
+    where
+        V: serde::Deserialize<'de>,
+    {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let raw = TrackRaw::<V>::deserialize(deserializer)?;
+            if raw.key_count as usize != raw.values.len() {
+                return Err(serde::de::Error::custom("track key_count does not match values length"));
+            }
+            let mut track = Track::<V>::from_raw(&raw.values, &raw.ratios, &raw.steps)
+                .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+            track.name = raw.name;
+            Ok(track)
+        }
+    }
+};
