@@ -48,6 +48,7 @@ where
     from: f32,
     to: f32,
     threshold: f32,
+    max_cycles: u32,
 }
 
 pub type TrackTriggeringJobRef<'t> = TrackTriggeringJob<&'t Track<f32>>;
@@ -64,6 +65,7 @@ where
             from: 0.0,
             to: 0.0,
             threshold: 0.0,
+            max_cycles: 1024,
         }
     }
 }
@@ -152,6 +154,22 @@ where
         self.threshold = threshold;
     }
 
+    /// Gets the maximum number of track cycles the iterator may traverse.
+    #[inline]
+    pub fn max_cycles(&self) -> u32 {
+        self.max_cycles
+    }
+
+    /// Sets the maximum number of track cycles the iterator may traverse.
+    ///
+    /// This bounds the cost of a `run()` over a large `from`/`to` range: when the
+    /// range covers more than `max_cycles` cycles, `run()` returns
+    /// `OzzError::InvalidJob`. `0` disables the limit. Defaults to `1024`.
+    #[inline]
+    pub fn set_max_cycles(&mut self, max_cycles: u32) {
+        self.max_cycles = max_cycles;
+    }
+
     /// Validates `TrackTriggeringJob` parameters.
     #[inline]
     pub fn validate(&self) -> bool {
@@ -159,12 +177,24 @@ where
     }
 
     /// Runs track triggering job's task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     ///
     /// Returns an iterator of `Edge` that represents the detected edges.
     pub fn run(&mut self) -> Result<TrackTriggeringIter<'_, T>, OzzError> {
         if self.track.is_none() {
             return Err(OzzError::InvalidJob);
+        }
+        if self.max_cycles != 0 {
+            let from = self.from as f64;
+            let to = self.to as f64;
+            let cycles = if to > from {
+                to.ceil() - from.floor()
+            } else {
+                from.floor() - to.floor() + 1.0
+            };
+            if cycles > self.max_cycles as f64 {
+                return Err(OzzError::InvalidJob);
+            }
         }
         Ok(TrackTriggeringIter::new(self))
     }
@@ -346,6 +376,36 @@ mod track_triggering_tests {
         job.set_to(1.0);
         job.set_threshold(1.0);
         assert!(job.run().unwrap().count() == 0);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_max_cycles() {
+        let track = Track::from_raw(&[0.0, 1.0, 0.0], &[0.0, 0.5, 1.0], &[0]).unwrap();
+        let mut job: TrackTriggeringJobRef = TrackTriggeringJob::default();
+        job.set_track(&track);
+        job.set_threshold(0.5);
+        job.set_from(0.0);
+
+        // Default limit (1024 cycles) rejects a much larger range.
+        job.set_to(1.0e6);
+        assert_eq!(job.max_cycles(), 1024);
+        assert!(job.run().unwrap_err().is_invalid_job());
+
+        // 0 disables the limit; the iterator is lazy, so this does not iterate.
+        job.set_max_cycles(0);
+        assert!(job.run().is_ok());
+
+        // A range within a custom limit still iterates.
+        job.set_max_cycles(10);
+        job.set_to(5.0);
+        assert!(!job.run().unwrap().collect::<Vec<_>>().is_empty());
+
+        // Exactly at the limit is accepted, one cycle more is rejected.
+        job.set_max_cycles(5);
+        assert!(job.run().is_ok());
+        job.set_max_cycles(4);
+        assert!(job.run().unwrap_err().is_invalid_job());
     }
 
     #[test]

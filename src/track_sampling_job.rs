@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::base::{OzzError, OzzObj};
+use crate::math::f32_clamp_or_max;
 use crate::track::{Track, TrackValue};
 
 /// Track sampling job implementation.
@@ -79,7 +80,7 @@ where
     ///
     /// Ratio used to sample track, clamped in range 0.0-1.0 before job execution.
     /// 0 is the beginning of the track, 1 is the end.
-    /// This is a ratio rather than a ratio because tracks have no duration.
+    /// This is a normalized ratio rather than a time value, because tracks have no duration.
     #[inline]
     pub fn set_ratio(&mut self, ratio: f32) {
         self.ratio = ratio;
@@ -127,16 +128,18 @@ where
     }
 
     /// Runs track sampling job's task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         let track = self.track.as_ref().ok_or(OzzError::InvalidJob)?.obj();
 
-        if track.ratios().len() == 0 {
+        let ratio = f32_clamp_or_max(self.ratio, 0.0f32, 1.0f32);
+
+        if track.ratios().is_empty() {
             self.result = V::default();
-        } else if track.ratios().len() == 1 || self.ratio < 0.0 {
+        } else if track.ratios().len() == 1 || ratio < track.ratios()[0] {
+            // `ratio < ratios[0]` also covers tracks whose first key isn't at 0: the
+            // `[id0, id1]` interval is degenerate there, clamp to the first value.
             self.result = *track.values().first().unwrap();
-        } else if self.ratio > 1.0 {
-            self.result = *track.values().last().unwrap();
         } else {
             let ratios = track.ratios();
             let len = ratios.len();
@@ -144,24 +147,18 @@ where
 
             let id1 = if cached_id1 >= track.key_count() {
                 // Invalid index, fall back to common search
-                track
-                    .ratios()
-                    .iter()
-                    .position(|&x| self.ratio < x)
-                    .unwrap_or(track.key_count())
+                ratios.iter().position(|&x| ratio < x).unwrap_or(track.key_count())
             } else {
                 let cached_id0 = cached_id1.saturating_sub(1);
-                if self.ratio < ratios[cached_id0] {
+                if ratio < ratios[cached_id0] {
                     // Left search
                     (0..cached_id0)
                         .rev()
-                        .find(|&idx| self.ratio >= ratios[idx])
+                        .find(|&idx| ratio >= ratios[idx])
                         .map_or(0, |idx| idx + 1)
-                } else if self.ratio >= ratios[cached_id1] {
+                } else if ratio >= ratios[cached_id1] {
                     // Right search
-                    (cached_id1..len)
-                        .find(|&idx| self.ratio < ratios[idx])
-                        .unwrap_or(track.key_count())
+                    (cached_id1..len).find(|&idx| ratio < ratios[idx]).unwrap_or(track.key_count())
                 } else {
                     cached_id1
                 }
@@ -174,7 +171,7 @@ where
             } else {
                 let tk0 = track.ratios()[id0];
                 let tk1 = track.ratios()[id1];
-                let t = (self.ratio - tk0) / (tk1 - tk0);
+                let t = (ratio - tk0) / (tk1 - tk0);
                 let v0 = track.values()[id0];
                 let v1 = track.values()[id1];
                 self.result = V::lerp(v0, v1, t);
@@ -393,6 +390,34 @@ mod track_sampling_tests {
         execute_test(&mut job, 0.8, Quat::from_xyzw(0.38268333, 0.0, 0.0, 0.92387962));
         execute_test(&mut job, 0.9, Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
         execute_test(&mut job, 1.0, Quat::from_xyzw(0.0, 0.0, 0.0, 1.0));
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_before_first_key() {
+        // Regression test: sampling below the first key ratio divided by a zero span
+        // (degenerate interval), it must clamp to the first value.
+        let track = Track::from_raw(&[1.0, 2.0], &[0.5, 1.0], &[0]).unwrap();
+        let mut job: TrackSamplingJobRc<f32> = TrackSamplingJob::default();
+        job.set_track(Rc::new(track));
+        execute_test(&mut job, 0.25, 1.0);
+        execute_test(&mut job, 0.0, 1.0);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_ratio_clamping() {
+        let track = Track::from_raw(&[1.0, 2.0, 3.0], &[0.0, 0.5, 1.0], &[0]).unwrap();
+        let mut job: TrackSamplingJobRef<f32> = TrackSamplingJob::default();
+        job.set_track(&track);
+
+        // NaN and +inf clamp to 1 (last value), -inf clamps to 0 (first value).
+        execute_test(&mut job, f32::NAN, 3.0);
+        execute_test(&mut job, f32::INFINITY, 3.0);
+        execute_test(&mut job, f32::NEG_INFINITY, 1.0);
+
+        // Boundary: exactly the first key ratio.
+        execute_test(&mut job, 0.5, 2.0);
     }
 
     #[test]
