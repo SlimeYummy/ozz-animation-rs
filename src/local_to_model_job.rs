@@ -117,7 +117,7 @@ where
 
     /// Sets root of `LocalToModelJob`.
     ///
-    /// The root matrix will multiply to every model space matrices, None means an identity matrix.
+    /// The root matrix will multiply to every model space matrices.
     /// This can be used to directly compute world-space transforms for example.
     #[inline]
     pub fn set_root(&mut self, root: &Mat4) {
@@ -207,7 +207,7 @@ where
         self.output.take()
     }
 
-    /// Replaces output of `BlendingJob`.
+    /// Replaces output of `LocalToModelJob`.
     pub fn replace_output(&mut self, output: O) -> Option<O> {
         self.output.replace(output)
     }
@@ -227,7 +227,7 @@ where
     }
 
     /// Runs local to model job's task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         let skeleton = self.skeleton.as_ref().ok_or(OzzError::InvalidJob)?.obj();
         let input = self.input.as_ref().ok_or(OzzError::InvalidJob)?.buf()?;
@@ -239,8 +239,9 @@ where
             return Err(OzzError::InvalidJob);
         }
 
-        let begin = i32::max(0, self.from + (self.from_excluded as i32)) as usize;
-        let end = i32::max(0, i32::min(self.to + 1, skeleton.num_joints() as i32)) as usize;
+        // Saturating additions guard against integer overflow for extreme from/to values.
+        let begin = i32::max(0, self.from.saturating_add(self.from_excluded as i32)) as usize;
+        let end = i32::max(0, i32::min(self.to.saturating_add(1), skeleton.num_joints() as i32)) as usize;
 
         let mut idx = begin;
         let mut process = idx < end && (!self.from_excluded || skeleton.joint_parent(idx) as i32 >= self.from);
@@ -331,6 +332,15 @@ mod local_to_model_tests {
         job.to = SKELETON_MAX_JOINTS;
         assert!(job.run().is_ok());
         job.to = -SKELETON_MAX_JOINTS;
+        assert!(job.run().is_ok());
+
+        // extreme from/to values used to overflow `i32`
+        job.from = i32::MAX;
+        job.from_excluded = true;
+        assert!(job.run().is_ok());
+        job.from = 0;
+        job.from_excluded = false;
+        job.to = i32::MAX;
         assert!(job.run().is_ok());
     }
 
@@ -472,7 +482,7 @@ mod local_to_model_tests {
         let input = new_input1();
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 6]));
-        execute_test(&skeleton, &input, &output, None, None, None, false, &vec![
+        execute_test(&skeleton, &input, &output, None, None, None, false, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 6.0, 4.0, 1.0, 1.0]),
@@ -483,7 +493,7 @@ mod local_to_model_tests {
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 6]));
         let root = Mat4::from_translation(Vec3::new(4.0, 3.0, 2.0));
-        execute_test(&skeleton, &input, &output, Some(root), None, None, false, &vec![
+        execute_test(&skeleton, &input, &output, Some(root), None, None, false, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 6.0, 5.0, 4.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 6.0, 5.0, 4.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 10.0, 7.0, 3.0, 1.0]),
@@ -501,7 +511,7 @@ mod local_to_model_tests {
         let input = new_input2();
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
-        execute_test(&skeleton, &input, &output, None, None, None, false, &vec![
+        execute_test(&skeleton, &input, &output, None, None, None, false, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
@@ -513,7 +523,7 @@ mod local_to_model_tests {
         ], "from_to from=* to=*");
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
-        execute_test(&skeleton, &input, &output, None, Some(0), Some(2), false, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(0), Some(2), false, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
@@ -525,7 +535,7 @@ mod local_to_model_tests {
         ], "from_to from=0 to=2");
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
-        execute_test(&skeleton, &input, &output, None, Some(0), Some(6), false, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(0), Some(6), false, &[
             Mat4::from_cols_array(&[ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[ 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[ 0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0,10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
@@ -537,7 +547,7 @@ mod local_to_model_tests {
         ], "from_to from=0 to=6");
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
-        execute_test(&skeleton, &input, &output, None, Some(0), Some(46), false, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(0), Some(46), false, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
@@ -549,7 +559,7 @@ mod local_to_model_tests {
         ], "from_to from=0 to=46");
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
-        execute_test(&skeleton, &input, &output, None, Some(0), Some(-99), false, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(0), Some(-99), false, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
@@ -561,7 +571,7 @@ mod local_to_model_tests {
         ], "from_to from=0 to=-99");
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
-        execute_test(&skeleton, &input, &output, None, Some(93), None, false, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(93), None, false, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
@@ -581,7 +591,7 @@ mod local_to_model_tests {
         let input = new_input2();
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
-        execute_test(&skeleton, &input, &output, None, None, None, true, &vec![
+        execute_test(&skeleton, &input, &output, None, None, None, true, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 1.0]),
@@ -594,7 +604,7 @@ mod local_to_model_tests {
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         output.borrow_mut()[0] = Mat4::from_scale(Vec3::splat(2.0));
-        execute_test(&skeleton, &input, &output, None, Some(0), None, true, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(0), None, true, &[
             Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[0.0, 0.0, -20.0, 0.0, 0.0, 20.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0, -4.0, -4.0, 4.0, 1.0]),
@@ -607,7 +617,7 @@ mod local_to_model_tests {
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         output.borrow_mut()[1] = Mat4::from_scale(Vec3::splat(2.0));
-        execute_test(&skeleton, &input, &output, None, Some(1), None, true, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(1), None, true, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[20.0, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, -4.0, -4.0, -4.0, 1.0]),
@@ -620,7 +630,7 @@ mod local_to_model_tests {
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         output.borrow_mut()[2] = Mat4::from_scale(Vec3::splat(2.0));
-        execute_test(&skeleton, &input, &output, None, Some(2), None, true, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(2), None, true, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
@@ -633,7 +643,7 @@ mod local_to_model_tests {
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         output.borrow_mut()[7] = Mat4::from_scale(Vec3::splat(2.0));
-        execute_test(&skeleton, &input, &output, None, Some(7), None, true, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(7), None, true, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
@@ -646,7 +656,7 @@ mod local_to_model_tests {
 
         let output = Rc::new(RefCell::new(vec![Mat4::IDENTITY; 8]));
         output.borrow_mut()[6] = Mat4::from_scale(Vec3::splat(2.0));
-        execute_test(&skeleton, &input, &output, None, Some(6), None, true, &vec![
+        execute_test(&skeleton, &input, &output, None, Some(6), None, true, &[
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
             Mat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
