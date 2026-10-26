@@ -185,7 +185,7 @@ impl IKAimJob {
         fx4_to_quat(self.joint_correction)
     }
 
-    /// Gets reached of `IKAimJob`.
+    /// Clears joint correction of `IKAimJob`.
     #[inline]
     pub fn clear_joint_correction(&mut self) {
         self.joint_correction = QUAT_UNIT;
@@ -221,7 +221,7 @@ impl IKAimJob {
     }
 
     /// Runs aim IK job's task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if !self.validate() {
             return Err(OzzError::InvalidJob);
@@ -234,7 +234,7 @@ impl IKAimJob {
 
         let offsetted_forward = Self::compute_offsetted_forward(self.forward, self.offset, joint_to_target_js);
         self.reached = offsetted_forward.is_some();
-        if !self.reached || (joint_to_target_js_len2.simd_eq(ZERO).to_bitmask() & 0x1 == 0x1) {
+        if !self.reached || ((joint_to_target_js_len2.simd_eq(ZERO).to_bitmask() & 0x1) == 0x1) {
             self.joint_correction = QUAT_UNIT;
             return Ok(());
         }
@@ -256,7 +256,7 @@ impl IKAimJob {
 
         let rotate_plane_axis_js;
         let rotate_plane_js;
-        if denoms.simd_ne(ZERO).to_bitmask() & 0x7 == 0x7 {
+        if (denoms.simd_ne(ZERO).to_bitmask() & 0x7) == 0x7 {
             let rsqrts = denoms.sqrt().recip();
             rotate_plane_axis_js = joint_to_target_js * fx4_splat_x(rsqrts);
 
@@ -266,6 +266,9 @@ impl IKAimJob {
             );
             let axis_flip = fx4_sign(fx4_splat_x(vec3_dot_s(ref_joint_normal_js, corrected_up_js)));
             let rotate_plane_axis_flipped_js = fx4_xor(rotate_plane_axis_js, axis_flip);
+            // Note: `simd_clamp` propagates NaN (unlike `fx4_clamp_or_min`), this
+            // matches the C++ ozz behavior when pole and target are parallel (the
+            // NaN correction is an expected outcome, locked by tests).
             rotate_plane_js = quat_from_cos_angle(
                 rotate_plane_axis_flipped_js,
                 rotate_plane_cos_angle.simd_clamp(NEG_ONE, ONE),
@@ -296,7 +299,7 @@ impl IKAimJob {
         let ao_l = vec3_dot_s(forward, offset);
         let ac_l2 = vec3_length2_s(offset) - ao_l * ao_l;
         let r2 = vec3_length2_s(target);
-        if ac_l2.simd_gt(r2).to_bitmask() & 0x1 == 0x1 {
+        if (ac_l2.simd_gt(r2).to_bitmask() & 0x1) == 0x1 {
             return None;
         }
         let ai_l = (r2 - ac_l2).sqrt();
@@ -790,8 +793,8 @@ mod ik_aim_job_tests {
         }
 
         {
-            // weight < 0
-            job.set_weight(0.0);
+            // weight < 0 (clamped to 0, giving an identity correction)
+            job.set_weight(-0.5);
             job.run().unwrap();
             assert!(job.joint_correction().abs_diff_eq(Quat::IDENTITY, 2e-3));
         }

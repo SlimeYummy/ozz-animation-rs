@@ -303,7 +303,7 @@ impl IKTwoBoneJob {
     }
 
     /// Runs two bone IK job's task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if !self.validate() {
             return Err(OzzError::InvalidJob);
@@ -334,8 +334,8 @@ impl IKTwoBoneJob {
             start_target_original_ss_len2,
         )
         .sqrt(); // [x y z]
-        let start_mid_ss_len = lengths; // [x]
-        let mid_end_ss_len = fx4_splat_y(lengths); // [x]
+        let start_mid_ss_len = lengths; // [x y z w]
+        let mid_end_ss_len = fx4_splat_y(lengths); // [x y z w]
         let start_target_original_ss_len = fx4_splat_z(lengths); // [x y z w]
         let bone_len_diff_abs = (start_mid_ss_len - mid_end_ss_len).abs(); // [x]
         let bones_chain_len = start_mid_ss_len + mid_end_ss_len; // [x]
@@ -351,6 +351,9 @@ impl IKTwoBoneJob {
 
         // xyw all 1, z is untested.
         if (comp_mask & 0xb) == 0xb {
+            // `soften == 1` with a target exactly at the chain length makes `ds == 0`,
+            // so `recip()` is infinite and the correction becomes NaN. This matches
+            // the C++ implementation (locked by tests).
             let alpha = (start_target_original_ss_len - da) * ds.recip();
 
             let op = fx4_set_y(THREE, alpha + THREE);
@@ -410,7 +413,7 @@ impl IKTwoBoneJob {
 
         let mut start_rot_ss = end_to_target_rot_ss;
 
-        if start_target_ss_len2.simd_gt(ZERO).to_bitmask() & 0x1 == 0x1 {
+        if (start_target_ss_len2.simd_gt(ZERO).to_bitmask() & 0x1) == 0x1 {
             // [x]
             let ref_plane_normal_ss = vec3_cross(start_target_ss, pole_ss); // [x y z]
             let ref_plane_normal_ss_len2 = vec3_length2_s(ref_plane_normal_ss); // [x]
@@ -437,6 +440,10 @@ impl IKTwoBoneJob {
             let start_axis_flip = fx4_sign(fx4_splat_x(vec3_dot_s(joint_plane_normal_ss, pole_ss)));
             let rotate_plane_axis_flipped_ss = fx4_xor(rotate_plane_axis_ss, start_axis_flip);
 
+            // Note: `simd_clamp` propagates NaN (unlike `fx4_clamp_or_min` used above
+            // for `soften`), this matches the C++ ozz behavior when pole and target
+            // are parallel (the NaN correction is an expected outcome, locked by
+            // tests).
             let rotate_plane_ss = quat_from_cos_angle(
                 rotate_plane_axis_flipped_ss,
                 rotate_plane_cos_angle.simd_clamp(NEG_ONE, ONE),
@@ -922,10 +929,6 @@ mod ik_two_bone_tests {
             assert!(job
                 .mid_joint_correction()
                 .abs_diff_eq(Quat::from_axis_angle(Vec3::Z, consts::PI), 2e-3));
-            assert_eq!(
-                Quat::from_axis_angle(Vec3::Z, consts::PI).mul_vec3(Vec3::new(3.0, 4.0, 5.0)),
-                Quat::from_axis_angle(Vec3::Z, consts::PI).mul_vec3(Vec3::new(3.0, 4.0, 5.0))
-            )
         }
 
         {
