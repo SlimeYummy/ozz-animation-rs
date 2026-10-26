@@ -158,7 +158,9 @@ where
                         .map_or(0, |idx| idx + 1)
                 } else if ratio >= ratios[cached_id1] {
                     // Right search
-                    (cached_id1..len).find(|&idx| ratio < ratios[idx]).unwrap_or(track.key_count())
+                    (cached_id1..len)
+                        .find(|&idx| ratio < ratios[idx])
+                        .unwrap_or(track.key_count())
                 } else {
                     cached_id1
                 }
