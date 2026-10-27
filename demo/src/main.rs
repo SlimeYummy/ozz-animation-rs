@@ -53,10 +53,10 @@ impl OzzComponent {
     fn load(&mut self) {
         let thread_pool = AsyncComputeTaskPool::get();
         let task = match OZZ_TYPES[self.typ].0 {
-            OzzType::Playback => thread_pool.spawn(OzzPlayback::new()),
-            OzzType::Blend => thread_pool.spawn(OzzBlend::new()),
-            OzzType::TwoBoneIK => thread_pool.spawn(OzzTwoBoneIK::new()),
-            OzzType::RootMotion => thread_pool.spawn(OzzRootMotion::new()),
+            OzzType::Playback => thread_pool.spawn(OzzPlayback::create()),
+            OzzType::Blend => thread_pool.spawn(OzzBlend::create()),
+            OzzType::TwoBoneIK => thread_pool.spawn(OzzTwoBoneIK::create()),
+            OzzType::RootMotion => thread_pool.spawn(OzzRootMotion::create()),
         };
         self.task = Some(task);
         self.example = None;
@@ -130,7 +130,8 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
         DirectionalLight {
             color: Color::WHITE,
             illuminance: 10000.0,
-            shadows_enabled: true,
+            contact_shadows_enabled: true,
+            shadow_maps_enabled: true,
             affects_lightmapped_mesh_diffuse: true,
             shadow_depth_bias: 0.05,
             shadow_normal_bias: 0.9,
@@ -141,7 +142,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials
     // light
     commands.spawn((
         PointLight {
-            shadows_enabled: false,
+            shadow_maps_enabled: false,
             color: Color::WHITE,
             ..default()
         },

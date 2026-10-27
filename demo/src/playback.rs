@@ -15,7 +15,7 @@ pub struct OzzPlayback {
 }
 
 impl OzzPlayback {
-    pub async fn new() -> Box<dyn OzzExample> {
+    pub async fn create() -> Box<dyn OzzExample> {
         let (mut ar_skeleton, mut ar_animation) = try_zip(
             load_archive("/playback/skeleton.ozz"),
             load_archive("/playback/animation.ozz"),
