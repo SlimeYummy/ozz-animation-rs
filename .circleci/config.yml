@@ -6,7 +6,7 @@ orbs:
 jobs:
   linux_x86_64:
     machine:
-      image: ubuntu-2404:current
+      image: ubuntu-2604:current
     resource_class: medium
     steps:
     - checkout
@@ -32,7 +32,7 @@ jobs:
 
   linux_aarch64:
     machine:
-      image: ubuntu-2404:current
+      image: ubuntu-2604:current
     resource_class: arm.medium
     steps:
     - checkout
@@ -58,7 +58,7 @@ jobs:
   
   windows_x86_64:
     machine:
-      image: windows-server-2022-gui:current
+      image: windows-server-2025-gui:current
       shell: powershell.exe -ExecutionPolicy Bypass
     resource_class: windows.medium
     steps:
@@ -85,7 +85,8 @@ jobs:
   
   macos_aarch64:
     macos:
-      xcode: 14.2.0
+      xcode: 27.2.0
+    resource_class: m4pro.medium
     steps:
     - checkout
     - run:
