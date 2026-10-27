@@ -28,7 +28,7 @@ pub async fn load_archive(path: &str) -> Result<Archive<Cursor<Vec<u8>>>, OzzErr
     let mut file = File::open(full_path)?; // Not async! For compatible with reqwest.
     let mut buf = vec![];
     file.read_to_end(&mut buf)?;
-    return Archive::from_vec(buf);
+    Archive::from_vec(buf)
 }
 
 // #[cfg(target_arch = "wasm32")]
