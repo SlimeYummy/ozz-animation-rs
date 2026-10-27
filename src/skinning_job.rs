@@ -123,8 +123,8 @@ where
     /// Maximum number of matrices influencing each vertex. Must be greater than 0.
     ///
     /// The number of influences drives how joint_indices and joint_weights are sampled:
-    /// - influences_count joint indices are red from joint_indices for each vertex.
-    /// - influences_count - 1 joint weights are red from joint_weightrs for each vertex.
+    /// - influences_count joint indices are read from joint_indices for each vertex.
+    /// - influences_count - 1 joint weights are read from joint_weights for each vertex.
     ///   The weight of the last joint is restored (weights are normalized).
     #[inline]
     pub fn set_influences_count(&mut self, influences_count: usize) {
@@ -224,7 +224,7 @@ where
 
     /// Sets input positions of `SkinningJob`.
     ///
-    /// Array length must be at least `joint_matrices.len()`.
+    /// Array length must be at least `vertex_count`.
     #[inline]
     pub fn set_in_positions(&mut self, in_positions: I) {
         self.in_positions = Some(in_positions);
@@ -244,7 +244,7 @@ where
 
     /// Sets input normals of `SkinningJob`.
     ///
-    /// Array length must be at least `joint_matrices.len()`.
+    /// Array length must be at least `vertex_count`.
     #[inline]
     pub fn set_in_normals(&mut self, in_normals: I) {
         self.in_normals = Some(in_normals);
@@ -264,7 +264,7 @@ where
 
     /// Sets input tangents of `SkinningJob`.
     ///
-    /// Array length must be at least `joint_matrices.len()`.
+    /// Array length must be at least `vertex_count`.
     #[inline]
     pub fn set_in_tangents(&mut self, in_tangents: I) {
         self.in_tangents = Some(in_tangents);
@@ -284,7 +284,7 @@ where
 
     /// Sets output positions of `SkinningJob`.
     ///
-    /// Array length must be at least `joint_matrices.len()`.
+    /// Array length must be at least `vertex_count`.
     #[inline]
     pub fn set_out_positions(&mut self, out_positions: O) {
         self.out_positions = Some(out_positions);
@@ -304,7 +304,7 @@ where
 
     /// Sets output normals of `SkinningJob`.
     ///
-    /// Array length must be at least `joint_matrices.len()`.
+    /// Array length must be at least `vertex_count`.
     #[inline]
     pub fn set_out_normals(&mut self, out_normals: O) {
         self.out_normals = Some(out_normals);
@@ -324,7 +324,7 @@ where
 
     /// Sets output tangents of `SkinningJob`.
     ///
-    /// Array length must be at least `joint_matrices.len()`.
+    /// Array length must be at least `vertex_count`.
     #[inline]
     pub fn set_out_tangents(&mut self, out_tangents: O) {
         self.out_tangents = Some(out_tangents);
@@ -447,7 +447,7 @@ macro_rules! skinning_1 {
 
 macro_rules! skinning_impl {
     ($self:expr, $n:expr, $it:tt, $pnt:tt) => {
-        let matrices = $self.joint_matrices.as_ref().unwrap().buf()?;
+        let matrices = $self.joint_matrices.as_ref().ok_or(OzzError::InvalidJob)?.buf()?;
         it!($it, let it_matrices = $self.joint_it_matrices.as_ref().ok_or(OzzError::InvalidJob)?.buf()?);
         let indices = unpack_buf(&$self.joint_indices, $self.vertex_count * $n)?;
         let weights = unpack_buf(&$self.joint_weights, $self.vertex_count * ($n - 1))?;
@@ -527,7 +527,7 @@ where
     O: OzzMutBuf<Vec3>,
 {
     /// Runs skinning job's task.
-    /// The validate job before any operation is performed.
+    /// Validation is performed before any operation.
     pub fn run(&mut self) -> Result<(), OzzError> {
         if self.influences_count == 0 {
             return Err(OzzError::InvalidJob);
@@ -703,6 +703,12 @@ mod skinning_tests {
             job.set_joint_weights(joint_weights.clone());
             job.set_in_positions(in_positions.clone());
             job.set_out_positions(out_positions.clone());
+
+            // matrices
+            job.clear_joint_matrices();
+            assert!(!job.validate());
+            assert!(job.run().unwrap_err().is_invalid_job());
+            job.set_joint_matrices(matrices.clone());
 
             // indices
             job.clear_joint_indices();
