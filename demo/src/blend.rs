@@ -18,7 +18,7 @@ pub struct OzzBlend {
 }
 
 impl OzzBlend {
-    pub async fn new() -> Box<dyn OzzExample> {
+    pub async fn create() -> Box<dyn OzzExample> {
         let ((mut ar_skeleton, mut ar_animation1), (mut ar_animation2, mut ar_animation3)) = try_zip(
             try_zip(
                 load_archive("/blend/skeleton.ozz"),

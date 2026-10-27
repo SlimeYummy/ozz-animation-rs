@@ -26,7 +26,7 @@ pub struct OzzRootMotion {
 }
 
 impl OzzRootMotion {
-    pub async fn new() -> Box<dyn OzzExample> {
+    pub async fn create() -> Box<dyn OzzExample> {
         let (mut ar_skeleton, mut ar_animation) = try_zip(
             load_archive("/motion/skeleton.ozz"),
             load_archive("/motion/animation.ozz"),

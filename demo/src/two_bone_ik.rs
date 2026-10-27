@@ -20,7 +20,7 @@ pub struct OzzTwoBoneIK {
 }
 
 impl OzzTwoBoneIK {
-    pub async fn new() -> Box<dyn OzzExample> {
+    pub async fn create() -> Box<dyn OzzExample> {
         let mut ar_skeleton = load_archive("/two_bone_ik/skeleton.ozz").await.unwrap();
 
         let skeleton = Arc::new(Skeleton::from_archive(&mut ar_skeleton).unwrap());
