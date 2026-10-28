@@ -253,12 +253,19 @@ const _: () = {
 
 /// Structure of Arrays (SoA) for Quaternions.
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SoaQuat {
     pub x: f32x4,
     pub y: f32x4,
     pub z: f32x4,
     pub w: f32x4,
+}
+
+impl Default for SoaQuat {
+    #[inline]
+    fn default() -> Self {
+        Self::IDENTITY
+    }
 }
 
 impl SoaQuat {
@@ -499,12 +506,19 @@ const _: () = {
 
 /// Structure of Arrays (SoA) for Transformations.
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SoaTransform {
     pub translation: SoaVec3,
     pub rotation: SoaQuat,
     pub scale: SoaVec3,
+}
+
+impl Default for SoaTransform {
+    #[inline]
+    fn default() -> Self {
+        Self::IDENTITY
+    }
 }
 
 impl ArchiveRead<SoaTransform> for SoaTransform {
@@ -617,9 +631,16 @@ const _: () = {
 //
 
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct AosMat4 {
     pub cols: [f32x4; 4],
+}
+
+impl Default for AosMat4 {
+    #[inline]
+    fn default() -> Self {
+        Self::IDENTITY
+    }
 }
 
 const_assert_eq!(mem::size_of::<AosMat4>(), mem::size_of::<Mat4>());
@@ -637,6 +658,15 @@ impl From<AosMat4> for Mat4 {
 }
 
 impl AosMat4 {
+    pub(crate) const IDENTITY: AosMat4 = AosMat4 {
+        cols: [
+            f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
+            f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
+            f32x4::from_array([0.0, 0.0, 1.0, 0.0]),
+            f32x4::from_array([0.0, 0.0, 0.0, 1.0]),
+        ],
+    };
+
     #[allow(clippy::too_many_arguments)]
     #[rustfmt::skip]
     #[inline]
@@ -681,15 +711,8 @@ impl AosMat4 {
     }
 
     #[inline]
-    pub(crate) fn identity() -> AosMat4 {
-        AosMat4 {
-            cols: [
-                f32x4::from_array([1.0, 0.0, 0.0, 0.0]),
-                f32x4::from_array([0.0, 1.0, 0.0, 0.0]),
-                f32x4::from_array([0.0, 0.0, 1.0, 0.0]),
-                f32x4::from_array([0.0, 0.0, 0.0, 1.0]),
-            ],
-        }
+    pub(crate) const fn identity() -> AosMat4 {
+        Self::IDENTITY
     }
 
     pub(crate) fn mul(&self, other: &AosMat4) -> AosMat4 {
@@ -830,12 +853,26 @@ impl AosMat4 {
 
 /// Structure of Arrays (SoA) for 4x4 Matrices.
 #[repr(C)]
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SoaMat4 {
     pub cols: [f32x4; 16],
 }
 
+impl Default for SoaMat4 {
+    #[inline]
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
 impl SoaMat4 {
+    /// The identity matrix.
+    pub const IDENTITY: SoaMat4 = SoaMat4 {
+        cols: [
+            ONE, ZERO, ZERO, ZERO, ZERO, ONE, ZERO, ZERO, ZERO, ZERO, ONE, ZERO, ZERO, ZERO, ZERO, ONE,
+        ],
+    };
+
     pub fn from_affine(translation: &SoaVec3, rotation: &SoaQuat, scale: &SoaVec3) -> SoaMat4 {
         let xx = rotation.x * rotation.x;
         let xy = rotation.x * rotation.y;
@@ -1367,6 +1404,19 @@ mod tests {
     use wasm_bindgen_test::*;
 
     use super::*;
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_default_math_values() {
+        assert_eq!(SoaQuat::default(), SoaQuat::IDENTITY);
+        assert_eq!(SoaTransform::default(), SoaTransform::IDENTITY);
+        assert_eq!(SoaMat4::default(), SoaMat4::IDENTITY);
+        assert_eq!(
+            SoaMat4::IDENTITY,
+            SoaMat4::from_affine(&SoaVec3::ZERO, &SoaQuat::IDENTITY, &SoaVec3::ONE)
+        );
+        assert_eq!(AosMat4::default(), AosMat4::IDENTITY);
+    }
 
     #[test]
     #[wasm_bindgen_test]
