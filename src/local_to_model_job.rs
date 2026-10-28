@@ -268,6 +268,21 @@ where
     }
 }
 
+impl Skeleton {
+    /// Gets all joints' model-space rest poses, ordered like skeleton's joints.
+    pub fn joint_rest_poses_model_space(&self) -> Vec<Mat4> {
+        let mut models = vec![Mat4::IDENTITY; self.num_joints()];
+
+        let mut job = LocalToModelJobRef::default();
+        job.set_skeleton(self);
+        job.set_input(self.joint_rest_poses());
+        job.set_output(&mut models);
+        job.run().expect("Rest pose should be a valid local to model input.");
+
+        models
+    }
+}
+
 #[cfg(test)]
 mod local_to_model_tests {
     use glam::Vec3;

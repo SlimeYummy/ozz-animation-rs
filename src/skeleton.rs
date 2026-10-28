@@ -3,6 +3,7 @@
 //!
 
 use bimap::BiHashMap;
+use glam_ext::Transform3A;
 use std::alloc::{self, Layout};
 use std::hint::unlikely;
 use std::io::Read;
@@ -257,6 +258,16 @@ impl Skeleton {
     #[inline]
     pub fn num_soa_joints(&self) -> usize {
         self.num_soa_joints as usize
+    }
+
+    /// Gets a joint's local-space rest pose.
+    ///
+    /// * `joint` - Joint index, in range [0, num_joints).
+    #[inline]
+    pub fn joint_rest_pose(&self, joint: impl OzzIndex) -> Transform3A {
+        let idx = joint.usize();
+        assert!(idx < self.num_joints(), "Joint index out of range.");
+        self.joint_rest_poses()[idx / 4].transform(idx % 4)
     }
 
     /// Gets joint's rest poses. Rest poses are stored in soa format.
@@ -646,5 +657,89 @@ mod tests {
         assert_eq!(skeleton.joint_rest_poses(), skeleton2.joint_rest_poses());
         assert_eq!(skeleton.joint_parents(), skeleton2.joint_parents());
         assert_eq!(skeleton.joint_names(), skeleton2.joint_names());
+    }
+
+    fn rest_pose_test_skeleton() -> Skeleton {
+        use glam::{Quat, Vec3};
+
+        let rotation0 = Quat::from_axis_angle(Vec3::Y, core::f32::consts::FRAC_PI_2);
+        let rotation1 = Quat::IDENTITY;
+        let rotation2 = Quat::from_axis_angle(Vec3::Y, -core::f32::consts::PI);
+        let rotation3 = Quat::IDENTITY;
+
+        let rest_pose = SoaTransform::new(
+            SoaVec3::new([1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]),
+            SoaQuat::new(
+                [rotation0.x, rotation1.x, rotation2.x, rotation3.x],
+                [rotation0.y, rotation1.y, rotation2.y, rotation3.y],
+                [rotation0.z, rotation1.z, rotation2.z, rotation3.z],
+                [rotation0.w, rotation1.w, rotation2.w, rotation3.w],
+            ),
+            SoaVec3::new([2.0, 1.0, 1.0, 1.0], [2.0, 1.0, 1.0, 1.0], [2.0, 1.0, 1.0, 1.0]),
+        );
+
+        let mut joint_names = JointHashMap::with_hashers(DeterministicState::new(), DeterministicState::new());
+        joint_names.insert("r0".to_string(), 0);
+        joint_names.insert("j0".to_string(), 1);
+        joint_names.insert("j1".to_string(), 2);
+
+        Skeleton::from_raw(&SkeletonRaw {
+            joint_rest_poses: vec![rest_pose],
+            joint_parents: vec![-1, 0, 0],
+            joint_names,
+        })
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_rest_pose_local_space() {
+        use glam::{Quat, Vec3, Vec3A};
+
+        let skeleton = rest_pose_test_skeleton();
+
+        let rest_pose0 = skeleton.joint_rest_pose(0);
+        assert_eq!(rest_pose0.translation, Vec3A::new(1.0, 0.0, 0.0));
+        assert!(rest_pose0
+            .rotation
+            .abs_diff_eq(Quat::from_axis_angle(Vec3::Y, core::f32::consts::FRAC_PI_2), 1e-6));
+        assert_eq!(rest_pose0.scale, Vec3A::splat(2.0));
+
+        let rest_pose1 = skeleton.joint_rest_pose(1);
+        assert_eq!(rest_pose1.translation, Vec3A::new(0.0, 1.0, 0.0));
+        assert_eq!(rest_pose1.rotation, Quat::IDENTITY);
+        assert_eq!(rest_pose1.scale, Vec3A::ONE);
+
+        let rest_pose2 = skeleton.joint_rest_pose(2);
+        assert_eq!(rest_pose2.translation, Vec3A::new(0.0, 0.0, 1.0));
+        assert!(rest_pose2
+            .rotation
+            .abs_diff_eq(Quat::from_axis_angle(Vec3::Y, -core::f32::consts::PI), 1e-6));
+        assert_eq!(rest_pose2.scale, Vec3A::ONE);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_joint_rest_poses_model_space() {
+        use glam::Mat4;
+
+        let skeleton = rest_pose_test_skeleton();
+        let models = skeleton.joint_rest_poses_model_space();
+        assert_eq!(models.len(), 3);
+
+        let expected = [
+            Mat4::from_cols_array(&[
+                0.0, 0.0, -2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+            ]),
+            Mat4::from_cols_array(&[
+                0.0, 0.0, -2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 1.0,
+            ]),
+            Mat4::from_cols_array(&[
+                0.0, 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 0.0, -2.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 1.0,
+            ]),
+        ];
+
+        for (model, expected) in models.iter().zip(expected.iter()) {
+            assert!(Mat4::abs_diff_eq(model, *expected, 1e-6));
+        }
     }
 }
