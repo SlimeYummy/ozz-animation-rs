@@ -151,16 +151,27 @@ where
             } else {
                 let cached_id0 = cached_id1.saturating_sub(1);
                 if ratio < ratios[cached_id0] {
-                    // Left search
-                    (0..cached_id0)
-                        .rev()
-                        .find(|&idx| ratio >= ratios[idx])
-                        .map_or(0, |idx| idx + 1)
+                    if ratio < ratios[cached_id0] * 0.5 {
+                        (0..cached_id0).find(|&idx| ratio < ratios[idx]).unwrap_or(cached_id0)
+                    } else {
+                        (0..cached_id0)
+                            .rev()
+                            .find(|&idx| ratio >= ratios[idx])
+                            .map(|idx| idx + 1)
+                            .unwrap_or(0)
+                    }
                 } else if ratio >= ratios[cached_id1] {
-                    // Right search
-                    (cached_id1..len)
-                        .find(|&idx| ratio < ratios[idx])
-                        .unwrap_or(track.key_count())
+                    if ratio > (ratios[cached_id1] + 1.0) * 0.5 {
+                        (cached_id1..len)
+                            .rev()
+                            .find(|&idx| ratio >= ratios[idx])
+                            .map(|idx| idx + 1)
+                            .unwrap_or(cached_id1)
+                    } else {
+                        (cached_id1..len)
+                            .find(|&idx| ratio < ratios[idx])
+                            .unwrap_or(track.key_count())
+                    }
                 } else {
                     cached_id1
                 }
@@ -217,6 +228,43 @@ mod track_sampling_tests {
             "{:?} != {:?}",
             job.result(),
             result
+        );
+    }
+
+    /// Independent reference for the cached search: `id1` is the first key
+    /// strictly greater than `ratio` (upper bound).
+    fn reference_sample(track: &Track<f32>, ratio: f32) -> (f32, u32) {
+        let ratios = track.ratios();
+        let values = track.values();
+        let id1 = ratios.partition_point(|&x| x <= ratio);
+        debug_assert!(id1 > 0);
+        let id0 = id1.saturating_sub(1);
+
+        let value = if id1 == ratios.len() || (track.steps()[id0 / 8] & (1 << (id0 & 7))) != 0 {
+            values[id0]
+        } else {
+            let tk0 = ratios[id0];
+            let tk1 = ratios[id1];
+            let t = (ratio - tk0) / (tk1 - tk0);
+            values[id0] + (values[id1] - values[id0]) * t
+        };
+
+        (value, id1 as u32)
+    }
+
+    fn assert_cached_sample(job: &mut TrackSamplingJob<f32>, track: &Track<f32>, ratio: f32, scenario: &str) {
+        job.set_ratio(ratio);
+        job.run().unwrap();
+
+        let (expected_value, expected_cache) = reference_sample(track, ratio);
+        assert!(
+            (job.result() - expected_value).abs() < 1e-5,
+            "{scenario}, ratio={ratio}: {} != {expected_value}",
+            job.result()
+        );
+        assert_eq!(
+            job.cached_index, expected_cache,
+            "{scenario}, ratio={ratio}: cached_index"
         );
     }
 
@@ -469,5 +517,74 @@ mod track_sampling_tests {
         execute_cache_test(&mut job, 1.0, 60.0, 6);
         execute_cache_test(&mut job, 0.3, 25.0, 2);
         execute_cache_test(&mut job, 0.45, 32.5, 3);
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_cached_index_wrap() {
+        let values: Vec<f32> = (0..=100).map(|v| v as f32).collect();
+        let ratios: Vec<f32> = (0..=100).map(|v| v as f32 / 100.0).collect();
+        let steps = vec![0u8; values.len().div_ceil(8)];
+        let track = Rc::new(Track::from_raw(&values, &ratios, &steps).unwrap());
+
+        // Every case seeds the cache with `from`, then samples `to`.
+        let cases = [
+            // Wrap end -> start: left branch, lower half -> scan forward from 0.
+            (0.99, 0.01, "wrap end -> start"),
+            // Wrap start -> end: right branch, upper half -> scan backward from last.
+            (0.01, 0.99, "wrap start -> end"),
+            // Large backward move in the upper half -> scan backward from cached_id0.
+            (0.99, 0.60, "large left reverse"),
+            // Adjacent backward move -> scan backward from cached_id0.
+            (0.50, 0.39, "adjacent left reverse"),
+            // Large forward move in the lower half -> scan forward from cached_id1.
+            (0.10, 0.40, "large right forward"),
+            // Adjacent forward move -> scan forward from cached_id1.
+            (0.30, 0.41, "adjacent right forward"),
+            // Ratio stays inside the cached interval -> no search.
+            (0.30, 0.305, "cached interval hit"),
+            // Ratio exactly equals a key ratio.
+            (0.41, 0.40, "exact key boundary"),
+            // Exact track bounds.
+            (0.30, 0.0, "exact first key"),
+            (0.30, 1.0, "exact last key"),
+            // Sampling 1.0 leaves cached_index == key_count; the next sample
+            // must fall back to the full search.
+            (1.0, 0.30, "invalid cache fallback"),
+        ];
+
+        for (from, to, scenario) in cases {
+            let mut job = TrackSamplingJob::<f32>::default();
+            job.set_track(track.clone());
+            assert_cached_sample(&mut job, &track, from, scenario);
+            assert_cached_sample(&mut job, &track, to, scenario);
+        }
+    }
+
+    #[test]
+    #[wasm_bindgen_test]
+    fn test_cached_index_irregular_ratios() {
+        let ratios = [0.0, 0.01, 0.02, 0.05, 0.10, 0.30, 0.90, 1.0];
+        let values = [0.0, 10.0, 20.0, 50.0, 100.0, 300.0, 900.0, 1000.0];
+        let steps = [0u8];
+        let track = Rc::new(Track::from_raw(&values, &ratios, &steps).unwrap());
+
+        let cases = [
+            // Sparse keys: wrap end -> start, forward scan from 0.
+            (0.95, 0.03, "irregular wrap end -> start"),
+            // Sparse keys: wrap start -> end, backward scan from last.
+            (0.03, 0.95, "irregular wrap start -> end"),
+            // Sparse keys: large backward move in the upper half.
+            (0.95, 0.50, "irregular large left reverse"),
+            // Sparse keys: forward move in the lower half.
+            (0.03, 0.07, "irregular right forward"),
+        ];
+
+        for (from, to, scenario) in cases {
+            let mut job = TrackSamplingJob::<f32>::default();
+            job.set_track(track.clone());
+            assert_cached_sample(&mut job, &track, from, scenario);
+            assert_cached_sample(&mut job, &track, to, scenario);
+        }
     }
 }
