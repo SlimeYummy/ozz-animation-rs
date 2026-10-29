@@ -334,7 +334,7 @@ impl IKTwoBoneJob {
             start_target_original_ss_len2,
         )
         .sqrt(); // [x y z]
-        let start_mid_ss_len = lengths; // [x y z w]
+        let start_mid_ss_len = fx4_splat_x(lengths); // [x y z w]
         let mid_end_ss_len = fx4_splat_y(lengths); // [x y z w]
         let start_target_original_ss_len = fx4_splat_z(lengths); // [x y z w]
         let bone_len_diff_abs = (start_mid_ss_len - mid_end_ss_len).abs(); // [x]
