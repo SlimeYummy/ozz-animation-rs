@@ -23,7 +23,7 @@ nodejs = ["wasm", "dep:js-sys", "dep:wasm-bindgen"]
 bimap = { version = "0.6" }
 bytecheck = { version = "0.8", optional = true, default-features = false }
 glam = { version = "0.33", features = [ "core-simd", "libm" ] }
-glam-ext = { version = "0.4.1", path = "../glam-ext", features = [ "core-simd", "libm" ] }
+glam-ext = { version = "0.4.1", features = [ "core-simd", "libm" ] }
 js-sys = { version = "0.3", optional = true }
 rkyv = { version = "0.8", optional = true }
 serde = { version= "1", optional = true, features = [ "serde_derive" ] }
